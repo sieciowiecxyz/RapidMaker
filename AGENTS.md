@@ -8,6 +8,19 @@
 - Czytaj `docs/ARCHITECTURE.md`. Jeśli go brak, utwórz: zasady prostego, minimalnego kodu i struktury, testów realnych błędów oraz krótką mapę faktycznych modułów.
 - Stosuj te zasady przy projektowaniu; aktualizuj mapę po zweryfikowanych zmianach architektury.
 
+## Stack i infrastruktura
+- **Frontend — `frontend/`:** Svelte 5 + TypeScript; Vite buduje stronę i uruchamia dev server na `127.0.0.1:18430`. Tailwind CSS 4 i wspólne pliki CSS definiują wygląd. `src/lib/api.ts` jest adapterem danych; konta, katalog, chat i panele nadal korzystają z mocków i `localStorage`.
+- **Backend — `backend/src/`:** Rust 2024, Axum (HTTP/JSON), Tokio (async), Serde (dane), Reqwest + rustls (HTTPS do dostawców). API na `127.0.0.1:18432`; Vite przekazuje `/api`. Backend analizuje modele, szacuje pakowanie i obsługuje testowy checkout. Wycena druku jest uproszczona, bez slicera i kalibracji kosztów.
+- **Geometria — `backend/geometry/`:** biblioteka Rust do siatek/GLB i odczytu STL, STEP oraz 3MF; używa m.in. truck, lib3mf i gltf. Analiza działa w osobnym procesie tego samego programu, izolowanym przez Linux bubblewrap + prlimit: bez sieci/sekretów, z limitami zasobów. Modele testowe: `backend/tests/fixtures/`.
+- **Płatności:** Stripe test; Stripe.js Address Element daje formularz adresu i podpowiedzi, Payment Element płatność; API tworzy PaymentIntents/sesje Checkout i sprawdza status oraz kwotę. Brak produkcyjnego flow webhooków i trwałych zamówień.
+- **Dostawa:** Furgonetka REST sandbox sprawdza i wycenia usługi oraz udostępnia punkty odbioru. Algorytm Rust szacuje paczki; aplikacja nie nadaje przesyłek.
+- **Dane:** wyceny, sesje płatnicze i analizy są w RAM z limitami/TTL; pliki analizy są tymczasowe. Restart traci stan backendu. PostgreSQL + SQLx i trwałe prywatne pliki są planem, nie aktualną infrastrukturą. Redis i broker nie są używane.
+- **Email:** docelowo iCloud/Apple SMTP + IMAP z hasłem aplikacji; obecny backend nie ma modułu mailowego. Same wpisy w `.env` nie oznaczają działającej integracji.
+- **Uruchamianie:** Node.js/npm dla frontendu, Cargo/Rust dla backendu, Python 3 wyłącznie do launchera `backend/run.py` i hooka. Start: `cargo build --locked --manifest-path backend/Cargo.toml`, `python backend/run.py`; osobno `npm --prefix frontend run dev`.
+- **Sekrety i Git:** SOPS + age z dwoma publicznymi kluczami SSH; jeden lokalny `.env` i zaszyfrowany `secrets/dev.enc.env`. Hook odświeża SOPS przed commitem. Repo: `sieciowiecxyz/RapidMaker`; zasady poniżej.
+- **Sprawdzanie:** svelte-check + Vite build, testy Rust, Playwright/Chromium do wybranych E2E i wyglądu; Prettier do frontendu. Zakres proporcjonalny do zmiany, bez pełnych zestawów przy każdej iteracji.
+- **Hosting i monitoring:** obecnie localhost, bez Dockerfile, Taskfile, Kubernetes i skonfigurowanego publicznego wdrożenia. Logi strukturalne i podłączenie Grafany są w planie; nie zakładaj, że już działają.
+
 ## Praca
 - Obecnie POC: więcej implementacji, mniej testów. Domyślnie build i krótki check zmiany; bez szerokiej walidacji i testujących subagentów.
 - Pracuj małymi zmianami, bez pobocznych refaktoryzacji. Weryfikuj tylko zmieniony zakres, szybko i proporcjonalnie do ryzyka.
