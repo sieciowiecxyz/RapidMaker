@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Encrypt changed local .env without requiring a private key."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+def git(*args):
+    return subprocess.check_output(['git', *args])
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+
+
+def main():
+    os.chdir(git('rev-parse', '--show-toplevel').decode().strip())
+    for name in git('ls-files', '-z').decode().split('\0'):
+        base = Path(name).name
+        if base == '.env' or (base.startswith('.env.') and base != '.env.example'):
+            raise RuntimeError('Jawny plik .env jest w indeksie. Usuń go z indeksu przed commitem.')
+    source, config, encrypted = map(Path, ('.env', '.sops.yaml', 'secrets/dev.enc.env'))
+    if not source.exists():
+        return
+    if source.is_symlink() or source.stat().st_mode & 0o077:
+        raise RuntimeError('.env musi być zwykłym plikiem z uprawnieniami 600.')
+    if git('diff', '--name-only', '--', '.sops.yaml').strip():
+        raise RuntimeError('Dodaj zmiany .sops.yaml do indeksu przed commitem.')
+    cache = Path(os.fsdecode(git('rev-parse', '--git-path', 'sops-env-state.json')).strip())
+    state = dict(env=digest(source), config=digest(config), encrypted=digest(encrypted))
+    previous = json.loads(cache.read_text()) if cache.exists() else {}
+    if state == previous:
+        return
+    if previous and state['env'] == previous['env'] and state['encrypted'] != previous['encrypted']:
+        raise RuntimeError('SOPS zmienił się niezależnie od .env. Odszyfruj aktualny SOPS do .env albo usuń lokalny .env przed commitem.')
+    encrypted.parent.mkdir(exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.sops-', dir=encrypted.parent)
+    os.close(fd)
+    try:
+        result = subprocess.run(['sops', 'encrypt', '--filename-override', str(encrypted),
+                                 '--input-type', 'dotenv', '--output-type', 'dotenv',
+                                 '--output', temporary, str(source)], capture_output=True)
+        if result.returncode:
+            raise RuntimeError('Szyfrowanie SOPS nie powiodło się; commit zablokowany. Sprawdź sops i .sops.yaml.')
+        if digest(source) != state['env'] or digest(config) != state['config']:
+            raise RuntimeError('.env lub konfiguracja zmieniły się podczas szyfrowania. Ponów commit.')
+        os.replace(temporary, encrypted)
+        subprocess.run(['git', 'add', '--', str(encrypted)], check=True)
+        state['encrypted'] = digest(encrypted)
+        cache.write_text(json.dumps(state))
+        cache.chmod(0o600)
+        print('SOPS: aktualny .env zaszyfrowany i dodany do commita.')
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+try:
+    main()
+except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as error:
+    print('pre-commit:', error, file=sys.stderr)
+    sys.exit(1)

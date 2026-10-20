@@ -15,13 +15,19 @@ python backend/run.py
 
 Klucz chroniony hasłem wymaga podania hasła w terminalu. Nie zapisuj hasła ani klucza prywatnego w repo. Jedyny plik `secrets/dev.enc.env` zawiera pełną konfigurację lokalną. Launcher czyta `.env` i przekazuje do API wyłącznie dozwolone zmienne dostawców.
 
-## Zmiana wartości
+## Automatyczne szyfrowanie przed commitem
+
+Po sklonowaniu każdy uruchamia raz:
 
 ```sh
-sops edit secrets/dev.enc.env
+git config --local core.hooksPath .githooks
 ```
 
-Po edycji odszyfruj ponownie pliki lokalne i zrestartuj API.
+Edytuj lokalny `.env`. Hook `pre-commit` zaszyfruje zmiany do `secrets/dev.enc.env` i automatycznie doda plik do commita. Bez zmian nie szyfruje ponownie. Wymaga Python 3 i SOPS; używa kluczy publicznych, bez hasła do klucza prywatnego. Zrestartuj API po zmianie `.env`.
+
+Hash stanu jest lokalnie w `.git/sops-env-state.json`, poza repozytorium. Błąd szyfrowania lub jawny `.env` w indeksie blokuje commit. Nowszy SOPS przy niezmienionym lokalnym `.env` również blokuje commit: odszyfruj aktualny plik do `.env`. Po pullu z cudzymi zmianami sekretów zrób to przed własną edycją. Pierwszy commit z lokalnym `.env` tworzy nowy szyfrogram.
+
+Możesz też edytować przez `sops edit secrets/dev.enc.env`; następnie odszyfruj go do `.env`. Bez lokalnego `.env` hook pomija szyfrowanie. Globalne hooki commit-msg, post-checkout, post-commit, post-merge i pre-push nadal działają przez delegowanie. `--no-verify` omija hook; nie jest to zabezpieczenie serwerowe.
 
 ## Dodanie osoby
 

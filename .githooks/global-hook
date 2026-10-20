@@ -1,0 +1,10 @@
+#!/bin/sh
+# Preserve the user's global hooks when this repository selects .githooks.
+hook_dir=$(git config --global --get core.hooksPath) || exit 0
+case "$hook_dir" in
+  '~/'*) hook_dir="$HOME/${hook_dir#\~/}" ;;
+esac
+hook="$hook_dir/$(basename "$0")"
+if [ -x "$hook" ] && [ "$(realpath "$hook")" != "$(realpath "$0")" ]; then
+    exec "$hook" "$@"
+fi
