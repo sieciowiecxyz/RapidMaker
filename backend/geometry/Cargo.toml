@@ -1,0 +1,15 @@
+[package]
+name = "rapidfab-3d-web-preview-generator"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+gltf = { version = "1.4.1", features = ["import"] }
+lib3mf = "0.1.6"
+ply-rs-bw = "4.0.0"
+truck-polymesh = "0.6.0"
+truck-meshalgo = "0.4.0"
+truck-stepio = "0.3.0"
+serde_json = "1"
+flate2 = "1"

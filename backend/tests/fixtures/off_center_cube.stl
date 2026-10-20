@@ -1,0 +1,86 @@
+solid off_center_cube
+  facet normal 1.0 0.0 0.0
+    outer loop
+      vertex 1010.000000 -510.000000 240.000000
+      vertex 1010.000000 -490.000000 240.000000
+      vertex 1010.000000 -490.000000 260.000000
+    endloop
+  endfacet
+  facet normal 1.0 0.0 0.0
+    outer loop
+      vertex 1010.000000 -510.000000 240.000000
+      vertex 1010.000000 -490.000000 260.000000
+      vertex 1010.000000 -510.000000 260.000000
+    endloop
+  endfacet
+  facet normal -1.0 0.0 0.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 990.000000 -490.000000 260.000000
+      vertex 990.000000 -490.000000 240.000000
+    endloop
+  endfacet
+  facet normal -1.0 0.0 0.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 990.000000 -510.000000 260.000000
+      vertex 990.000000 -490.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 1.0 0.0
+    outer loop
+      vertex 990.000000 -490.000000 240.000000
+      vertex 1010.000000 -490.000000 240.000000
+      vertex 1010.000000 -490.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 1.0 0.0
+    outer loop
+      vertex 990.000000 -490.000000 240.000000
+      vertex 1010.000000 -490.000000 260.000000
+      vertex 990.000000 -490.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 -1.0 0.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 1010.000000 -510.000000 260.000000
+      vertex 1010.000000 -510.000000 240.000000
+    endloop
+  endfacet
+  facet normal 0.0 -1.0 0.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 990.000000 -510.000000 260.000000
+      vertex 1010.000000 -510.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 0.0 1.0
+    outer loop
+      vertex 990.000000 -510.000000 260.000000
+      vertex 1010.000000 -490.000000 260.000000
+      vertex 1010.000000 -510.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 0.0 1.0
+    outer loop
+      vertex 990.000000 -510.000000 260.000000
+      vertex 990.000000 -490.000000 260.000000
+      vertex 1010.000000 -490.000000 260.000000
+    endloop
+  endfacet
+  facet normal 0.0 0.0 -1.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 1010.000000 -510.000000 240.000000
+      vertex 1010.000000 -490.000000 240.000000
+    endloop
+  endfacet
+  facet normal 0.0 0.0 -1.0
+    outer loop
+      vertex 990.000000 -510.000000 240.000000
+      vertex 1010.000000 -490.000000 240.000000
+      vertex 990.000000 -490.000000 240.000000
+    endloop
+  endfacet
+endsolid off_center_cube

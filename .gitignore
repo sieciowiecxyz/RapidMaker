@@ -1,0 +1,23 @@
+# Local secrets (only encrypted secrets/ files belong in Git)
+.env
+.env.*
+!.env.example
+
+# Builds and dependencies
+**/target/
+**/node_modules/
+**/dist/
+
+# Local test output
+**/__pycache__/
+*.pyc
+frontend/tests/artifacts/
+frontend/playwright-report/
+frontend/test-results/
+
+# Editors and local tools
+.idea/
+.vscode/
+.codex/
+.DS_Store
+*.log

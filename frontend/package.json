@@ -1,0 +1,32 @@
+{
+  "name": "rapidmaker-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 18430 --strictPort",
+    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 18430 --strictPort",
+    "test:e2e": "npm run build && playwright test",
+    "format": "prettier --write src vite.config.ts playwright.config.ts",
+    "format:check": "prettier --check src vite.config.ts playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@sveltejs/vite-plugin-svelte": "6.2.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "clsx": "^2.1.1",
+    "prettier": "^3.9.10",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "5.57.2",
+    "svelte-check": "4.3.3",
+    "tailwind-merge": "^3.7.0",
+    "tailwind-variants": "^3.3.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  },
+  "dependencies": {
+    "@stripe/stripe-js": "^10.1.0"
+  }
+}

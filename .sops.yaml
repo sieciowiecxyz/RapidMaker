@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: ^secrets/.*\.enc\.env$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB3QdJYIFiTljT//W5YFJb9a8DIBS0ow10CI8l1imxVW,
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIx5iJK+DF6QyR4xwFF6M6CEb+tVZ3yW/Blt8RsO/onL
