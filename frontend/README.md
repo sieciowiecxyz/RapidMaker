@@ -21,7 +21,7 @@ npm run build
 - `src/lib/api.ts` oddziela widoki od `mock.ts` i `types.ts`.
 - Kwoty są fikcyjnymi wartościami demonstracyjnymi. Pliki nie są wysyłane. Wybrany STL jest odczytywany lokalnie w celu podglądu; cena nadal nie wynika z jego geometrii.
 - Próbka obsługuje nazwy plików STL, STEP i 3MF, liczbę sztuk, materiał, kolor, jakość, trzy warianty wytrzymałości, odbiór/wysyłkę, ręczną wycenę, błąd i ponowienie.
-- Implementuje lokalny podgląd binarnych i tekstowych STL. Nie implementuje podglądu STEP/3MF, zamówień, kont, płatności ani wysyłania zapytań. Przyciski email/telefon otwierają odpowiednią aplikację użytkownika.
+- Implementuje lokalny podgląd binarnych i tekstowych STL. Nie implementuje podglądu STEP/3MF, składania rzeczywistych zamówień, kont, płatności ani wysyłania zapytań. Formularz danych zamówienia działa jako lokalny podgląd. Przyciski email/telefon otwierają odpowiednią aplikację użytkownika.
 - `PrintScene.svelte`, `partViewer.ts` i `partMesh.ts` tworzą lekki podgląd WebGL bez Three.js. Modele są proceduralne: PLA figurka szachowa, PETG zębatka, ASA obudowa, PA-CF ramię z trzema tulejami według referencji użytkownika, TPU mieszek harmonijkowy. Nie są to projekty dopuszczone do zastosowań konstrukcyjnych.
 - GSAP steruje budowaniem, obrotem, zmianą koloru i ugięciem TPU. Shader pokazuje poglądowe warstwy zależne od jakości. Odświeżanie ma limit 30fps i DPR1.5; poza ekranem i w ukrytej karcie obrót zatrzymuje się. Reduced-motion daje statyczny podgląd. Jest przycisk obrotu, pauza i ponowienie.
 - Materiały i jakość używają własnych etykietowanych selektorów opartych na natywnych grupach radio. Wytrzymałość zmienia przykładową cenę (Lekka ×0.9, Standard ×1, Wzmocniona ×1.25), bez deklarowania fizycznej nośności.
@@ -76,3 +76,12 @@ Materiały do powrotu:
 - Obrót myszą obejmuje dwa kierunki, przyciski plus/minus sterują przybliżeniem. Działają zmiana koloru, poglądowe warstwy i animacja budowania. Wybór wytrzymałości uruchamia jednorazowy, poglądowy przekrój również na wgranym STL: górna część unosi się i zanika, widoczne są różne grubości ścianek i gęstości wypełnienia, a model wraca do całości. Maska przekroju jest przygotowywana w workerze i przechowywana z siatką. Pokaz nie jest wynikiem slicera ani analizą wytrzymałości.
 - STEP/3MF można dodać do listy i skonfigurować, ale podgląd jasno informuje, że potrzebny jest STL. Plików nie wysyłamy na serwer.
 - Sprawdzono parser na binarnym STL z nagłówkiem `solid`, ASCII z wykładnikami i błędnych plikach. Testy przeglądarki używają własnych plików kontrolnych. Brak jeszcze pomiarów na pliku użytkownika i fizycznym telefonie.
+
+
+## Formularz realizacji i przejście dyszą — 2026-10-21
+
+- „Porozmawiajmy o realizacji” otwiera widok `#zamowienie` po poprawnym skonfigurowaniu wszystkich modeli i aktualizacji wyceny.
+- Jednorazowe przejście GSAP trwa około 1,4 s: osiem naprzemiennych przejazdów dyszy pokrywa ekran warstwami; formularz odsłania się po pełnym zakryciu. „Pomiń animację” oraz Escape kończą przejście od razu. Klawiatura i `prefers-reduced-motion` przechodzą bez ruchu.
+- Formularz zawiera kontakt, adres przy wysyłce, opcjonalne dane firmy/NIP i uwagi. Natywna walidacja blokuje puste lub niepoprawne pola. Podsumowanie przenosi każdy model, liczbę sztuk i jego ustawienia.
+- Powrót do konfiguratora zachowuje pliki i wpisane dane w pamięci bieżącej karty. Historia przeglądarki obsługuje widok zamówienia; odświeżenie nie odtwarza plików ani danych osobowych. Bez konfiguracji adres `#zamowienie` wraca do konfiguratora.
+- Ostatni krok to lokalny podgląd podsumowania. Nie wysyła danych, nie rezerwuje terminu i nie składa zamówienia. Backend, płatności i docelowa obsługa faktur pozostają do wdrożenia.

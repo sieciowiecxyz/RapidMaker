@@ -172,10 +172,13 @@ p { text-wrap: pretty; }
 
 /* Production chamber: one scene and controls share the same configuration. */
 .hero { grid-template-columns: 1fr 1fr; column-gap: 56px; row-gap: 32px; padding-top: 48px; }
-.hero-copy { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px 56px; align-items: end; padding: 0; }
+.hero-copy { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px 56px; align-items: start; padding: 0; }
 .hero-copy h1 { font-size: clamp(48px,5.7vw,80px); line-height: 1.02; letter-spacing: -.035em; grid-row: 1 / span 2; }
-.hero-copy .intro { font-size: 15px; margin: 0; max-width: 48ch; }
-.hero-copy .capabilities { margin: 0; gap: 8px 16px; }
+.hero-copy .intro { font-size: 17px; font-weight: 500; color: var(--ink); margin: 0; max-width: 48ch; }
+.intro-lead { display: block; max-width: 27ch; font-family: var(--display); font-size: clamp(23px,2vw,28px); line-height: 1.25; font-weight: 600; letter-spacing: -.02em; text-wrap: pretty; }
+.intro-lead span { color: var(--accent); white-space: nowrap; }
+.intro-detail { display: block; max-width: 43ch; margin-top: 14px; line-height: 1.65; color: color-mix(in srgb,var(--ink) 86%,var(--bg)); }
+.hero-copy .capabilities { margin: 0; padding-top: 14px; border-top: 1px solid var(--line); gap: 8px 16px; }
 .hero #wycena { grid-column: 2; grid-row: 2; }
 .hero > .print-scene { grid-column: 1; grid-row: 2; align-self: start; position: sticky; top: 28px; margin-top: 0; }
 .quote-card { border-radius: 0; padding: 28px; background: transparent; border: 1px solid var(--line); }
@@ -465,3 +468,6 @@ p { text-wrap: pretty; }
 
 .chamber-callout { max-width:calc(100% - 44px); overflow-wrap:anywhere; }
 .scene-actions { flex-wrap:wrap; }
+
+.order-nav-back { min-height:44px; padding:0; border:0; background:transparent; color:var(--ink); font-size:13px; font-weight:600; }
+[hidden] { display:none !important; }

@@ -5,6 +5,8 @@
   import { customColors } from './lib/colors';
   import { softValue } from './lib/motion';
   import PrintScene from './components/PrintScene.svelte';
+  import PrintTransition from './components/PrintTransition.svelte';
+  import OrderPage from './components/OrderPage.svelte';
   import ProductionControls from './components/ProductionControls.svelte';
   import { IconArrowUpRight, IconArrowRight, IconUpload, IconFile3d, IconX, IconCheck, IconSun, IconMoon, IconPhone, IconMail, IconMapPin, IconCube, IconRefresh } from '@tabler/icons-svelte';
   import Button from './components/ui/Button.svelte';
@@ -14,6 +16,24 @@
   import { defaultSettings, emptySettings, normalizeSettings, validateModel, settingsSummary } from './lib/modelSettings';
   import type { Model, Material, Quote, PrintSettings } from './lib/types';
 
+  let checkoutOpen = $state(false);
+  let transitioning = $state(false);
+  let orderDraft = $state<{models:Model[];materials:Material[];quote:Quote;delivery:string} | null>(null);
+  let configuratorScroll = 0;
+  async function focusOrder() { await tick(); document.getElementById('order-title')?.focus({preventScroll:true}); }
+  function revealOrder() {
+    checkoutOpen=true;
+    if(location.hash!=='#zamowienie') history.pushState(null,'','#zamowienie');
+    window.scrollTo({top:0,behavior:'instant'});
+  }
+  function finishOrderTransition() { transitioning=false; void focusOrder(); }
+  async function backToConfiguration() {
+    checkoutOpen=false;
+    history.pushState(null,'','#wycena');
+    await tick();
+    window.scrollTo({top:configuratorScroll,behavior:'instant'});
+    document.querySelector<HTMLButtonElement>('.quote-contact')?.focus({preventScroll:true});
+  }
   let contactGlow = $state(false);
   let contactFrame = 0;
   let contactTimer: ReturnType<typeof setTimeout>;
@@ -114,6 +134,15 @@
   const money = (value: number) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 
   onMount(() => {
+    const syncRoute=()=>{
+      if(transitioning)transitioning=false;
+      checkoutOpen=location.hash==='#zamowienie' && !!orderDraft;
+      if(checkoutOpen){window.scrollTo({top:0,behavior:'instant'});void focusOrder();}
+      else if(location.hash==='#zamowienie')history.replaceState(null,'','#wycena');
+    };
+    syncRoute();
+    window.addEventListener('popstate',syncRoute);
+    window.addEventListener('hashchange',syncRoute);
     const mobile = matchMedia('(max-width: 760px)');
     const syncMobile = () => { isMobile = mobile.matches; };
     syncMobile(); mobile.addEventListener('change', syncMobile);
@@ -131,6 +160,7 @@
         .from('.hero .quote-card', { y: 16, opacity: .45, duration: .5 }, .16);
     });
     return () => {
+      window.removeEventListener('popstate',syncRoute);window.removeEventListener('hashchange',syncRoute);
       cancelAnimationFrame(contactFrame); clearTimeout(contactTimer);
       mobile.removeEventListener('change', syncMobile);
       media.revert();
@@ -208,19 +238,21 @@
     if (fileInput) fileInput.value = '';
   }
   function changeQuantity(id: string, quantity: number) { models = models.map(m => m.id === id ? { ...m, quantity } : m); }
-  function prepareContact() {
-    if (!canContact || !quote) return;
-    contactContext = models.map(model=>`${model.name} (${model.quantity} szt.): ${settingsSummary(model.settings!,materials)}.`).join('\n')+`\n${quote.manual ? 'Ręczna wycena.' : `Przykładowa kwota: ${money(quote.total)}.`} To podsumowanie próbki, a nie wysłane zapytanie.`;
-    document.getElementById('contact-title')?.focus({ preventScroll: true });
-    document.getElementById('kontakt')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  function prepareContact(event:MouseEvent) {
+    if (!canContact || !quote || transitioning) return;
+    configuratorScroll=window.scrollY;
+    orderDraft={models:models.map(model=>({...model,settings:{...model.settings!}})),materials:[...materials],quote:{...quote,lines:quote.lines.map(line=>({...line}))},delivery};
+    if(event.detail===0 || matchMedia('(prefers-reduced-motion: reduce)').matches){revealOrder();void focusOrder();}
+    else transitioning=true;
   }
 </script>
 
-<a class="skip-link button button-primary" href="#main">Przejdź do treści</a>
+<div inert={transitioning} aria-busy={transitioning}>
+<a class="skip-link button button-primary" href={checkoutOpen?'#zamowienie':'#main'}>Przejdź do treści</a>
 <div class="prototype-bar">Propozycja nowej strony. Podgląd STL działa lokalnie. Pliki pozostają w przeglądarce, ceny są przykładowe.</div>
 <header class="header shell">
   <a class="brand" href="#main" aria-label="RapidMaker, początek strony"><img src="/logo.svg" alt="" width="30" height="40" /><span>rapidmaker</span></a>
-  <nav aria-label="Główna nawigacja"><a href="#oferta">Oferta</a><a href="#wycena">Wycena</a><a href="#kontakt" onclick={highlightContact}>Kontakt</a></nav>
+  <nav aria-label="Główna nawigacja">{#if checkoutOpen}<button class="order-nav-back" onclick={backToConfiguration}>Wróć do konfiguracji</button>{:else}<a href="#oferta">Oferta</a><a href="#wycena">Wycena</a><a href="#kontakt" onclick={highlightContact}>Kontakt</a>{/if}</nav>
   <div class="header-actions"><button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}><span class="t-icon-swap" data-state={theme === 'dark' ? 'a' : 'b'} aria-hidden="true"><span class="t-icon" data-icon="a"><IconSun size={18} stroke={1.6} /></span><span class="t-icon" data-icon="b"><IconMoon size={18} stroke={1.6} /></span></span></button></div>
 </header>
 
@@ -244,11 +276,12 @@
 {/snippet}
 {#snippet mobilePreview()}{#if isMobile}{@render scenePreview()}{/if}{/snippet}
 
+<div hidden={checkoutOpen}>
 <main id="main" class="shell">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
       <h1 id="hero-title"><span class="hero-word">Twój pomysł.</span><span class="hero-word hero-accent">Realna część.</span></h1>
-      <p class="intro">Prototyp, część zamienna czy krótka seria. Wydrukujemy Twój model i pomożemy dobrać materiał do jego zadania.</p>
+      <p class="intro"><strong class="intro-lead">Prototyp, część zamienna czy <span>krótka seria.</span></strong><span class="intro-detail">Wydrukujemy Twój model i pomożemy dobrać materiał do jego zadania.</span></p>
       <div class="capabilities"><span><IconCheck size={15} stroke={2} /> Druk FDM</span><span><IconCheck size={15} stroke={2} /> Projektowanie 3D</span><span><IconCheck size={15} stroke={2} /> Odbiór w Piasecznie</span></div>
     </div>
 
@@ -321,3 +354,8 @@
   <details class="prototype-tools"><summary>Narzędzia podglądu</summary><div class="specimen-tools"><Button variant="text" onclick={changeTheme}>Zmień motyw</Button><Button variant="text" onclick={async () => { if (!models.length) await useSample(); simulateError = true; document.getElementById('wycena')?.scrollIntoView(); }}>Symuluj błąd wyceny</Button></div></details>
 </main>
 <footer class="shell"><span>RapidMaker / Piaseczno</span><span>Próbka projektu. Wycena i kontakt teraz, zakup w kolejnym etapie.</span><a href="#main">Wróć na górę</a></footer>
+
+</div>
+{#if orderDraft}<div hidden={!checkoutOpen}><OrderPage draft={orderDraft} onback={backToConfiguration}/></div>{/if}
+</div>
+{#if transitioning}<PrintTransition oncovered={revealOrder} oncomplete={finishOrderTransition}/>{/if}
