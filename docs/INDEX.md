@@ -14,9 +14,9 @@ W tym katalogu: [PLAN.md — Wizja produktu](PLAN.md#wizja-produktu), zakres i s
 - [Brief frontendu](rapidmaker-frontend-brief.md)
   - przeczytaj gdy: rozwijasz samodzielny prototyp Svelte.
   - opis: widoki, konfigurator FDM, mocki i granice lokalnego checkout API.
-- [Aktywny M0](milestones/M0.md)
+- [Backend — checkpoint](milestones/backend.md)
   - przeczytaj gdy: wznawiasz przebudowę backendu.
-  - opis: dowody snapshotu i przygotowania środowiska.
+  - opis: postęp przebudowy API, PostgreSQL i wyceny slicerem.
 
 - [Sekrety](secrets.md)
   - przeczytaj gdy: konfigurujesz lokalne API lub dostęp współpracownika.

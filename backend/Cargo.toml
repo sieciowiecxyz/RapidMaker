@@ -19,3 +19,6 @@ gltf = { version = "1.4", default-features = false, features = ["utils"] }
 rapidmaker-geometry = { path = "crates/geometry" }
 rapidmaker-packing = { path = "crates/packing" }
 rapidmaker-pricing = { path = "crates/pricing" }
+rapidmaker-api = { path = "crates/api" }
+rapidmaker-storage = { path = "crates/storage" }
+rapidmaker-slicer = { path = "crates/slicer" }

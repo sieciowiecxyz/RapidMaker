@@ -17,7 +17,7 @@ Checkout: **konfiguracja druku → dane i dostawa → podsumowanie → płatnoś
 
 To POC. Działają frontend, API analizy modeli, szacowanie paczek oraz testowe integracje Stripe i Furgonetki. Konta, katalog, chat i panele w dużej części używają mocków i `localStorage`.
 
-Wycena druku jest uproszczona; slicer, kalibracja kosztów, trwałe zamówienia, produkcyjne webhooki i email pozostają do wdrożenia. Backend przechowuje stan w RAM; restart wymaga ponownego uploadu modeli i pobrania ofert. Nowy frontend Piotra ma podgląd STL w natywnym WebGL, z parserem w workerze przeglądarki. STEP i 3MF analizuje backend; ich podgląd oraz wspólny viewer GLB/Three.js pozostają do podłączenia. Przykłady bez analizy serwera wymagają ręcznej wyceny.
+Stary checkout nadal ma uproszczoną taryfę i stan w RAM. Nowe API katalogu i wyceny slicerem zapisuje dane w PostgreSQL; nie jest jeszcze podłączone do UI/checkoutu. Kalibracja kosztów, trwałe zamówienia, produkcyjne webhooki i email pozostają do wdrożenia. Konfiguracja i kontrakt: [backend/README.md](backend/README.md). Nowy frontend Piotra ma podgląd STL w natywnym WebGL, z parserem w workerze przeglądarki. STEP i 3MF analizuje backend; ich podgląd oraz wspólny viewer GLB/Three.js pozostają do podłączenia. Przykłady bez analizy serwera wymagają ręcznej wyceny.
 
 Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), logowanie oraz panele klienta i admina zachowują dotychczasową logikę w motywie Piotra. Opcje techniczne druku są pod `/wycena/zaawansowana`; powrót do konfiguratora zachowuje ustawienia koszyka.
 

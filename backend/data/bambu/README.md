@@ -8,7 +8,7 @@ Presety pochodzą z Bambu Studio; obowiązują warunki licencji źródłowego pr
 - `profiles.json`: 134 oryginalne presety materiałów, drukarki i druku wraz z zależnościami `inherits` oraz `include`. Katalog zawiera SHA-256 tego pliku.
 - P1P ma zapisaną osobno zamierzoną zmianę dyszy na hardened steel. Oryginalny preset pozostaje bez zmian; sam snapshot nie konfiguruje slicera.
 
-To dane wejściowe przyszłego importu, jeszcze nie działający katalog API ani wyceniarka. Nie zawierają kont, tokenów ani konfiguracji użytkownika Bambu Studio.
+Snapshot zasila już import PostgreSQL i katalog API; nowy slicer używa wybranych presetów. Frontend i stary checkout nie są jeszcze przełączone. Nie zawierają kont, tokenów ani konfiguracji użytkownika Bambu Studio.
 
 ## Czego te dane nie potwierdzają
 
@@ -17,6 +17,6 @@ To dane wejściowe przyszłego importu, jeszcze nie działający katalog API ani
 - 47 materiałów ma profil deklarujący P1P 0,4 mm. To nie kwalifikacja produkcyjna: trzeba sprawdzić m.in. obudowę, ekstruder i wymagania materiału. `production_enabled` pozostaje wyłączone.
 - Przed użyciem CLI trzeba rozwiązać dziedziczenie i dołączenia presetów oraz zastosować konfigurację rzeczywistej drukarki.
 
-## Dalsze podłączenie
+## Podłączenie
 
-Rust: `storage` importuje materiały i kolory do PostgreSQL przez SQLx; `slicer` uruchamia kontrolowane profile; `pricing` liczy koszt z czasu i zużycia; `app` zbiera trasy HTTP. Panel admina edytuje cenę zakupu, kolory, magazyn i dopuszczenie do produkcji. Zapisy wymagają uprawnień sprawdzanych przez backend.
+Rust: `storage` importuje materiały i kolory przez SQLx; `slicer` uruchamia profile PLA Basic/PETG HF; `pricing` liczy koszt; `api` zbiera trasy HTTP, `app` uruchamia serwer. Panel admina będzie edytować cenę zakupu, kolory, magazyn i dopuszczenie do produkcji po dodaniu uprawnień w backendzie.
