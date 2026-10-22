@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use rapidmaker_geometry::{ConversionLimits, ThreeMfLimits, source_to_preview_glb};
+use rapidmaker_geometry::{ConversionLimits, ThreeMfLimits, source_to_preview_glb, source_to_stl};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -15,7 +15,7 @@ use std::{
     fs,
     io::Write,
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -114,54 +114,8 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
             "Nie można przygotować analizy.",
         )
     })?;
-    let executable = std::env::current_exe()
+    let mut command = isolated_worker(&source, output, "--analyze-model-worker", 80 * 1024 * 1024)
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak procesu analizy."))?;
-    // Fail closed if bubblewrap/namespaces are unavailable: the parser cannot
-    // read host files, reach the network or leave child processes running.
-    let isolated_source = format!("/model.{extension}");
-    let mut command = tokio::process::Command::new("/usr/bin/prlimit");
-    command
-        .args([
-            "--as=2147483648",
-            "--cpu=25",
-            "--fsize=83886080",
-            "--nofile=64",
-            "--",
-            "/usr/bin/bwrap",
-            "--unshare-all",
-            "--die-with-parent",
-            "--new-session",
-            "--cap-drop",
-            "ALL",
-            "--ro-bind",
-            "/usr",
-            "/usr",
-            "--symlink",
-            "usr/lib",
-            "/lib",
-            "--symlink",
-            "usr/lib",
-            "/lib64",
-            "--proc",
-            "/proc",
-            "--dev",
-            "/dev",
-            "--ro-bind",
-        ])
-        .arg(executable)
-        .arg("/worker")
-        .arg("--ro-bind")
-        .arg(&source)
-        .arg(&isolated_source)
-        .args(["--remount-ro", "/", "/worker", "--analyze-model-worker"])
-        .arg(&isolated_source)
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin")
-        .current_dir(&workspace.0)
-        .stdin(std::process::Stdio::null())
-        .stdout(output)
-        .stderr(std::process::Stdio::null())
-        .kill_on_drop(true);
     let status = tokio::time::timeout(Duration::from_secs(30), command.status())
         .await
         .map_err(|_| {
@@ -215,57 +169,157 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
     Ok(Json(result))
 }
 
+fn isolated_worker(
+    source: &Path,
+    output: fs::File,
+    flag: &str,
+    output_limit: u64,
+) -> Result<tokio::process::Command, String> {
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    // Fail closed if bubblewrap/namespaces are unavailable: the parser cannot
+    // read host files, reach the network or leave child processes running.
+    let extension = source
+        .extension()
+        .and_then(|v| v.to_str())
+        .ok_or("Missing model extension")?;
+    let isolated_source = format!("/model.{extension}");
+    let mut command = tokio::process::Command::new("/usr/bin/prlimit");
+    command
+        .arg(format!("--fsize={output_limit}"))
+        .args([
+            "--as=2147483648",
+            "--cpu=25",
+            "--nofile=64",
+            "--",
+            "/usr/bin/bwrap",
+            "--unshare-all",
+            "--die-with-parent",
+            "--new-session",
+            "--cap-drop",
+            "ALL",
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--symlink",
+            "usr/lib",
+            "/lib",
+            "--symlink",
+            "usr/lib",
+            "/lib64",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--ro-bind",
+        ])
+        .arg(executable)
+        .arg("/worker")
+        .arg("--ro-bind")
+        .arg(source)
+        .arg(&isolated_source)
+        .args(["--remount-ro", "/", "/worker", flag])
+        .arg(&isolated_source)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(source.parent().ok_or("Missing model directory")?)
+        .stdin(std::process::Stdio::null())
+        .stdout(output)
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    Ok(command)
+}
+
+/// Convert only geometry in the same restricted parser sandbox as analysis.
+/// The caller owns both paths; output must be a fresh file in its private workspace.
+pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<(), String> {
+    let extension = source.extension().and_then(|v| v.to_str()).unwrap_or("");
+    if !matches!(extension, "stl" | "step" | "stp" | "3mf") {
+        return Err("Unsupported source format".into());
+    }
+    let length = fs::metadata(source).map_err(|e| e.to_string())?.len();
+    if length == 0 || length > MAX_BYTES as u64 {
+        return Err("Invalid model size".into());
+    }
+    let _permit = BUSY.try_acquire().map_err(|_| "Model parser busy")?;
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output)
+        .map_err(|e| e.to_string())?;
+    let result = async {
+        let mut command =
+            isolated_worker(source, file, "--prepare-slicing-worker", 50 * 1024 * 1024)?;
+        let status = tokio::time::timeout(Duration::from_secs(30), command.status())
+            .await
+            .map_err(|_| "Model conversion timed out")?
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("Unsupported or invalid model geometry".into());
+        }
+        let length = fs::metadata(output).map_err(|e| e.to_string())?.len();
+        if !(84..=50 * 1024 * 1024).contains(&length) {
+            return Err("Invalid canonical mesh size".into());
+        }
+        Ok(())
+    }
+    .await;
+    if result.is_err() {
+        let _ = fs::remove_file(output);
+    }
+    result
+}
+
 /// Called before Tokio starts, so parser panics/resource exhaustion stay in this child.
 pub fn worker() -> bool {
     let mut args = std::env::args();
     args.next();
-    if args.next().as_deref() != Some("--analyze-model-worker") {
+    let mode = args.next().unwrap_or_default();
+    if !matches!(
+        mode.as_str(),
+        "--analyze-model-worker" | "--prepare-slicing-worker"
+    ) {
         return false;
     }
     let result = args
         .next()
-        .ok_or(())
-        .and_then(|filename| analyze_file(&filename).map_err(|_| ()));
-    match result {
-        Ok(result) => {
-            let _ = std::io::stdout().write_all(&serde_json::to_vec(&result).unwrap());
-        }
-        Err(_) => std::process::exit(1),
+        .ok_or_else(|| "Missing model path".to_string())
+        .and_then(|filename| {
+            if mode == "--prepare-slicing-worker" {
+                if fs::metadata(&filename).map_err(|e| e.to_string())?.len() > MAX_BYTES as u64 {
+                    return Err("Input too large".into());
+                }
+                let input = fs::read(&filename).map_err(|e| e.to_string())?;
+                source_to_stl(
+                    &filename,
+                    &input,
+                    &ConversionLimits {
+                        max_input_bytes: MAX_BYTES,
+                        max_output_glb_bytes: 50 * 1024 * 1024,
+                        max_parse_seconds: 25,
+                        ..Default::default()
+                    },
+                    &ThreeMfLimits::default(),
+                )
+                .map_err(|e| e.to_string())
+            } else {
+                serde_json::to_vec(&analyze_file(&filename)?).map_err(|e| e.to_string())
+            }
+        });
+    if result
+        .and_then(|bytes| {
+            std::io::stdout()
+                .write_all(&bytes)
+                .map_err(|e| e.to_string())
+        })
+        .is_err()
+    {
+        std::process::exit(1);
     }
     true
 }
 
 fn analyze_file(filename: &str) -> Result<ModelAnalysis, String> {
     let input = fs::read(filename).map_err(|e| e.to_string())?;
-    if filename.ends_with(".step") || filename.ends_with(".stp") {
-        // Legacy tessellation does not apply assembly instances or STEP units.
-        // Accept a single explicit mm context only; never silently mis-scale a parcel.
-        let text = std::str::from_utf8(&input).map_err(|_| "Invalid STEP")?;
-        let compact: String = text
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>()
-            .to_ascii_uppercase();
-        let units: Vec<_> = compact
-            .split(';')
-            .filter(|entity| entity.contains("LENGTH_UNIT()"))
-            .collect();
-        if units.len() != 1
-            || !units[0].contains("SI_UNIT(.MILLI.,.METRE.)")
-            || [
-                "MAPPED_ITEM(",
-                "REPRESENTATION_RELATIONSHIP(",
-                "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(",
-                "CONVERSION_BASED_UNIT(",
-            ]
-            .iter()
-            .any(|item| compact.contains(item))
-        {
-            return Err(
-                "STEP assembly or ambiguous/unsupported units; export a single mm part".into(),
-            );
-        }
-    }
     let limits = ConversionLimits {
         max_input_bytes: MAX_BYTES,
         max_parse_seconds: 25,

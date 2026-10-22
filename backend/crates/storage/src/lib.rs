@@ -5,6 +5,9 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 use std::{collections::HashSet, error::Error, time::Duration};
 
+mod admin;
+pub use admin::{MaterialInput, validate_color};
+
 pub type StorageError = Box<dyn Error + Send + Sync>;
 
 #[derive(Clone)]
@@ -24,6 +27,7 @@ pub struct Material {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Color {
     pub code: String,
     pub name: String,
@@ -74,8 +78,7 @@ impl Storage {
             });
             sqlx::query(
                 "INSERT INTO catalog_materials (id,name,density_g_cm3,source) VALUES ($1,$2,$3,$4)
-                 ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,
-                 density_g_cm3=EXCLUDED.density_g_cm3, source=EXCLUDED.source",
+                 ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source",
             )
             .bind(&material.id)
             .bind(material.name)
@@ -86,7 +89,7 @@ impl Storage {
             for color in material.colors {
                 sqlx::query(
                     "INSERT INTO catalog_colors (material_id,code,name,rgba) VALUES ($1,$2,$3,$4)
-                     ON CONFLICT (material_id,code) DO UPDATE SET name=EXCLUDED.name,rgba=EXCLUDED.rgba",
+                     ON CONFLICT (material_id,code) DO NOTHING",
                 )
                 .bind(&material.id)
                 .bind(color.code)

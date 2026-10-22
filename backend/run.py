@@ -5,7 +5,7 @@ import shlex
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
-allowed = {"STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "FURGONETKA_SANDBOX_TOKEN", "FURGONETKA_SENDER_JSON", "DATABASE_URL", "PRICING_RATES_JSON"}
+allowed = {"STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "FURGONETKA_SANDBOX_TOKEN", "FURGONETKA_SENDER_JSON", "DATABASE_URL", "PRICING_RATES_JSON", "ADMIN_API_TOKEN"}
 for name in (".env",):
     path = root / name
     if not path.exists():

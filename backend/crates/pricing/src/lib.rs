@@ -67,30 +67,29 @@ impl Rates {
     }
 }
 
-/// Conservative first implementation: each copy occupies a separate plate.
-/// Setup is charged once; handling and measured runtime accrue per plate.
+/// Inputs are measured totals across all plates, not per-copy guesses.
+/// Setup is charged once and plate handling follows the actual batch plan.
 pub fn calculate(
     seconds: u64,
     filament_milligrams: u64,
-    quantity: u32,
+    plates: u32,
     purchase_grosze_per_kg: u32,
     rates: &Rates,
 ) -> Result<Price, &'static str> {
     rates.validate()?;
-    if !(1..=1000).contains(&quantity)
+    if !(1..=1000).contains(&plates)
         || seconds == 0
-        || seconds > 7 * 24 * 3600
+        || seconds > 365 * 24 * 3600
         || filament_milligrams == 0
-        || filament_milligrams > 10_000_000
+        || filament_milligrams > 1_000_000_000
         || purchase_grosze_per_kg == 0
     {
-        return Err("Invalid slicer measurement, quantity or purchase price");
+        return Err("Invalid slicer measurement, plate count or purchase price");
     }
     let ceil = |n: u128, d: u128| n.div_ceil(d);
-    let count = u128::from(quantity);
-    let time = u128::from(seconds) * count;
+    let time = u128::from(seconds);
     let filament = ceil(
-        u128::from(filament_milligrams) * count * u128::from(purchase_grosze_per_kg),
+        u128::from(filament_milligrams) * u128::from(purchase_grosze_per_kg),
         1_000_000,
     );
     let machine = ceil(time * u128::from(rates.machine_per_hour_grosze), 3600);
@@ -98,7 +97,7 @@ pub fn calculate(
         time * u128::from(rates.printer_watts) * u128::from(rates.energy_per_kwh_grosze),
         3_600_000,
     );
-    let handling = count * u128::from(rates.handling_per_plate_grosze);
+    let handling = u128::from(plates) * u128::from(rates.handling_per_plate_grosze);
     let base = filament + machine + energy + handling + u128::from(rates.setup_grosze);
     let loss = ceil(base * u128::from(rates.loss_bps), 10_000);
     let cost = base + loss;
@@ -148,12 +147,24 @@ mod tests {
             (800, 200, 18)
         );
         for quantity in [2, 10, 100] {
-            let price = calculate(3600, 100_000, quantity, 8000, &rates).unwrap();
+            let price = calculate(
+                3600 * u64::from(quantity),
+                100_000 * u64::from(quantity),
+                quantity,
+                8000,
+                &rates,
+            )
+            .unwrap();
             assert_eq!(price.setup_grosze, 1000);
             assert!(price.net_grosze > price.cost_net_grosze);
             assert!(price.gross_grosze > one.gross_grosze);
             assert!(price.gross_grosze < one.gross_grosze * quantity);
         }
+        let shared = calculate(6000, 200_000, 1, 8000, &rates).unwrap();
+        let separate = calculate(7200, 200_000, 2, 8000, &rates).unwrap();
+        assert_eq!(shared.handling_grosze, 100);
+        assert_eq!(shared.filament_grosze, 1600);
+        assert!(shared.net_grosze < separate.net_grosze);
         assert!(
             calculate(3600, 200_000, 1, 8000, &rates)
                 .unwrap()

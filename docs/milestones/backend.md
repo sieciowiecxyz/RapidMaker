@@ -1,29 +1,32 @@
 # Checkpoint backendu
 
-2026-10-23. Aktywny B3/B4; nowy plan zastępuje M0–M6. Historia starych opisów jest w Git. Baza przed zmianą: `ee4208a`.
+2026-10-23. Aktywny B5. Baza tego kroku: `573f1af`; stary plan M0–M6 pozostaje w historii Git.
 
-## Zrobione
+## Stan
 
-- B1 PASS: osobny crate `api`, `app` tylko uruchamia serwer i tryb workera. Zależności jednokierunkowe; dotychczasowe 9 testów API przechodzi.
-- B2 PASS: PostgreSQL 16 na localhost:18434, SQLx/migracje, import 49 materiałów/314 kolorów. Powtórny import zachowuje koszt/stock/dopuszczenie; reconnect i niezmienność ID wyceny sprawdzone na prawdziwej bazie.
-- B3 częściowo: izolowany Bambu Studio, STL, PLA Basic/PETG HF, P1P hardened 0,4 + Textured PEI + standard 0,20. Rzeczywisty cube20mm: PLA około 1263 s/3,72 g, PETG około 1465 s/3,67 g. Niedozwolony profil i błędny wynik są odrzucane; uszkodzony STL sprawdzony przez HTTP.
-- B4 częściowo: koszt netto/VAT/brutto z czasu i masy; cena zakupu/rates jawne; przygotowanie raz, obsługa/czas na sztukę. Cache pomiaru 64 wpisy/10 min, zapis snapshotu w DB. Każda sztuka na osobnej płycie, bez optymalizacji partii.
+- B1/B2 PASS: osobny crate API; PostgreSQL/SQLx, katalog 49 materiałów i 314 kolorów, trwałe snapshoty wycen.
+- B3 PASS POC: STL/STEP/STP/3MF → kanoniczny STL w izolowanym workerze → izolowany Bambu Studio. STEP wymaga pojedynczej części w mm; 3MF zachowuje jednostki/transformacje i pomija ustawienia/G-code klienta.
+- B4 PASS POC: rzeczywiste układanie kopii, pomiar pełnej płyty, powtarzanie identycznych płyt i osobny pomiar reszty. Ilość 1–1000, draft/standard/fine, 2–8 ścian, wypełnienie 5–100%. Koszt opiera się na zmierzonych sumach i liczbie płyt, przygotowanie raz.
+- Profile materiałów wybierane z zaufanego snapshotu: 41 ma profil P1P 0,4 mm po wykluczeniu podpór. Nie oznacza to fizycznej kwalifikacji wszystkich materiałów; cena, magazyn i zatwierdzenie sprzętu są obowiązkiem operatora. Faktycznie uruchomiono PLA Basic/PETG HF/ABS.
+- B5 częściowo: chronione Bearer API operatora tworzy/edytuje materiały, kolory i wersjonowane stawki. Porównanie sekretu w stałym czasie. Import zachowuje zmiany operatora; cennik PostgreSQL ma pierwszeństwo przed `.env` bez restartu.
 
 ## Dowody
 
-- PASS build i Clippy zmienionych crate’ów; 13 testów jednostkowych (API, wycena, katalog i parser wyniku slicera). Workerzy: unit/import/reconnect PostgreSQL oraz prawdziwy sandbox slicera dla obu materiałów.
-- PASS HTTP na osobnej tymczasowej bazie: katalog 49/314 bez cen zakupu, brak dopuszczenia → 422, STL → pomiar/cena/zapis, uszkodzony STL → 422, cztery wyceny pozostają po restarcie API.
-- Stawki WYŁĄCZNIE testowe, koszt zakupu 80 zł netto/kg: cube20mm dla 1/2/10/100 sztuk dał 19,53/22,85/49,49/349,14 zł brutto. To test arytmetyki i przebiegu, nie zatwierdzony cennik ani dowód rentowności. Tymczasowa baza została usunięta.
-- Normalny API uruchomiony ponownie z `.env`/PostgreSQL. Nie zapisano fikcyjnych cen, stanów ani stawek produkcyjnych; nowa wycena bez nich zwraca ręczną ocenę/503.
-- NOT RUN: produkcyjna kalibracja, frontend/checkout nowego silnika, screenshoty (UI bez zmian), pełny pentest/E2E.
+- PASS build, Clippy zmienionych crate’ów i fmt. Testy API/pricing/storage przechodzą; geometria 14 testów; rzeczywisty slicer potwierdził ustawienia i partie, w tym 1000 kopii na 9 płytach (8 × 120 + 40), dwa uruchomienia CLI.
+- PASS HTTP na osobnej tymczasowej bazie: STL, dwa STEP, 3MF oraz transformowany model w cm. Dodane ustawienia i G-code w 3MF nie zmieniły pomiaru. Uszkodzony STL, ZIP traversal, niedozwolone jednostki STEP i infill101% są odrzucane.
+- PASS API operatora: brak/błędny token → 401; dodawanie materiału/koloru, edycja kosztu i magazynu; błędny kolor → 400; zmiana ceny bez nowej wersji → 409. Nowy cennik zmienia nowe wyceny, nie poprzednie snapshoty.
+- PASS restart/import: 12 wycen, własny materiał i zmiany operatora przetrwały restart; ceny zakupu są ukryte w publicznym katalogu.
+- Przykład WYŁĄCZNIE na stawkach testowych, koszt zakupu 80 zł netto/kg: cube20mm 1/2/10/100 sztuk około 19,53/20,10/25,98/96 zł brutto; wszystkie te partie mieszczą się na jednej płycie. Układanie slicera może dać nieco inny czas przy nowym przebiegu; wydana wycena pozostaje snapshotem. To nie zatwierdzony cennik ani dowód rentowności. Tymczasowa baza została usunięta.
+- Normalny API restartowany z `.env` i PostgreSQL. Losowy sekret operatora jest lokalnie w `.env`/SOPS, bez ujawniania wartości. Nie zapisano fikcyjnych cen, magazynu ani cennika produkcyjnego.
+- NOT RUN: kalibracja rzeczywistych wydruków, całościowy pentest, frontend nowej wyceny i checkout; UI nie zmieniano.
 
-Rust LOC: 3830 → 4749 (+919), bez pustych linii i komentarzy, łącznie z testami inline. Nowy crate `api`; SQLx dla PostgreSQL i SHA-256 dla cache.
+Rust LOC: 4749 → 5555 (+806), łącznie z testami inline, bez komentarzy i pustych linii. Baseline zmierzony z `git archive HEAD`. Jedyna nowa bezpośrednia zależność: `subtle` do porównania sekretu w stałym czasie (już obecna w lockfile).
 
-## Dalej
+## Dalej — B5
 
-1. Bezpieczna siatka produkcyjna STEP/3MF i zachowanie modeli/zadań; analiza geometrii działa już osobno.
-2. Rzeczywiste partie/wspólne płyty i kontrolowane opcje druku; kolejne zatwierdzone profile.
-3. Konfiguracja operatora i autoryzowany zapis admina, frontend i checkout nowej kwoty (B5).
-4. Potrzebne rzeczywiste ceny zakupu oraz zatwierdzenie kosztów i sprzętu; nie zastępować ich domyślnymi wartościami slicera.
+1. Sesja operatora i formularze panelu bez sekretu w bundle/localStorage; browser mock nigdy nie autoryzuje zapisu DB.
+2. Konfigurator korzysta z katalogu i nowego silnika zamiast starych mocków/taryfy; przechowuje pliki prywatnie z jasną własnością i limitami.
+3. Wynik wyceny wiąże ilość/ustawienia/model z właściwą masą/wymiarami do pakowania, ofertą Furgonetki i kwotą Stripe. Zmiana koszyka unieważnia ofertę.
+4. Potrzebne rzeczywiste ceny zakupu i zatwierdzenie kosztów/sprzętu przed sprzedażą; nie zastępować ich domyślnym kosztem slicera.
 
-Niezależne dopiski użytkownika w `AGENTS.md` oraz nieśledzony `result.json` zachować.
+Niezależne dopiski użytkownika w `AGENTS.md` i nieśledzony `result.json` zachować.

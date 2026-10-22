@@ -1,7 +1,7 @@
 # Rapidmaker — backend i automatyczna wycena
 
 Mode: goal
-Active: B3
+Active: B5
 
 ## Cel
 

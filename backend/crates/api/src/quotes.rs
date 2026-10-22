@@ -7,6 +7,7 @@ use axum::{
     routing::{get, post},
 };
 use rapidmaker_pricing::{Rates, calculate};
+use rapidmaker_slicer::{BatchEstimate, Options};
 use rapidmaker_storage::Storage;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -22,7 +23,7 @@ use tokio::sync::{Mutex, Semaphore};
 
 static UPLOAD: Semaphore = Semaphore::const_new(1);
 type Error = (StatusCode, Json<Value>);
-type Cache = HashMap<String, (Instant, rapidmaker_slicer::Estimate)>;
+type Cache = HashMap<String, (Instant, BatchEstimate)>;
 struct App {
     storage: Option<Storage>,
     rates: Option<Rates>,
@@ -53,6 +54,7 @@ pub async fn router() -> Result<Router, Box<dyn std::error::Error + Send + Sync>
     if let Some(rates) = &rates {
         rates.validate()?;
     }
+    let admin = super::admin::router(storage.clone(), rates.clone())?;
     Ok(Router::new()
         .route("/api/catalog/materials", get(materials))
         .route(
@@ -63,7 +65,8 @@ pub async fn router() -> Result<Router, Box<dyn std::error::Error + Send + Sync>
             storage,
             rates,
             cache: Mutex::new(HashMap::new()),
-        })))
+        }))
+        .merge(admin))
 }
 
 async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
@@ -74,7 +77,8 @@ async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
         json!({"materials": catalog.into_iter().map(|m| json!({
         "id":m.id,"name":m.name,"density_g_cm3":m.density_g_cm3,"colors":m.colors,
         "available":m.production_enabled && m.cost_net_grosze_per_kg.is_some()
-            && matches!(m.id.as_str(), "GFA00" | "GFG02"),
+            && m.colors.iter().any(|color| color.in_stock)
+            && rapidmaker_slicer::material_supported(&m.id),
     })).collect::<Vec<_>>()}),
     ))
 }
@@ -93,7 +97,7 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, Error> {
         .ok_or_else(|| {
             error(
                 StatusCode::BAD_REQUEST,
-                "Podaj plik STL, materiał, kolor i liczbę sztuk.",
+                "Podaj plik modelu, materiał, kolor i liczbę sztuk.",
             )
         })
 }
@@ -104,7 +108,14 @@ async fn estimate(
     input: Bytes,
 ) -> Result<Json<Value>, Error> {
     let storage = app.storage.as_ref().ok_or_else(unavailable)?;
-    let rates = app.rates.as_ref().ok_or_else(unavailable)?;
+    let configured = storage.pricing_config().await.map_err(|_| unavailable())?;
+    let rates = configured
+        .map(serde_json::from_value::<Rates>)
+        .transpose()
+        .map_err(|_| unavailable())?
+        .or_else(|| app.rates.clone())
+        .ok_or_else(unavailable)?;
+    rates.validate().map_err(|_| unavailable())?;
     let filename = header(&headers, "x-model-filename")?;
     let material_id = header(&headers, "x-material-id")?;
     let color = header(&headers, "x-color-code")?;
@@ -118,13 +129,47 @@ async fn estimate(
                 "Liczba sztuk musi wynosić od 1 do 1000.",
             )
         })?;
-    if input.is_empty() || filename.len() > 1024 || !filename.to_ascii_lowercase().ends_with(".stl")
+    let extension = filename
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if input.is_empty()
+        || filename.len() > 1024
+        || !matches!(extension.as_str(), "stl" | "step" | "stp" | "3mf")
     {
         return Err(error(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "Automatyczny slicer obsługuje obecnie STL. STEP i 3MF wymagają jeszcze podłączenia bezpiecznej siatki produkcyjnej.",
+            "Wybierz niepusty model STL, STEP albo 3MF do 32 MiB.",
         ));
     }
+    let optional = |name: &str, fallback: &str| -> Result<String, Error> {
+        match headers.get(name) {
+            Some(value) => value
+                .to_str()
+                .map(str::to_owned)
+                .map_err(|_| error(StatusCode::BAD_REQUEST, "Nieprawidłowe ustawienia druku.")),
+            None => Ok(fallback.to_owned()),
+        }
+    };
+    let options: Options = serde_json::from_value(json!({
+        "quantity":quantity,
+        "quality":optional("x-print-quality", "standard")?,
+        "wall_loops":optional("x-wall-loops", "2")?.parse::<u8>().ok(),
+        "infill_percent":optional("x-infill-percent", "15")?.parse::<u8>().ok(),
+    }))
+    .map_err(|_| {
+        error(
+            StatusCode::BAD_REQUEST,
+            "Wybierz jakość draft/standard/fine, 2–8 ścian i wypełnienie 5–100%.",
+        )
+    })?;
+    options.validate().map_err(|_| {
+        error(
+            StatusCode::BAD_REQUEST,
+            "Wybierz jakość draft/standard/fine, 2–8 ścian i wypełnienie 5–100%.",
+        )
+    })?;
     let material = storage
         .materials()
         .await
@@ -160,9 +205,10 @@ async fn estimate(
     })?;
     let model_hash = format!("{:x}", Sha256::digest(&input));
     let cache_key = format!(
-        "{model_hash}:{material_id}:{}:{}",
+        "{model_hash}:{extension}:{material_id}:{}:{}:{}",
         rapidmaker_slicer::PROFILE_VERSION,
-        material.source["profiles_sha256"]
+        material.source["profiles_sha256"],
+        serde_json::to_string(&options).map_err(|_| unavailable())?
     );
     let mut cache = app.cache.lock().await;
     cache.retain(|_, (created, _)| created.elapsed() < Duration::from_secs(600));
@@ -174,9 +220,11 @@ async fn estimate(
         fs::create_dir(&workspace.0).map_err(|_| unavailable())?;
         fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))
             .map_err(|_| unavailable())?;
-        let source = workspace.0.join("model.stl");
+        let source = workspace.0.join(format!("source.{extension}"));
+        let canonical = workspace.0.join("model.stl");
         fs::write(&source, input).map_err(|_| unavailable())?;
-        let measured = rapidmaker_slicer::slice(&source, material_id).await.map_err(|e| match e {
+        super::models::prepare_for_slicing(&source, &canonical).await.map_err(|_| error(StatusCode::UNPROCESSABLE_ENTITY, "Nie udało się przygotować bezpiecznej siatki. STEP wymaga pojedynczej części w mm; uszkodzone lub nieobsługiwane modele wymagają ręcznej oceny."))?;
+        let measured = rapidmaker_slicer::slice_job(&canonical, material_id, &options).await.map_err(|e| match e {
             rapidmaker_slicer::Error::Busy => error(StatusCode::TOO_MANY_REQUESTS, "Slicer jest zajęty. Spróbuj za chwilę."),
             rapidmaker_slicer::Error::UnsupportedMaterial => error(StatusCode::UNPROCESSABLE_ENTITY, "Ten materiał wymaga ręcznej wyceny; brak zatwierdzonego profilu slicera."),
             _ => error(StatusCode::UNPROCESSABLE_ENTITY, "Nie udało się przygotować wyceny slicerem. Sprawdź model lub poproś o ocenę indywidualną."),
@@ -191,9 +239,9 @@ async fn estimate(
     let price = calculate(
         measured.time_seconds,
         (measured.filament_grams * 1000.0).ceil() as u64,
-        quantity,
+        measured.plates,
         cost,
-        rates,
+        &rates,
     )
     .map_err(|_| {
         error(
@@ -203,11 +251,11 @@ async fn estimate(
     })?;
     let id = uuid::Uuid::new_v4().to_string();
     let request = json!({"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
-        "purchase_net_grosze_per_kg":cost,"rates":rates,"profiles_sha256":material.source["profiles_sha256"]});
+        "options":options,"purchase_net_grosze_per_kg":cost,"rates":rates,"profiles_sha256":material.source["profiles_sha256"]});
     let result = json!({"id":id,"status":"estimated_poc","currency":"PLN","quantity":quantity,
-        "measurement_per_copy":measured,"plates":quantity,"batch_strategy":"one_copy_per_plate",
+        "measurement":measured,"plates":measured.plates,"batch_strategy":"arranged_plate_batches","options":options,
         "price":price,"pricing_version":rates.version,"payable":false,
-        "notice":"Wycena testowa: osobna płyta na każdą sztukę. Dostawa i opakowanie osobno. Kalibracja i checkout pozostają do podłączenia."});
+        "notice":"Wycena testowa z ułożenia modeli na płytach. Powtarzalne pełne płyty liczone z jednego pomiaru, ostatnia osobno. Dostawa i opakowanie osobno; kalibracja i checkout pozostają do podłączenia."});
     drop(cache);
     storage
         .save_quote(&id, &request, &result)

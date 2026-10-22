@@ -8,18 +8,18 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 
 - `backend/crates/app`: start serwera na localhost:18432, start trybu workera geometrii.
 - `api`: wspólny router, lokalna ochrona Host/Origin, upload, katalog, nowa wycena i stary checkout sandboxów. `checkout.rs` wciąż zawiera adaptery Stripe/Furgonetki.
-- `storage`: SQLx/PostgreSQL; migracja `catalog_materials`, `catalog_colors`, `quotes`. Import transakcyjny zachowuje ceny i dostępność operatora. Snapshot wyniku wyceny jest niezmienny przez API.
-- `slicer`: Bambu Studio w osobnym procesie bubblewrap/prlimit; P1P hardened 0,4 mm, Textured PEI, standard 0,20 mm; obecnie STL i profile PLA Basic/PETG HF. Nasze presety z `data/bambu`, rozwiązywane `inherits`/`include`. Bez sieci i sekretów, RAM 4 GiB, CPU 60 s, timeout 65 s, limit pliku 128 MiB, jedno zadanie naraz. Odczyt rzeczywistego czasu i zużycia filamentu.
-- `pricing`: całkowitoliczbowe koszty netto w groszach, energia, maszyna, obsługa płyt, przygotowanie raz, rezerwa strat, marża, minimum i VAT. Stawki wymagają jawnej konfiguracji. Obecnie każda kopia ma osobną płytę; brak optymalizacji partii.
+- `storage`: SQLx/PostgreSQL; migracje `catalog_materials`, `catalog_colors`, `quotes`, `pricing_config`. Import transakcyjny zachowuje ceny i dostępność operatora. Snapshot wyniku wyceny jest niezmienny przez API.
+- `slicer`: Bambu Studio w osobnym procesie bubblewrap/prlimit; P1P hardened 0,4 mm, Textured PEI, standard 0,20 mm; STL po bezpiecznej konwersji z STL/STEP/3MF; profile materiałów z zaufanego katalogu, oddzielne dopuszczenie operatora. Materiały podporowe nie są osobną ofertą. Nasze presety z `data/bambu`, rozwiązywane `inherits`/`include`. Bez sieci i sekretów, RAM 4 GiB, CPU 60 s, timeout 65 s, limit pliku 128 MiB, jedno zadanie naraz. Odczyt rzeczywistego czasu i zużycia filamentu. Slicer układa kopie na płytach; wynik pełnej płyty jest powtarzany, reszta mierzona osobno (maks. dwa przebiegi/512 kopii w układaniu). Kontrolowane draft/standard/fine, 2–8 ścian i 5–100% wypełnienia.
+- `pricing`: całkowitoliczbowe koszty netto w groszach, energia, maszyna, obsługa płyt, przygotowanie raz, rezerwa strat, marża, minimum i VAT. Stawki wymagają jawnej konfiguracji. Wejście to zmierzone sumy partii i liczba płyt, bez ponownego mnożenia przez ilość. Plan układania jest wykonalny, bez gwarancji globalnego optimum.
 - `geometry`: analiza STL/STEP/3MF i GLB. Worker bez sieci/sekretów, 30 s/2 GiB. STEP ograniczony do pojedynczej części w mm. Masa z analizy jest oszacowaniem pełnej bryły, nie wynikiem slicera.
 - `packing`: algorytm układania obwiedni z zapasem, 6 obrotów, katalog kartonów; do 2000 sztuk/30 paczek. Nie obiecuje minimum paczek. Furgonetka sandbox waliduje/wycenia usługi i punkty; aplikacja nie nadaje przesyłek.
 - `orders`, `auth`, `payments`, `shipping`, `notifications`, `observability`: nadal szkielety bez własnej implementacji. Nie oznaczają gotowych kont, maila, webhooków ani monitoringu.
 
 ## Nowa wycena a istniejący checkout
 
-`POST /api/quotes/estimate`: kontrolowany STL → pomiar slicera → koszt z ceny zakupu i skonfigurowanych stawek → snapshot PostgreSQL. Katalog: `GET /api/catalog/materials`. Cache pomiarów: SHA-256 modelu + materiał + wersja/hash profili, 64 wpisy/10 minut. Brak ceny, magazynu, zatwierdzenia albo poprawnego wyniku nie daje automatycznej oferty.
+`POST /api/quotes/estimate`: STL/STEP/3MF → izolowana kanoniczna siatka STL bez ustawień/G-code → pomiar partii slicerem → koszt z ceny zakupu i skonfigurowanych stawek → snapshot PostgreSQL. Katalog: `GET /api/catalog/materials`. Cache pomiarów: SHA-256 modelu + format + materiał + opcje/ilość + wersja/hash profili, 64 wpisy/10 minut. Brak ceny, magazynu, zatwierdzenia albo poprawnego wyniku nie daje automatycznej oferty.
 
-Nowy wynik jest POC i nie jest płatny. Nie ma jeszcze adaptera do checkoutu, wspólnych płyt, wyboru jakości ani siatki produkcyjnej STEP/3MF. Nowy endpoint usuwa oryginał po pomiarze; trwałe prywatne modele/zadania pozostają do wdrożenia.
+Nowy wynik jest POC i nie jest płatny. Adapter do checkoutu i panelu jest do podłączenia. Wspólne płyty, wybór jakości i konwersja STEP/3MF działają w nowym endpointcie; STEP nadal wymaga pojedynczej części w mm. Nowy endpoint usuwa oryginał po pomiarze; trwałe prywatne modele/zadania pozostają do wdrożenia.
 
 Stary `/api/checkout/quote` nadal używa taryfy 24 zł/szt. + 15 zł przygotowania i kosztu kartonów. Dane geometrii, oferty i sesje Stripe są w ograniczonym RAM; restart je traci. Stripe jest testowy; kwota/status są sprawdzane na serwerze. Trwałe zamówienia, webhooki i przełączenie na nową wycenę są przed nami.
 
@@ -27,7 +27,7 @@ Stary `/api/checkout/quote` nadal używa taryfy 24 zł/szt. + 15 zł przygotowan
 
 `frontend/`: Svelte 5/TypeScript/Vite, Tailwind 4, GSAP, Manrope/Oxanium i limonkowe akcenty. `App.svelte` ładuje `storefront/Storefront.svelte` dla `/` i `/wycena`; `Workspace.svelte` dla checkoutu, konta, admina i wyceny zaawansowanej. STL: natywny WebGL i parser w workerze przeglądarki. STEP/3MF analizuje backend; pełny viewer GLB/Three.js pozostaje planem. GLB nie zastępuje oryginału ani siatki dla produkcji.
 
-Frontend korzysta jeszcze ze starego checkoutu; katalog/panele/login/chat są mockami z localStorage. Nowy katalog PostgreSQL i wycena nie zostały jeszcze podłączone do UI. Zapisy admina wymagają prawdziwej autoryzacji backendu; rola z localStorage jej nie zastępuje.
+Frontend korzysta jeszcze ze starego checkoutu; katalog/panele/login/chat są mockami z localStorage. Nowy katalog PostgreSQL i wycena nie zostały jeszcze podłączone do UI. API operatora ma osobny `ADMIN_API_TOKEN` (Bearer), weryfikowany przez backend w stałym czasie po SHA-256. Token jest sekretem `.env`/SOPS, nigdy frontendową zmienną ani localStorage. Pozwala tworzyć/edytować materiały, kolory i wersjonowane stawki w DB. Rola z mocków nie daje dostępu. Sesja przeglądarkowa i połączenie panelu pozostają do wdrożenia.
 
 Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/314 kolorów. Ceny presetów mają niepotwierdzoną walutę/VAT; ceny zakupu netto PLN, magazyn i dopuszczenie operatora pozostają osobne. Sama obecność profilu P1P nie kwalifikuje sprzętu.
 

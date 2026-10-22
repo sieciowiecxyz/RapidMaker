@@ -1,3 +1,4 @@
+mod admin;
 mod checkout;
 mod models;
 mod packing;

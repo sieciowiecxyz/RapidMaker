@@ -19,4 +19,4 @@ Snapshot zasila już import PostgreSQL i katalog API; nowy slicer używa wybrany
 
 ## Podłączenie
 
-Rust: `storage` importuje materiały i kolory przez SQLx; `slicer` uruchamia profile PLA Basic/PETG HF; `pricing` liczy koszt; `api` zbiera trasy HTTP, `app` uruchamia serwer. Panel admina będzie edytować cenę zakupu, kolory, magazyn i dopuszczenie do produkcji po dodaniu uprawnień w backendzie.
+Rust: `storage` importuje materiały i kolory przez SQLx; `slicer` dobiera zaufany profil P1P (oprócz materiałów podporowych), po osobnym zatwierdzeniu materiału przez operatora; `pricing` liczy koszt; `api` zbiera trasy HTTP, `app` uruchamia serwer. Chronione tokenem API operatora zapisuje cenę zakupu, kolory, magazyn i dopuszczenie do produkcji. Podłączenie panelu jest kolejnym krokiem.

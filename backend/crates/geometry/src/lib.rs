@@ -162,6 +162,66 @@ pub fn source_to_preview_glb(
     build_preview_output(scene, source_format, limits)
 }
 
+/// Canonical millimetre geometry only: no project settings, G-code or attachments.
+/// The output bound reuses the conversion byte budget for this STL representation.
+pub fn source_to_stl(
+    filename: &str,
+    input: &[u8],
+    limits: &ConversionLimits,
+    three_mf_limits: &ThreeMfLimits,
+) -> Result<Vec<u8>, PreviewError> {
+    let started = Instant::now();
+    if input.len() > limits.max_input_bytes {
+        return Err(PreviewError::InputTooLarge);
+    }
+    let format = gate_source_format(filename, input, three_mf_limits)?.source_format;
+    if !matches!(
+        format,
+        SourceFormat::StlBinary
+            | SourceFormat::StlAscii
+            | SourceFormat::Step
+            | SourceFormat::ThreeMf
+    ) {
+        return Err(PreviewError::UnsupportedFormat);
+    }
+    let (scene, format) = scene_from_source(format, input, limits, started)?;
+    let analysis = analyze_scene(&scene, format, limits)?;
+    if analysis
+        .dimensions_mm
+        .iter()
+        .any(|dimension| *dimension <= 0.0)
+    {
+        return Err(PreviewError::MalformedInput);
+    }
+    let output_len = analysis
+        .triangle_count
+        .checked_mul(50)
+        .and_then(|n| n.checked_add(84))
+        .filter(|n| *n <= limits.max_output_glb_bytes)
+        .ok_or(PreviewError::OutputTooLarge)?;
+    let count =
+        u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
+    let mut output = Vec::with_capacity(output_len);
+    output.resize(80, 0);
+    output.extend_from_slice(&count.to_le_bytes());
+    for triangle in scene.indices.chunks_exact(3) {
+        check_timeout(started, limits)?;
+        // STL normals may be zero: geometry and winding define the surface.
+        output.extend_from_slice(&[0; 12]);
+        for index in triangle {
+            let position = scene
+                .positions_mm
+                .get(*index as usize)
+                .ok_or(PreviewError::MalformedInput)?;
+            for coordinate in position {
+                output.extend_from_slice(&coordinate.to_le_bytes());
+            }
+        }
+        output.extend_from_slice(&[0; 2]);
+    }
+    Ok(output)
+}
+
 pub fn stl_to_preview_glb(
     input: &[u8],
     limits: &ConversionLimits,
@@ -752,7 +812,7 @@ fn scene_from_3mf(
         ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient);
     let model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
         .map_err(|_| PreviewError::MalformedInput)?;
-    let scale = three_mf_unit_scale_mm(model.unit.as_str());
+    let scale = three_mf_unit_scale_mm(model.unit.as_str())?;
     let mut object_index_by_id = HashMap::new();
     for (index, object) in model.resources.objects.iter().enumerate() {
         object_index_by_id.insert(object.id, index);
@@ -792,7 +852,31 @@ fn scene_from_step(
     limits: &ConversionLimits,
     started: Instant,
 ) -> Result<MeshScene, PreviewError> {
+    // Legacy tessellation does not apply assembly instances or STEP units.
+    // Accept a single explicit mm context only; never silently mis-scale geometry.
     let text = std::str::from_utf8(input).map_err(|_| PreviewError::MalformedInput)?;
+    let compact: String = text
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_uppercase();
+    let units: Vec<_> = compact
+        .split(';')
+        .filter(|entity| entity.contains("LENGTH_UNIT()"))
+        .collect();
+    if units.len() != 1
+        || !units[0].contains("SI_UNIT(.MILLI.,.METRE.)")
+        || [
+            "MAPPED_ITEM(",
+            "REPRESENTATION_RELATIONSHIP(",
+            "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(",
+            "CONVERSION_BASED_UNIT(",
+        ]
+        .iter()
+        .any(|item| compact.contains(item))
+    {
+        return Err(PreviewError::UnsupportedFormat);
+    }
     let table = Table::from_step(text).ok_or(PreviewError::MalformedInput)?;
     let mut builder = MeshSceneBuilder::default();
     for step_shell in table.shell.values() {
@@ -1106,16 +1190,16 @@ fn ply_face_indices(element: &DefaultElement) -> Result<Vec<usize>, PreviewError
     Ok(out)
 }
 
-fn three_mf_unit_scale_mm(unit: &str) -> f32 {
-    match unit.to_ascii_lowercase().as_str() {
+fn three_mf_unit_scale_mm(unit: &str) -> Result<f32, PreviewError> {
+    Ok(match unit.to_ascii_lowercase().as_str() {
         "micron" | "micrometer" => 0.001,
         "millimeter" => 1.0,
         "centimeter" => 10.0,
         "inch" => 25.4,
         "foot" => 304.8,
         "meter" => 1000.0,
-        _ => 1.0,
-    }
+        _ => return Err(PreviewError::UnsupportedFormat),
+    })
 }
 
 fn mat4_identity() -> [[f32; 4]; 4] {
@@ -1410,6 +1494,93 @@ mod tests {
     const STEP_CYLINDER: &[u8] = include_bytes!("../tests/fixtures/step_cylinder.step");
     const STEP_UNSUPPORTED_NURBS: &[u8] =
         include_bytes!("../tests/fixtures/step_unsupported_nurbs.step");
+
+    fn signed_volume(scene: &MeshScene) -> f64 {
+        scene
+            .indices
+            .chunks_exact(3)
+            .map(|triangle| {
+                let [a, b, c] = [triangle[0], triangle[1], triangle[2]]
+                    .map(|index| scene.positions_mm[index as usize].map(f64::from));
+                (a[0] * (b[1] * c[2] - b[2] * c[1])
+                    + a[1] * (b[2] * c[0] - b[0] * c[2])
+                    + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                    / 6.0
+            })
+            .sum()
+    }
+
+    #[test]
+    fn canonical_stl_preserves_geometry_without_project_payloads() {
+        let limits = ConversionLimits::default();
+        for (filename, input) in [
+            ("cube.stl", CUBE_BINARY),
+            ("cube.stl", CUBE_ASCII),
+            ("part.step", STEP_BLOCK),
+            ("part.stp", STEP_CYLINDER),
+            ("part.3mf", THREEMF_SIMPLE),
+            (
+                "transformed.3mf",
+                include_bytes!("../tests/fixtures/centimeter_transformed.3mf").as_slice(),
+            ),
+        ] {
+            let format = gate_source_format(filename, input, &ThreeMfLimits::default())
+                .unwrap()
+                .source_format;
+            let (original, format) =
+                scene_from_source(format, input, &limits, Instant::now()).unwrap();
+            let stl = source_to_stl(filename, input, &limits, &ThreeMfLimits::default()).unwrap();
+            let (canonical, _) = parse_stl(&stl, &limits, Instant::now()).unwrap();
+            let before = analyze_scene(&original, format, &limits).unwrap();
+            let after = analyze_scene(&canonical, SourceFormat::StlBinary, &limits).unwrap();
+            assert_eq!(before.bounds_min_mm, after.bounds_min_mm, "{filename}");
+            assert_eq!(before.bounds_max_mm, after.bounds_max_mm, "{filename}");
+            assert_eq!(before.triangle_count, after.triangle_count, "{filename}");
+            assert!(
+                (signed_volume(&original) - signed_volume(&canonical)).abs() < 0.0001,
+                "{filename}"
+            );
+            assert_eq!(stl.len(), 84 + before.triangle_count * 50);
+            assert!(stl[..80].iter().all(|byte| *byte == 0));
+            if filename == "transformed.3mf" {
+                assert_eq!(after.bounds_min_mm[0], 30.0);
+                assert_eq!(after.bounds_min_mm[2], 50.0);
+                assert_eq!(after.dimensions_mm[0], 200.0);
+            }
+        }
+    }
+
+    #[test]
+    fn canonical_stl_rejects_unsupported_step_contexts_and_output_overflow() {
+        let source = std::str::from_utf8(STEP_BLOCK).unwrap();
+        for input in [
+            source.replace("SI_UNIT(.MILLI.,.METRE.)", "SI_UNIT($,.METRE.)"),
+            source.replace("ENDSEC;", "#99999=MAPPED_ITEM(#1,#2);ENDSEC;"),
+        ] {
+            assert_eq!(
+                source_to_stl(
+                    "part.step",
+                    input.as_bytes(),
+                    &ConversionLimits::default(),
+                    &ThreeMfLimits::default()
+                )
+                .unwrap_err(),
+                PreviewError::UnsupportedFormat
+            );
+        }
+        assert_eq!(
+            three_mf_unit_scale_mm("unknown").unwrap_err(),
+            PreviewError::UnsupportedFormat
+        );
+        let limits = ConversionLimits {
+            max_output_glb_bytes: 100,
+            ..Default::default()
+        };
+        assert_eq!(
+            source_to_stl("cube.stl", CUBE_BINARY, &limits, &ThreeMfLimits::default()).unwrap_err(),
+            PreviewError::OutputTooLarge
+        );
+    }
 
     #[test]
     fn stl_binary_cube_writes_glb_magic_and_sane_dimensions() {
