@@ -160,13 +160,12 @@
   });
   let validationAttempted = $state(false);
   const missingGeometry = $derived(
-    cart?.models.some(
-      (model) =>
-        !model.shipping ||
-        model.shipping.dimensions_mm.some((value) => !Number.isFinite(value) || value <= 0) ||
-        !Number.isFinite(model.shipping.weight_g) ||
-        model.shipping.weight_g <= 0,
-    ) ?? false,
+    cart?.models.some((model) => {
+      const dimensions = model.analysis?.dimensions_mm;
+      const weight = model.analysis?.weight_g;
+      return !dimensions || dimensions.some(value => !Number.isFinite(value) || value <= 0) ||
+        weight == null || !Number.isFinite(weight) || weight <= 0;
+    }) ?? false,
   );
   const fieldErrors: Partial<Record<keyof Contact, string>> = $derived({
     ...(quoteFresh ? cart?.quote?.checkout?.field_errors : {}),
@@ -345,6 +344,8 @@
             cart.quote.checkout.offers.find((o) => o.id === selectedOffer)?.name ?? 'Kurier',
         };
         sessionStorage.setItem(receiptKey, JSON.stringify(saved));
+        // Keep the receipt address after an inline payment, including a later reload.
+        history.replaceState({}, '', '/zamowienie?payment_intent=' + encodeURIComponent(intent.payment_intent_id));
         await stripeForm.confirm(intent.client_secret, contact.email, intent.payment_intent_id);
         stripePayment = await api.verifyCheckout(intent.payment_intent_id);
         order = api.getCheckoutOrder(intent.payment_intent_id);
@@ -472,7 +473,7 @@
   {:else if !cart?.models.length}<div class="panel empty-state">
       <h2>Najpierw Twój model</h2>
       <p class="muted">Koszyk czeka na pierwszy projekt.</p>
-      <a class="button primary" href="/wycena">Przejdź do wyceny →</a>
+      <a class="button primary" href="/wycena?restore=cart">Przejdź do wyceny →</a>
     </div>
   {:else}
     {#if paymentMessage}<div class="alert stack" role="status">
@@ -760,7 +761,7 @@
                     >Analiza modelu jest wymagana do wyceny dostawy. Wymiary, masę i liczbę paczek
                     ustalimy na podstawie modelu.</span
                   >
-                  <a href="/wycena">Wróć do konfiguracji modelu →</a>
+                  <a href="/wycena?restore=cart">Wróć do konfiguracji modelu →</a>
                   <small>Możesz też przejść dalej i poprosić zespół o ręczną wycenę.</small>
                 </div>
               {/if}
@@ -812,7 +813,7 @@
           <section class="checkout-section stack">
             <div class="review-heading">
               <h2>Wydruki</h2>
-              <a href="/wycena">Zmień konfigurację</a>
+              <a href="/wycena?restore=cart">Zmień konfigurację</a>
             </div>
             {#each cart.models as model}
               <details class="review-model">
@@ -956,7 +957,7 @@
             }}>← Wróć do podsumowania</button
           >{:else if stage === 3}<button type="button" class="text-button" onclick={editDelivery}
             >← Wróć do dostawy</button
-          >{:else}<a href="/wycena">← Wróć do konfiguracji druku</a>{/if}
+          >{:else}<a href="/wycena?restore=cart">← Wróć do konfiguracji druku</a>{/if}
       </aside>
     </form>
   {/if}

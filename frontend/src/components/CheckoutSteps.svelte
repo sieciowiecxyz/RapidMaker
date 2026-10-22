@@ -13,7 +13,7 @@
         aria-current={step === current ? 'step' : undefined}
       >
         {#if step === 1 && current > 1}
-          <a href="/wycena"><span class="number">✓</span><span>{label}</span></a>
+          <a href="/wycena?restore=cart"><span class="number">✓</span><span>{label}</span></a>
         {:else if step < current && onStep}
           <button type="button" onclick={() => onStep?.(step)}
             ><span class="number">✓</span><span>{label}</span></button
@@ -90,7 +90,7 @@
   .active .number {
     background: var(--color-primary);
     border-color: var(--color-primary);
-    color: white;
+    color: var(--color-on-primary);
   }
   .complete {
     color: var(--color-accent);

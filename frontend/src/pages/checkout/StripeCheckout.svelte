@@ -40,6 +40,8 @@
         });
         if (disposed) return;
         if (!stripe) throw new Error('Nie udało się wczytać Stripe. Odśwież stronę.');
+        const theme = getComputedStyle(document.documentElement);
+        const token = (name: string) => theme.getPropertyValue(name).trim();
         elements = stripe.elements({
           mode: 'payment',
           amount: Math.max(100, amount),
@@ -49,12 +51,12 @@
           appearance: {
             theme: 'night',
             variables: {
-              colorPrimary: '#a8edbc',
-              colorBackground: '#1b231f',
-              colorText: '#e0e5e2',
-              colorDanger: '#ffb5a5',
-              borderRadius: '6px',
-              fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+              colorPrimary: token('--color-primary') || '#b5ee4b',
+              colorBackground: token('--color-control') || '#202e1d',
+              colorText: token('--color-text') || '#edf4e9',
+              colorDanger: token('--color-danger') || '#ffc2b8',
+              borderRadius: '3px',
+              fontFamily: '"Segoe UI", Arial, sans-serif',
               fontSizeBase: '16px',
               spacingGridRow: '18px',
               spacingGridColumn: '18px',

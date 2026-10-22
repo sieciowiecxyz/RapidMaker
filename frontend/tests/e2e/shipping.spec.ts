@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 const part = { id: 'bracket', quantity: 1, dimensions_mm: [120, 80, 45], weight_g: 60 };
 
 test('locker selection, parcel contents and Stripe return keep the checkout usable', async ({page}) => {
-  await page.goto('/wycena');
+  await page.goto('/wycena/zaawansowana');
   await page.getByRole('button',{name:'Wypróbuj przykład'}).click();
   await page.getByRole('link',{name:'Dalej: wysyłka →'}).click();
   await page.getByLabel('Imię i nazwisko',{exact:true}).fill('Test odbiorcy');

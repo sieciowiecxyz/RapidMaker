@@ -9,7 +9,7 @@ Strona do zamawiania wydruków 3D FDM: dodaj części STL, STEP/STP lub 3MF, sko
 | **Piotr — frontend** | Wygląd, responsywność, konfigurator wielu części, checkout, panel klienta, panel admina, podgląd 3D i obsługa stanów ładowania/błędów. Podłączenie API oraz wizualne sprawdzanie przepływu zakupu w sandboxach. |
 | **Kuba — backend i infrastruktura** | API, baza danych, konta i uprawnienia, pliki i geometria, slicer i wycena, algorytm pakowania, integracje Stripe/Furgonetki, chat i email, powiadomienia, bezpieczeństwo, logi, monitoring, backupy i wdrożenie. |
 
-Wspólnie ustalamy formaty danych API i zachowanie ekranów. Piotr korzysta z jednego adaptera `frontend/src/lib/api.ts`; brakujące funkcje może rozwijać na mockach. Ceny, płatności, uprawnienia i pakowanie docelowo rozstrzyga backend.
+Wspólnie ustalamy formaty danych API i zachowanie ekranów. Wspólny adapter `frontend/src/lib/api.ts` obsługuje checkout i mocki; `frontend/src/storefront/lib/api.ts` łączy z nim nowy konfigurator Piotra. Brakujące funkcje można rozwijać na mockach. Ceny, płatności, uprawnienia i pakowanie docelowo rozstrzyga backend.
 
 Checkout: **konfiguracja druku → dane i dostawa → podsumowanie → płatność**. Dane odbiorcy wpisujemy raz. Klient widzi zamówienia i rozmowę w swoim panelu; admin zarządza realizacją i odpowiada klientowi. Liczbę paczek i ich parametry wylicza system z części, ilości, zabezpieczeń i limitów przewoźnika. Sama objętość nie gwarantuje poprawnego pakowania.
 
@@ -17,13 +17,15 @@ Checkout: **konfiguracja druku → dane i dostawa → podsumowanie → płatnoś
 
 To POC. Działają frontend, API analizy modeli, szacowanie paczek oraz testowe integracje Stripe i Furgonetki. Konta, katalog, chat i panele w dużej części używają mocków i `localStorage`.
 
-Wycena druku jest uproszczona; slicer, kalibracja kosztów, trwałe zamówienia, produkcyjne webhooki i email pozostają do wdrożenia. Backend przechowuje stan w RAM; restart wymaga ponownego uploadu modeli i pobrania ofert. Podgląd 3D we frontendzie jest placeholderem; docelowo Three.js wyświetli GLB przygotowany przez backend.
+Wycena druku jest uproszczona; slicer, kalibracja kosztów, trwałe zamówienia, produkcyjne webhooki i email pozostają do wdrożenia. Backend przechowuje stan w RAM; restart wymaga ponownego uploadu modeli i pobrania ofert. Nowy frontend Piotra ma podgląd STL w natywnym WebGL, z parserem w workerze przeglądarki. STEP i 3MF analizuje backend; ich podgląd oraz wspólny viewer GLB/Three.js pozostają do podłączenia. Przykłady bez analizy serwera wymagają ręcznej wyceny.
+
+Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), logowanie oraz panele klienta i admina zachowują dotychczasową logikę w motywie Piotra. Opcje techniczne druku są pod `/wycena/zaawansowana`; powrót do konfiguratora zachowuje ustawienia koszyka.
 
 ## Stack i katalogi
 
 | Miejsce | Technologia i zastosowanie |
 | --- | --- |
-| `frontend/` | Svelte 5, TypeScript, Vite, Tailwind CSS 4; interfejs, adapter API i mocki. |
+| `frontend/` | Svelte 5, TypeScript, Vite, Tailwind CSS 4, GSAP i WebGL; motyw Piotra, adaptery API i mocki. |
 | `backend/src/` | Rust, Axum, Tokio, Serde, Reqwest/rustls; HTTP/JSON, pakowanie i integracje. |
 | `backend/geometry/` | Biblioteka Rust do analizy geometrii; worker izolowany przez bubblewrap i prlimit. |
 | `backend/tests/fixtures/` | Referencyjne modele do sprawdzania parsera. |
@@ -38,7 +40,7 @@ Docelowa baza: PostgreSQL + SQLx. Płatności: Stripe test; dostawa: Furgonetka 
 Wymagania: Git, Node.js zgodny z Vite 7, npm, Rust/Cargo, Python 3, SOPS i age. Pełna analiza modeli wymaga Linux, `bubblewrap` (`bwrap`) oraz `prlimit` z util-linux.
 
 ```sh
-git clone --branch codex/clean-start git@github.com:sieciowiecxyz/RapidMaker.git
+git clone --branch main git@github.com:sieciowiecxyz/RapidMaker.git
 cd RapidMaker
 git config --local core.hooksPath .githooks
 ```

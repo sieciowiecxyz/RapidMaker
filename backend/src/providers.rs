@@ -839,8 +839,7 @@ async fn intent(
         ("amount", total.to_string()),
         ("currency", "pln".into()),
         ("metadata[quote_id]", request.quote_id.clone()),
-        ("automatic_payment_methods[enabled]", "true".into()),
-        ("automatic_payment_methods[allow_redirects]", "never".into()),
+        ("allowed_payment_method_types[0]", "card".into()),
         (
             "description",
             "Rapidmaker — zamówienie TESTOWE, bez realizacji".into(),

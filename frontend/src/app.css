@@ -50,7 +50,7 @@ button:disabled {
 }
 ::selection {
   background: var(--color-primary);
-  color: white;
+  color: var(--color-on-primary);
 }
 .site-shell {
   max-width: 1360px;
@@ -164,7 +164,7 @@ h1 {
 }
 .button.primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
-  color: white;
+  color: var(--color-on-primary);
 }
 .button.primary:active:not(:disabled) {
   background: var(--color-primary-active);
@@ -266,7 +266,7 @@ textarea:hover {
   border: 1px solid transparent;
   border-radius: 50%;
   background: transparent;
-  color: white;
+  color: var(--color-on-primary);
 }
 .swatch:before {
   content: '';

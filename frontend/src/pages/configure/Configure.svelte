@@ -105,8 +105,9 @@
 
 <section class="page purchase-page">
   <CheckoutSteps current={1} />
+  <a class="text-button" href="/wycena?restore=cart">← Wróć do konfiguratora</a>
   <div class="page-heading">
-    <h1>Jak drukujemy Twój projekt?</h1>
+    <h1>Opcje zaawansowane druku.</h1>
     <p class="muted">Dodaj części. Wybierz materiał, kolor i sposób wykonania dla każdej z nich.</p>
   </div>
   {#if error}<p class="alert error" role="alert">

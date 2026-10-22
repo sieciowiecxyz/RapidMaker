@@ -8,7 +8,7 @@ async function login(page: Page, role: 'client' | 'admin') {
   await expect(page).toHaveURL(role === 'admin' ? /\/admin\/zamowienia$/ : /\/konto\/zamowienia$/);
 }
 async function sample(page: Page) {
-  await page.goto('/wycena');
+  await page.goto('/wycena/zaawansowana');
   await page.getByRole('button', { name: 'Lub wypróbuj przykładowy model →' }).click();
   await expect(page.getByRole('link', { name: 'Przejdź do zamówienia →' })).toBeVisible();
 }
@@ -89,7 +89,7 @@ test('client gate, conversation, persisted notification preferences and reorder'
   await expect(page.getByLabel('Nowa wiadomość od obsługi', { exact: true })).not.toBeChecked();
   await page.goto('/konto/zamowienia/demo-order-1');
   await page.getByRole('button', { name: 'Zamów ponownie ↗' }).click();
-  await expect(page).toHaveURL(/\/wycena$/);
+  await expect(page).toHaveURL(/\/wycena(?:\?restore=cart)?$/);
   await expect(page.getByRole('link', { name: 'Przejdź do zamówienia →' })).toBeVisible();
 });
 
@@ -136,7 +136,7 @@ test('admin production, shipping, refund, manual offer and failed job retry', as
 });
 
 test('invalid upload and empty/error lists provide visible recovery states', async ({ page }) => {
-  await page.goto('/wycena');
+  await page.goto('/wycena/zaawansowana');
   await expect(
     page.getByRole('button', { name: 'Lub wypróbuj przykładowy model →' }),
   ).toBeEnabled();
@@ -286,6 +286,6 @@ test('order list actions open the right sections and reorder on mobile', async (
     .getByRole('listitem', { name: 'RM-26041', exact: true })
     .getByRole('button', { name: 'Zamów ponownie', exact: true })
     .click();
-  await expect(page).toHaveURL(/\/wycena$/);
+  await expect(page).toHaveURL(/\/wycena(?:\?restore=cart)?$/);
   await expect(page.getByRole('link', { name: 'Przejdź do zamówienia →' })).toBeVisible();
 });

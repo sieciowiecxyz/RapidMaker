@@ -855,6 +855,7 @@ export async function reorder(orderId: string): Promise<Cart> {
     quote: null,
   };
   save();
+  try { localStorage.setItem('rapidmaker.storefront.checkout-ready', '1'); } catch { /* Optional draft restore. */ }
   return clone(state.cart);
 }
 export async function sendMessage(orderId: string, text: string): Promise<Order> {

@@ -124,3 +124,12 @@ Bloker zewnętrzny zatrzymuje zależne kryterium, nie niezależne prace. Mock ni
 ### Porządki struktury — 2026-10-20
 
 Działające projekty przeniesiono do `frontend/` i `backend/`; parser zachowano w `backend/geometry/`, modele w `backend/tests/fixtures/`. Dokumenty planowania są w `docs/`. Usunięto legacy, Docker, Taskfile, narzędzie tokenów, `.codex`, LICENSE i artefakty. Jeden `.env` ma kopię SOPS; token odświeżania Furgonetki zachowano w nim jako `FURGONETKA_OAUTH_JSON` (launcher go nie przekazuje). Build frontendu i backendu PASS. Strona, API config i proxy Vite zwracają HTTP 200; upload cube_20mm.stl przez nowe API zwrócił analizę HTTP 200. Pełnego E2E ani odszyfrowania SOPS nie uruchamiano. Kryteria przyszłych etapów pozostają planem.
+
+
+### Integracja frontendu Piotra — 2026-10-22
+
+Bazą jest `codex/clean-start`; importujemy wyłącznie frontend z `codex/rapidmaker-frontend` (`ef8ceb9`), bez starej historii, Pythona, Dockera i `.idea`. Integrację przygotowano na `codex/frontend-integration`; wspólny wynik trafia do `main`. Rust API, geometria, SOPS, hooki i dokumentacja pozostają bazą projektu.
+
+Landing i konfigurator Piotra używają WebGL do STL; upload STL/STEP/3MF i ceny przechodzą przez Rust API. Dotychczasowy checkout Stripe/Furgonetki i panele zachowują logikę w nowym motywie. Opcje techniczne są dostępne pod `/wycena/zaawansowana`, a powrót odtwarza koszyk. Pełny viewer GLB, trwałe zamówienia, slicer, konta i email pozostają dalszym planem.
+
+Checkpoint: build frontendu PASS (0 błędów/ostrzeżeń), build backendu PASS. Upload prawdziwego `cube_20mm.stl` → podgląd WebGL → konfiguracja → analiza/wycena Rust → oferty DPD/FEDEX/UPS z Furgonetki sandbox → Stripe karta testowa → opłacone zamówienie 44,24 zł w panelu admina PASS. Niezgodność metod płatności naprawiono przez zgodne `allowed_payment_method_types`; status ponownie odczytano przyciskiem „Sprawdź płatność”. Obejrzano landing/checkout na komputerze i landing/panel na telefonie; poprawiono nakładającą się nawigację mobilną. Przykłady bez analizy kierowane są do ręcznej wyceny. Istniejące scenariusze technicznego konfiguratora kierują do nowej ścieżki zaawansowanej; pełny zestaw E2E NOT RUN. Nie zamawiano przesyłek ani nie wykonywano płatności live. Dalsze milestones pozostają otwarte.

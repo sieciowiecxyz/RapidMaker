@@ -283,7 +283,7 @@ button.danger {
   padding: 12px 18px;
   border-radius: var(--radius-sm);
   background: var(--color-primary);
-  color: white;
+  color: var(--color-on-primary);
 }
 .skip-link:focus-visible {
   clip-path: none;
