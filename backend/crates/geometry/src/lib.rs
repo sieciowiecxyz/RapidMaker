@@ -1384,46 +1384,32 @@ mod tests {
     use flate2::{Compression, write::DeflateEncoder};
     use std::io::Write;
 
-    const CUBE_BINARY: &[u8] = include_bytes!("../../tests/fixtures/cube_20mm.stl");
-    const CUBE_ASCII: &[u8] =
-        include_bytes!("../../tests/fixtures/cube_20mm_ascii.stl");
-    const TINY_CUBE: &[u8] =
-        include_bytes!("../../tests/fixtures/tiny_cube_1mm.stl");
-    const HUGE_CUBE: &[u8] =
-        include_bytes!("../../tests/fixtures/huge_cube_1000mm.stl");
-    const OFF_CENTER_CUBE: &[u8] =
-        include_bytes!("../../tests/fixtures/off_center_cube.stl");
-    const INVALID: &[u8] = include_bytes!("../../tests/fixtures/invalid.stl");
-    const MALFORMED: &[u8] =
-        include_bytes!("../../tests/fixtures/malformed_mesh.stl");
-    const NAN_INF: &[u8] =
-        include_bytes!("../../tests/fixtures/nan_inf_coordinates.stl");
-    const OBJ_SINGLE_CUBE: &[u8] =
-        include_bytes!("../../tests/fixtures/single_cube.obj");
-    const PLY_SIMPLE: &[u8] = include_bytes!("../../tests/fixtures/simple.ply");
-    const GLB_SIMPLE: &[u8] = include_bytes!("../../tests/fixtures/simple.glb");
-    const THREEMF_SIMPLE: &[u8] =
-        include_bytes!("../../tests/fixtures/simple_model.3mf");
-    const THREEMF_TRAVERSAL: &[u8] =
-        include_bytes!("../../tests/fixtures/zip_path_traversal.3mf");
+    const CUBE_BINARY: &[u8] = include_bytes!("../tests/fixtures/cube_20mm.stl");
+    const CUBE_ASCII: &[u8] = include_bytes!("../tests/fixtures/cube_20mm_ascii.stl");
+    const TINY_CUBE: &[u8] = include_bytes!("../tests/fixtures/tiny_cube_1mm.stl");
+    const HUGE_CUBE: &[u8] = include_bytes!("../tests/fixtures/huge_cube_1000mm.stl");
+    const OFF_CENTER_CUBE: &[u8] = include_bytes!("../tests/fixtures/off_center_cube.stl");
+    const INVALID: &[u8] = include_bytes!("../tests/fixtures/invalid.stl");
+    const MALFORMED: &[u8] = include_bytes!("../tests/fixtures/malformed_mesh.stl");
+    const NAN_INF: &[u8] = include_bytes!("../tests/fixtures/nan_inf_coordinates.stl");
+    const OBJ_SINGLE_CUBE: &[u8] = include_bytes!("../tests/fixtures/single_cube.obj");
+    const PLY_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple.ply");
+    const GLB_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple.glb");
+    const THREEMF_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple_model.3mf");
+    const THREEMF_TRAVERSAL: &[u8] = include_bytes!("../tests/fixtures/zip_path_traversal.3mf");
     const THREEMF_DUPLICATE: &[u8] =
-        include_bytes!("../../tests/fixtures/zip_duplicate_normalized.3mf");
+        include_bytes!("../tests/fixtures/zip_duplicate_normalized.3mf");
     const THREEMF_EXTERNAL_REL: &[u8] =
-        include_bytes!("../../tests/fixtures/zip_external_relationship.3mf");
-    const THREEMF_BOMB: &[u8] =
-        include_bytes!("../../tests/fixtures/zip_bomb_limit.3mf");
-    const GLTF_EXTERNAL: &[u8] =
-        include_bytes!("../../tests/fixtures/gltf_external_ref.gltf");
-    const GLTF_EMBEDDED: &[u8] =
-        include_bytes!("../../tests/fixtures/gltf_embedded_minimal.gltf");
+        include_bytes!("../tests/fixtures/zip_external_relationship.3mf");
+    const THREEMF_BOMB: &[u8] = include_bytes!("../tests/fixtures/zip_bomb_limit.3mf");
+    const GLTF_EXTERNAL: &[u8] = include_bytes!("../tests/fixtures/gltf_external_ref.gltf");
+    const GLTF_EMBEDDED: &[u8] = include_bytes!("../tests/fixtures/gltf_embedded_minimal.gltf");
     const GLTF_EMBEDDED_TRIANGLE: &[u8] =
-        include_bytes!("../../tests/fixtures/gltf_embedded_triangle.gltf");
-    const STEP_BLOCK: &[u8] =
-        include_bytes!("../../tests/fixtures/step_block.step");
-    const STEP_CYLINDER: &[u8] =
-        include_bytes!("../../tests/fixtures/step_cylinder.step");
+        include_bytes!("../tests/fixtures/gltf_embedded_triangle.gltf");
+    const STEP_BLOCK: &[u8] = include_bytes!("../tests/fixtures/step_block.step");
+    const STEP_CYLINDER: &[u8] = include_bytes!("../tests/fixtures/step_cylinder.step");
     const STEP_UNSUPPORTED_NURBS: &[u8] =
-        include_bytes!("../../tests/fixtures/step_unsupported_nurbs.step");
+        include_bytes!("../tests/fixtures/step_unsupported_nurbs.step");
 
     #[test]
     fn stl_binary_cube_writes_glb_magic_and_sane_dimensions() {

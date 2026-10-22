@@ -26,12 +26,14 @@ Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), l
 | Miejsce | Technologia i zastosowanie |
 | --- | --- |
 | `frontend/` | Svelte 5, TypeScript, Vite, Tailwind CSS 4, GSAP i WebGL; motyw Piotra, adaptery API i mocki. |
-| `backend/src/` | Rust, Axum, Tokio, Serde, Reqwest/rustls; HTTP/JSON, pakowanie i integracje. |
-| `backend/geometry/` | Biblioteka Rust do analizy geometrii; worker izolowany przez bubblewrap i prlimit. |
-| `backend/tests/fixtures/` | Referencyjne modele do sprawdzania parsera. |
+| `backend/crates/app/src/` | Rust/Axum: HTTP i orkiestracja. `packing` liczy paczki, `pricing` zawiera obecną taryfę POC. |
+| `backend/crates/geometry/` | Biblioteka Rust do analizy geometrii; worker izolowany przez bubblewrap i prlimit. |
+| `backend/crates/geometry/tests/fixtures/` | Referencyjne modele do sprawdzania parsera. |
 | `docs/` | Wizja, plan, milestones, architektura i instrukcje pracy. |
 | `secrets/dev.enc.env` | Jeden zaszyfrowany plik konfiguracji SOPS; jawny `.env` zostaje lokalnie. |
 | `.githooks/` | Automatyczne szyfrowanie zmienionego `.env` przed commitem. |
+
+Mapa aktywnych i przyszłych crate’ów: [backend/README.md](backend/README.md).
 
 Docelowa baza: PostgreSQL + SQLx. Płatności: Stripe test; dostawa: Furgonetka sandbox. Email docelowo przez iCloud SMTP/IMAP z hasłem aplikacji. Obecnie pracujemy na localhost.
 

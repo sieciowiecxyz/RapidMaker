@@ -13,7 +13,7 @@ Nie kasuj działających testów bez powodu. Zmieniony kontrakt wymaga dopasowan
 
 - `npm --prefix frontend run build` — Svelte/TypeScript i build.
 - `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npm --prefix frontend run test:e2e -- --grep 'nazwa testu'` — wybrany scenariusz.
-- `cargo test --locked --manifest-path backend/Cargo.toml` — testy pakowania i granic integracji.
+- `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-app -p rapidmaker-packing -p rapidmaker-pricing` — zmienione reguły API, pakowania i wyceny.
 - `cargo build --locked --manifest-path backend/Cargo.toml`, `python backend/run.py` — lokalne Rust API na porcie 18432.
 - `cargo fmt --manifest-path backend/Cargo.toml --all -- --check` — formatowanie Rust.
 - `cargo test --locked --manifest-path backend/Cargo.toml --workspace` — API i parser, gdy wymagają tego zmiany.

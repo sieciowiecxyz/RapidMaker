@@ -21,5 +21,5 @@ for name in (".env",):
             os.environ[key] = values[0] if values else ""
 
 os.chdir(root)
-binary = root / "backend/target/debug/rapidmaker-checkout-demo"
+binary = root / "backend/target/debug/rapidmaker-api"
 os.execv(binary, [str(binary)])

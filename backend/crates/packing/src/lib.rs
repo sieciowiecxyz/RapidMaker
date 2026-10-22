@@ -1,5 +1,4 @@
 //! Local, uncalibrated packing estimates. Client-entered geometry is never verified geometry.
-use axum::{Json, Router, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
 
 const PADDING_MM: u32 = 4;
@@ -289,15 +288,6 @@ pub fn estimate(request: EstimateRequest) -> Estimate {
     }
     result
 }
-async fn estimate_handler(Json(request): Json<EstimateRequest>) -> (StatusCode, Json<Estimate>) {
-    (StatusCode::OK, Json(estimate(request)))
-}
-pub fn router() -> Router {
-    Router::new()
-        .route("/api/shipping/estimate", post(estimate_handler))
-        .layer(axum::extract::DefaultBodyLimit::max(32 * 1024))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

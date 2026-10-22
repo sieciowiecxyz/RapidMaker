@@ -6,7 +6,8 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use rapidmaker_checkout_demo::{Delivery, Estimate, EstimateRequest, Part, estimate};
+use rapidmaker_packing::{Delivery, Estimate, EstimateRequest, Part, estimate};
+use rapidmaker_pricing::{PrintLine, SETUP_GROSZE, price_line};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -181,13 +182,6 @@ struct Offer {
     id: String,
     name: String,
     price_grosze: u32,
-}
-#[derive(Serialize)]
-struct PrintLine {
-    model_id: String,
-    quantity: u32,
-    unit_grosze: u32,
-    total_grosze: u32,
 }
 #[derive(Serialize)]
 struct QuoteResponse {
@@ -517,7 +511,7 @@ async fn quote(
     let has_analysis = request.parts.iter().any(|part| part.analysis_id.is_some());
     for part in &mut request.parts {
         if let Some(id) = &part.analysis_id {
-            let model = crate::models::resolve(id);
+            let model = super::models::resolve(id);
             part.dimensions_mm = model
                 .as_ref()
                 .map(|m| m.dimensions_mm.map(|v| v.ceil() as u32));
@@ -527,12 +521,7 @@ async fn quote(
     let print_lines: Vec<_> = request
         .parts
         .iter()
-        .map(|part| PrintLine {
-            model_id: part.id.clone(),
-            quantity: part.quantity,
-            unit_grosze: 2400,
-            total_grosze: part.quantity.saturating_mul(2400),
-        })
+        .map(|part| price_line(part.id.clone(), part.quantity))
         .collect();
     let delivery = request.delivery;
     let mut packing = estimate(EstimateRequest {
@@ -590,7 +579,7 @@ async fn quote(
     }
     let expires_at = now() + TTL;
     let id = uuid::Uuid::new_v4().to_string();
-    let setup_grosze = 1500;
+    let setup_grosze = SETUP_GROSZE;
     let print_grosze = print_lines
         .iter()
         .map(|line| line.total_grosze)

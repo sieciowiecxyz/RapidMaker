@@ -1,19 +1,21 @@
-[package]
-name = "rapidmaker-checkout-demo"
+[workspace]
+members = ["crates/*"]
+default-members = ["crates/app"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 publish = false
 
-[workspace]
-members = ["geometry"]
-
-[dependencies]
+[workspace.dependencies]
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "process", "time"] }
-
 serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "process", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 uuid = { version = "1", features = ["v4"] }
-rapidfab-3d-web-preview-generator = { path = "geometry" }
 gltf = { version = "1.4", default-features = false, features = ["utils"] }
+rapidmaker-geometry = { path = "crates/geometry" }
+rapidmaker-packing = { path = "crates/packing" }
+rapidmaker-pricing = { path = "crates/pricing" }

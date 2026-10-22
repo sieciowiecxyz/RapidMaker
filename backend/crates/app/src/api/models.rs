@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use rapidfab_3d_web_preview_generator::{ConversionLimits, ThreeMfLimits, source_to_preview_glb};
+use rapidmaker_geometry::{ConversionLimits, ThreeMfLimits, source_to_preview_glb};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{

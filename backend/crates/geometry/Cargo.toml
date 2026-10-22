@@ -1,8 +1,9 @@
 [package]
-name = "rapidfab-3d-web-preview-generator"
-version = "0.1.0"
-edition = "2024"
+name = "rapidmaker-geometry"
+version.workspace = true
+edition.workspace = true
 license = "MIT"
+publish.workspace = true
 
 [dependencies]
 gltf = { version = "1.4.1", features = ["import"] }

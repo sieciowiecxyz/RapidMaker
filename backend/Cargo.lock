@@ -1716,7 +1716,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "rapidfab-3d-web-preview-generator"
+name = "rapidmaker-app"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "gltf",
+ "rapidmaker-geometry",
+ "rapidmaker-packing",
+ "rapidmaker-pricing",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "rapidmaker-auth"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-geometry"
 version = "0.1.0"
 dependencies = [
  "flate2",
@@ -1730,18 +1750,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "rapidmaker-checkout-demo"
+name = "rapidmaker-notifications"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-observability"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-orders"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-packing"
 version = "0.1.0"
 dependencies = [
- "axum",
- "gltf",
- "rapidfab-3d-web-preview-generator",
- "reqwest",
  "serde",
  "serde_json",
- "tokio",
- "uuid",
 ]
+
+[[package]]
+name = "rapidmaker-payments"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-pricing"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "rapidmaker-shipping"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-slicer"
+version = "0.1.0"
+
+[[package]]
+name = "rapidmaker-storage"
+version = "0.1.0"
 
 [[package]]
 name = "rawpointer"

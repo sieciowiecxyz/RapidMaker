@@ -21,3 +21,7 @@ W tym katalogu: [PLAN.md — Wizja produktu](PLAN.md#wizja-produktu), zakres i s
 - [Sekrety](secrets.md)
   - przeczytaj gdy: konfigurujesz lokalne API lub dostęp współpracownika.
   - opis: SOPS, klucze SSH i odszyfrowanie konfiguracji.
+
+- [Backend](../backend/README.md)
+  - przeczytaj gdy: rozwijasz backend Rust.
+  - opis: mapa crate’ów, ich stan i uruchamianie.
