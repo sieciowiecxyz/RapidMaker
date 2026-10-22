@@ -1,0 +1,3623 @@
+{
+  "source": "Local Bambu Studio system presets",
+  "source_version": "02.08.00.06",
+  "extracted_on": "2026-10-23",
+  "printer": {
+    "source_profile": "Bambu Lab P1P 0.4 nozzle",
+    "overrides": {
+      "nozzle_type": [
+        "hardened_steel"
+      ]
+    },
+    "hardware_compatibility_verified": false
+  },
+  "materials": [
+    {
+      "id": "GFB00",
+      "name": "Bambu ABS",
+      "base_profile": "Bambu ABS @base",
+      "p1p_04_profiles": [
+        "Bambu ABS @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.04"
+      ],
+      "type": [
+        "ABS"
+      ],
+      "colors": [
+        {
+          "code": "40300",
+          "name": "Orange",
+          "rgba": [
+            "#FF6A13FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40600",
+          "name": "Blue",
+          "rgba": [
+            "#0A2CA5FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40601",
+          "name": "Azure",
+          "rgba": [
+            "#489FDFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40602",
+          "name": "Navy Blue",
+          "rgba": [
+            "#0C2340FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40501",
+          "name": "Mint",
+          "rgba": [
+            "#7AE1BFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40102",
+          "name": "Silver",
+          "rgba": [
+            "#87909AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40500",
+          "name": "Bambu Green",
+          "rgba": [
+            "#00AE42FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40502",
+          "name": "Olive",
+          "rgba": [
+            "#789D4AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40701",
+          "name": "Lavender",
+          "rgba": [
+            "#7248BDFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40700",
+          "name": "Purple",
+          "rgba": [
+            "#AF1685FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40200",
+          "name": "Red",
+          "rgba": [
+            "#D32941FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40400",
+          "name": "Yellow",
+          "rgba": [
+            "#FCE900FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40402",
+          "name": "Tangerine Yellow",
+          "rgba": [
+            "#FFC72CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "40401",
+          "name": "Beige",
+          "rgba": [
+            "#DFD1A7FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFB50",
+      "name": "Bambu ABS-GF",
+      "base_profile": "Bambu ABS-GF @base",
+      "p1p_04_profiles": [
+        "Bambu ABS-GF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "26.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.08"
+      ],
+      "type": [
+        "ABS-GF"
+      ],
+      "colors": [
+        {
+          "code": "41300",
+          "name": "Orange",
+          "rgba": [
+            "#F48438FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41600",
+          "name": "Blue",
+          "rgba": [
+            "#0C3B95FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41102",
+          "name": "Gray",
+          "rgba": [
+            "#C6C6C6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41500",
+          "name": "Green",
+          "rgba": [
+            "#61BF36FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41200",
+          "name": "Red",
+          "rgba": [
+            "#E83100FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "41400",
+          "name": "Yellow",
+          "rgba": [
+            "#FFE133FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFB01",
+      "name": "Bambu ASA",
+      "base_profile": "Bambu ASA @base",
+      "p1p_04_profiles": [
+        "Bambu ASA @BBL X1C 0.4 nozzle"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "26.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.05"
+      ],
+      "type": [
+        "ASA"
+      ],
+      "colors": [
+        {
+          "code": "45600",
+          "name": "Blue",
+          "rgba": [
+            "#2140B4FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "45102",
+          "name": "Gray",
+          "rgba": [
+            "#8A949EFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "45500",
+          "name": "Green",
+          "rgba": [
+            "#00A6A0FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "45101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "45200",
+          "name": "Red",
+          "rgba": [
+            "#E02928FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "45100",
+          "name": "White",
+          "rgba": [
+            "#FFFAF2FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFB02",
+      "name": "Bambu ASA-Aero",
+      "base_profile": "Bambu ASA-Aero @base",
+      "p1p_04_profiles": [
+        "Bambu ASA-Aero @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "46.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "0.99"
+      ],
+      "type": [
+        "ASA-AERO"
+      ],
+      "colors": [
+        {
+          "code": "46100",
+          "name": "White",
+          "rgba": [
+            "#F5F1DDFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFB51",
+      "name": "Bambu ASA-CF",
+      "base_profile": "Bambu ASA-CF @base",
+      "p1p_04_profiles": [
+        "Bambu ASA-CF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "33.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.02"
+      ],
+      "type": [
+        "ASA-CF"
+      ],
+      "colors": [
+        {
+          "code": "46101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFN03",
+      "name": "Bambu PA-CF",
+      "base_profile": "Bambu PA-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PA-CF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "84.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.09"
+      ],
+      "type": [
+        "PA-CF"
+      ],
+      "colors": []
+    },
+    {
+      "id": "GFN05",
+      "name": "Bambu PA6-CF",
+      "base_profile": "Bambu PA6-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PA6-CF @BBL X1C"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "76.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.10"
+      ],
+      "type": [
+        "PA6-CF"
+      ],
+      "colors": [
+        {
+          "code": "72100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFN08",
+      "name": "Bambu PA6-GF",
+      "base_profile": "Bambu PA6-GF @base",
+      "p1p_04_profiles": [
+        "Bambu PA6-GF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "56.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.14"
+      ],
+      "type": [
+        "PA-GF"
+      ],
+      "colors": [
+        {
+          "code": "72600",
+          "name": "Blue",
+          "rgba": [
+            "#75AED8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72102",
+          "name": "White",
+          "rgba": [
+            "#EAEAE4FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72103",
+          "name": "Gray",
+          "rgba": [
+            "#353533FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72500",
+          "name": "Lime",
+          "rgba": [
+            "#C5ED48FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72104",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72800",
+          "name": "Brown",
+          "rgba": [
+            "#5B492FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72200",
+          "name": "Orange",
+          "rgba": [
+            "#FF4800FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "72400",
+          "name": "Yellow",
+          "rgba": [
+            "#FFCE00FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFN04",
+      "name": "Bambu PAHT-CF",
+      "base_profile": "Bambu PAHT-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PAHT-CF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "91.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.06"
+      ],
+      "type": [
+        "PA-CF"
+      ],
+      "colors": [
+        {
+          "code": "70100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFC00",
+      "name": "Bambu PC",
+      "base_profile": "Bambu PC @base",
+      "p1p_04_profiles": [
+        "Bambu PC @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "36.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.185"
+      ],
+      "type": [
+        "PC"
+      ],
+      "colors": [
+        {
+          "code": "60102",
+          "name": "Clear Black",
+          "rgba": [
+            "#68686580"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "60103",
+          "name": "Transparent",
+          "rgba": [
+            "#00000000"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "60101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "60100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFC01",
+      "name": "Bambu PC FR",
+      "base_profile": "Bambu PC FR @base",
+      "p1p_04_profiles": [
+        "Bambu PC FR @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "51.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.19"
+      ],
+      "type": [
+        "PC"
+      ],
+      "colors": [
+        {
+          "code": "63102",
+          "name": "Gray",
+          "rgba": [
+            "#A8A8AAFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "63100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "63101",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFT01",
+      "name": "Bambu PET-CF",
+      "base_profile": "Bambu PET-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PET-CF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "81.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.29"
+      ],
+      "type": [
+        "PET-CF"
+      ],
+      "colors": [
+        {
+          "code": "71100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFG00",
+      "name": "Bambu PETG Basic",
+      "base_profile": "Bambu PETG Basic @base",
+      "p1p_04_profiles": [
+        "Bambu PETG Basic @BBL X1C"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "17.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.25"
+      ],
+      "type": [
+        "PETG"
+      ],
+      "colors": [
+        {
+          "code": "30105",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30106",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30107",
+          "name": "Gray",
+          "rgba": [
+            "#7F7E83FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30402",
+          "name": "Yellow",
+          "rgba": [
+            "#FCE300FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30201",
+          "name": "Red",
+          "rgba": [
+            "#D6001CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30603",
+          "name": "Reflex Blue",
+          "rgba": [
+            "#001489FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30800",
+          "name": "Dark Brown",
+          "rgba": [
+            "#4f2c1dFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30502",
+          "name": "Green",
+          "rgba": [
+            "#009639FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30301",
+          "name": "Orange",
+          "rgba": [
+            "#FF671FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30503",
+          "name": "Pine Green",
+          "rgba": [
+            "#034638FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30604",
+          "name": "Navy Blue",
+          "rgba": [
+            "#0086d6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30108",
+          "name": "Misty Blue",
+          "rgba": [
+            "#688197FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "30403",
+          "name": "Dark Beige",
+          "rgba": [
+            "#dbc8b6FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFG02",
+      "name": "Bambu PETG HF",
+      "base_profile": "Bambu PETG HF @base",
+      "p1p_04_profiles": [
+        "Bambu PETG HF @BBL P1P 0.4 nozzle"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.28"
+      ],
+      "type": [
+        "PETG"
+      ],
+      "colors": [
+        {
+          "code": "33300",
+          "name": "Orange",
+          "rgba": [
+            "#F75403FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33600",
+          "name": "Blue",
+          "rgba": [
+            "#002E96FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33601",
+          "name": "Lake Blue",
+          "rgba": [
+            "#1F79E5FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33101",
+          "name": "Gray",
+          "rgba": [
+            "#ADB1B2FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33103",
+          "name": "Dark Gray",
+          "rgba": [
+            "#515151FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33500",
+          "name": "Green",
+          "rgba": [
+            "#00AE42FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33501",
+          "name": "Lime Green",
+          "rgba": [
+            "#6EE53CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33502",
+          "name": "Forest Green",
+          "rgba": [
+            "#39541AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33102",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33801",
+          "name": "Peanut Brown",
+          "rgba": [
+            "#875718FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33200",
+          "name": "Red",
+          "rgba": [
+            "#BC0900FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33400",
+          "name": "Yellow",
+          "rgba": [
+            "#FFD00BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "33401",
+          "name": "Cream",
+          "rgba": [
+            "#F9DFB9FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFG03",
+      "name": "Bambu PETG Matte",
+      "base_profile": "Bambu PETG Matte @base",
+      "p1p_04_profiles": [
+        "Bambu PETG Matte @BBL P1P 0.4 nozzle"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "17.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.25"
+      ],
+      "type": [
+        "PETG"
+      ],
+      "colors": [
+        {
+          "code": "35100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35500",
+          "name": "Lime",
+          "rgba": [
+            "#c0df16FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35102",
+          "name": "Gray",
+          "rgba": [
+            "#7F7E83FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35700",
+          "name": "Pink",
+          "rgba": [
+            "#FABBCBFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35600",
+          "name": "Baby Blue",
+          "rgba": [
+            "#B9D9EBFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35702",
+          "name": "Violet",
+          "rgba": [
+            "#A7A4E0FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "35501",
+          "name": "Avocado Green",
+          "rgba": [
+            "#bce194FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFG01",
+      "name": "Bambu PETG Translucent",
+      "base_profile": "Bambu PETG Translucent @base",
+      "p1p_04_profiles": [
+        "Bambu PETG Translucent @BBL X1C"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.25"
+      ],
+      "type": [
+        "PETG"
+      ],
+      "colors": [
+        {
+          "code": "32300",
+          "name": "Translucent Orange",
+          "rgba": [
+            "#FF911A80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32600",
+          "name": "Translucent Light Blue",
+          "rgba": [
+            "#61B0FF80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32101",
+          "name": "Clear",
+          "rgba": [
+            "#00000000"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32100",
+          "name": "Translucent Gray",
+          "rgba": [
+            "#8E8E8E80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32500",
+          "name": "Translucent Olive",
+          "rgba": [
+            "#748C4580"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32501",
+          "name": "Translucent Teal",
+          "rgba": [
+            "#77EDD780"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32800",
+          "name": "Translucent Brown",
+          "rgba": [
+            "#C9A38180"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32700",
+          "name": "Translucent Purple",
+          "rgba": [
+            "#D6ABFF80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "32200",
+          "name": "Translucent Pink",
+          "rgba": [
+            "#F9C1BD80"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFG50",
+      "name": "Bambu PETG-CF",
+      "base_profile": "Bambu PETG-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PETG-CF @BBL P1P 0.4 nozzle"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "31.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.25"
+      ],
+      "type": [
+        "PETG-CF"
+      ],
+      "colors": [
+        {
+          "code": "31600",
+          "name": "Indigo Blue",
+          "rgba": [
+            "#324585FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "31101",
+          "name": "Titan Gray",
+          "rgba": [
+            "#565656FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "31500",
+          "name": "Malachite Green",
+          "rgba": [
+            "#16b08eFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "31100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "31700",
+          "name": "Violet Purple",
+          "rgba": [
+            "#583061FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "31200",
+          "name": "Brick Red",
+          "rgba": [
+            "#9f332aFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA11",
+      "name": "Bambu PLA Aero",
+      "base_profile": "Bambu PLA Aero @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Aero @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "41.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.21"
+      ],
+      "type": [
+        "PLA-AERO"
+      ],
+      "colors": [
+        {
+          "code": "14104",
+          "name": "Gray",
+          "rgba": [
+            "#CDCECAFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14103",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14102",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA00",
+      "name": "Bambu PLA Basic",
+      "base_profile": "Bambu PLA Basic @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Basic @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "10300",
+          "name": "Orange",
+          "rgba": [
+            "#FF6A13FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10301",
+          "name": "Pumpkin Orange",
+          "rgba": [
+            "#FF9016FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10602",
+          "name": "Blue Gray",
+          "rgba": [
+            "#5B6579FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10604",
+          "name": "Cobalt Blue",
+          "rgba": [
+            "#0056B8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10605",
+          "name": "Turquoise",
+          "rgba": [
+            "#00B1B7FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10603",
+          "name": "Cyan",
+          "rgba": [
+            "#0086D6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10601",
+          "name": "Blue",
+          "rgba": [
+            "#0A2989FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10103",
+          "name": "Gray",
+          "rgba": [
+            "#8E9089FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10102",
+          "name": "Silver",
+          "rgba": [
+            "#A6A9AAFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10104",
+          "name": "Light Gray",
+          "rgba": [
+            "#D1D3D5FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10105",
+          "name": "Dark Gray",
+          "rgba": [
+            "#545454FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10502",
+          "name": "Mistletoe Green",
+          "rgba": [
+            "#3F8E43FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10503",
+          "name": "Bright Green",
+          "rgba": [
+            "#BECF00FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10501",
+          "name": "Bambu Green",
+          "rgba": [
+            "#00AE42FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10900",
+          "name": "Arctic Whisper",
+          "rgba": [
+            "#9CDBD9FF",
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10901",
+          "name": "Solar Breeze",
+          "rgba": [
+            "#E94B3CFF",
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10902",
+          "name": "Ocean to Meadow",
+          "rgba": [
+            "#307FE2FF",
+            "#54FF9BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10903",
+          "name": "Pink Citrus",
+          "rgba": [
+            "#F78F77FF",
+            "#E4505AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10904",
+          "name": "Mint Lime",
+          "rgba": [
+            "#B6FF43FF",
+            "#4EC939FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10905",
+          "name": "Blueberry Bubblegum",
+          "rgba": [
+            "#6FCAEFFF",
+            "#8573DDFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10906",
+          "name": "Dusk Glare",
+          "rgba": [
+            "#CE4406FF",
+            "#ED9558FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10907",
+          "name": "Cotton Candy Cloud",
+          "rgba": [
+            "#E7C1D5FF",
+            "#8EC9E9FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10800",
+          "name": "Brown",
+          "rgba": [
+            "#9D432CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10802",
+          "name": "Cocoa Brown",
+          "rgba": [
+            "#6F5034FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10201",
+          "name": "Beige",
+          "rgba": [
+            "#F7E6DEFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10203",
+          "name": "Pink",
+          "rgba": [
+            "#F55A74FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10701",
+          "name": "Indigo Purple",
+          "rgba": [
+            "#482960FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10700",
+          "name": "Purple",
+          "rgba": [
+            "#5E43B7FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10202",
+          "name": "Magenta",
+          "rgba": [
+            "#EC008CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10200",
+          "name": "Red",
+          "rgba": [
+            "#C12E1FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10205",
+          "name": "Maroon Red",
+          "rgba": [
+            "#9D2235FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10204",
+          "name": "Hot Pink",
+          "rgba": [
+            "#F5547CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10100",
+          "name": "Jade White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10400",
+          "name": "Yellow",
+          "rgba": [
+            "#F4EE2AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10402",
+          "name": "Sunflower Yellow",
+          "rgba": [
+            "#FEC600FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10801",
+          "name": "Bronze",
+          "rgba": [
+            "#847D48FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "10401",
+          "name": "Gold",
+          "rgba": [
+            "#E4BD68FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA13",
+      "name": "Bambu PLA Dynamic",
+      "base_profile": "Bambu PLA Dynamic @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Dynamic @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "31.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "15100",
+          "name": "UV Color Changing - White to Coral",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA15",
+      "name": "Bambu PLA Galaxy",
+      "base_profile": "Bambu PLA Galaxy @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Galaxy @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.19"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13602",
+          "name": "Purple",
+          "rgba": [
+            "#594177FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13503",
+          "name": "Green",
+          "rgba": [
+            "#3B665EFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13504",
+          "name": "Nebulae",
+          "rgba": [
+            "#424379FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13203",
+          "name": "Brown",
+          "rgba": [
+            "#684A43FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA12",
+      "name": "Bambu PLA Glow",
+      "base_profile": "Bambu PLA Glow @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Glow @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "15300",
+          "name": "Glow Orange",
+          "rgba": [
+            "#FF9D5BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "15600",
+          "name": "Glow Blue",
+          "rgba": [
+            "#7AC0E9FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "15500",
+          "name": "Glow Green",
+          "rgba": [
+            "#A1FFACFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "15200",
+          "name": "Glow Pink",
+          "rgba": [
+            "#F17B8FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "15400",
+          "name": "Glow Yellow",
+          "rgba": [
+            "#F8FF80FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA18",
+      "name": "Bambu PLA Lite",
+      "base_profile": "Bambu PLA Lite @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Lite @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "18.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.40"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "16100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16400",
+          "name": "Yellow",
+          "rgba": [
+            "#EFE255FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16103",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16600",
+          "name": "Cyan",
+          "rgba": [
+            "#4DAFDAFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16200",
+          "name": "Red",
+          "rgba": [
+            "#C6001AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16101",
+          "name": "Gray",
+          "rgba": [
+            "#999D9DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16601",
+          "name": "Blue",
+          "rgba": [
+            "#004EA8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16401",
+          "name": "Sunflower Yellow",
+          "rgba": [
+            "#FFB549FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16501",
+          "name": "Green",
+          "rgba": [
+            "#00BB31FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16301",
+          "name": "Orange",
+          "rgba": [
+            "#FF671FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16700",
+          "name": "Matte Beige",
+          "rgba": [
+            "#ECC3B2FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16800",
+          "name": "Cocoa Brown",
+          "rgba": [
+            "#745335FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "16102",
+          "name": "Dark Gray",
+          "rgba": [
+            "#8c8b8cFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA07",
+      "name": "Bambu PLA Marble",
+      "base_profile": "Bambu PLA Marble @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Marble @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13103",
+          "name": "White Marble",
+          "rgba": [
+            "#F7F3F0FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13201",
+          "name": "Red Granite",
+          "rgba": [
+            "#AD4E38FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA01",
+      "name": "Bambu PLA Matte",
+      "base_profile": "Bambu PLA Matte @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Matte @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.32"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "11300",
+          "name": "Mandarin Orange",
+          "rgba": [
+            "#F99963FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11603",
+          "name": "Sky Blue",
+          "rgba": [
+            "#56B7E6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11600",
+          "name": "Marine Blue",
+          "rgba": [
+            "#0078BFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11601",
+          "name": "Ice Blue",
+          "rgba": [
+            "#A3D8E1FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11602",
+          "name": "Dark Blue",
+          "rgba": [
+            "#042F56FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11104",
+          "name": "Nardo Gray",
+          "rgba": [
+            "#757575FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11102",
+          "name": "Ash Gray",
+          "rgba": [
+            "#9B9EA0FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11502",
+          "name": "Apple Green",
+          "rgba": [
+            "#C2E189FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11500",
+          "name": "Grass Green",
+          "rgba": [
+            "#61C680FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11501",
+          "name": "Dark Green",
+          "rgba": [
+            "#68724DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11101",
+          "name": "Charcoal",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11802",
+          "name": "Dark Chocolate",
+          "rgba": [
+            "#4D3324FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11800",
+          "name": "Latte Brown",
+          "rgba": [
+            "#D3B7A7FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11801",
+          "name": "Dark Brown",
+          "rgba": [
+            "#7D6556FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11803",
+          "name": "Caramel",
+          "rgba": [
+            "#AE835BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11201",
+          "name": "Sakura Pink",
+          "rgba": [
+            "#E8AFCFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11700",
+          "name": "Lilac Purple",
+          "rgba": [
+            "#AE96D4FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11200",
+          "name": "Scarlet Red",
+          "rgba": [
+            "#DE4343FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11203",
+          "name": "Terracotta",
+          "rgba": [
+            "#B15533FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11204",
+          "name": "Plum",
+          "rgba": [
+            "#950051FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11202",
+          "name": "Dark Red",
+          "rgba": [
+            "#BB3D43FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11100",
+          "name": "Ivory White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11103",
+          "name": "Bone White",
+          "rgba": [
+            "#CBC6B8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11400",
+          "name": "Lemon Yellow",
+          "rgba": [
+            "#F7D959FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "11401",
+          "name": "Desert Tan",
+          "rgba": [
+            "#E8DBB7FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA02",
+      "name": "Bambu PLA Metal",
+      "base_profile": "Bambu PLA Metal @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Metal @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.25"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13100",
+          "name": "Iron Gray Metallic",
+          "rgba": [
+            "#43403DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13400",
+          "name": "Iridium Gold Metallic",
+          "rgba": [
+            "#B39B84FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13500",
+          "name": "Oxide Green Metallic",
+          "rgba": [
+            "#1D7C6AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13600",
+          "name": "Cobalt Blue Metallic",
+          "rgba": [
+            "#39699EFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13800",
+          "name": "Copper Brown Metallic",
+          "rgba": [
+            "#AA6443FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA19",
+      "name": "Bambu PLA Pure",
+      "base_profile": "Bambu PLA Pure @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Pure @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.24"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "17100",
+          "name": "Pure White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "17101",
+          "name": "Absolute Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "17200",
+          "name": "Milky Pink",
+          "rgba": [
+            "#f7ced7FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "17600",
+          "name": "Baby Blue",
+          "rgba": [
+            "#a4dbe8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "17300",
+          "name": "Apricot",
+          "rgba": [
+            "#ffb673FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA05",
+      "name": "Bambu PLA Silk",
+      "base_profile": "Bambu PLA Silk @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Silk @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.32"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13601",
+          "name": "Blue",
+          "rgba": [
+            "#147BD1FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13104",
+          "name": "Silver",
+          "rgba": [
+            "#EAECEBFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13502",
+          "name": "Green",
+          "rgba": [
+            "#4CE4A0FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13300",
+          "name": "Copper",
+          "rgba": [
+            "#5E4B3CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13202",
+          "name": "Pink",
+          "rgba": [
+            "#EEB1C1FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13701",
+          "name": "Purple",
+          "rgba": [
+            "#854CE4FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13901",
+          "name": "Gilded Rose",
+          "rgba": [
+            "#FF9425FF",
+            "#C16784FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13902",
+          "name": "Midnight Blaze",
+          "rgba": [
+            "#0047BBFF",
+            "#7D1B49FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13903",
+          "name": "Neon City",
+          "rgba": [
+            "#0047BBFF",
+            "#BB22A3FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13904",
+          "name": "Blue Hawaii",
+          "rgba": [
+            "#418FDEFF",
+            "#70C884FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13905",
+          "name": "Velvet Eclipse (Black-Red)",
+          "rgba": [
+            "#000000FF",
+            "#A34342FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13105",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13401",
+          "name": "Gold",
+          "rgba": [
+            "#E5B03DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13906",
+          "name": "South Beach",
+          "rgba": [
+            "#F772A4FF",
+            "#00918BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13909",
+          "name": "Aurora Purple",
+          "rgba": [
+            "#7F3696FF",
+            "#006EC9FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13912",
+          "name": "Dawn Radiance",
+          "rgba": [
+            "#EC984CFF",
+            "#6CD4BCFF",
+            "#A66EB9FF",
+            "#D87694FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13913",
+          "name": "Mystic Magenta",
+          "rgba": [
+            "#720062FF",
+            "#3a913fFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13916",
+          "name": "Phantom Blue",
+          "rgba": [
+            "#00629bFF",
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA06",
+      "name": "Bambu PLA Silk+",
+      "base_profile": "Bambu PLA Silk+ @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Silk+ @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.27"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13603",
+          "name": "Baby Blue",
+          "rgba": [
+            "#A8C6EEFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13604",
+          "name": "Blue",
+          "rgba": [
+            "#008BDAFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13108",
+          "name": "Titan Gray",
+          "rgba": [
+            "#5F6367FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13109",
+          "name": "Silver",
+          "rgba": [
+            "#C8C8C8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13506",
+          "name": "Candy Green",
+          "rgba": [
+            "#018814FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13507",
+          "name": "Mint",
+          "rgba": [
+            "#96DCB9FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13702",
+          "name": "Purple",
+          "rgba": [
+            "#8671CBFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13205",
+          "name": "Candy Red",
+          "rgba": [
+            "#D02727FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13206",
+          "name": "Rose Gold",
+          "rgba": [
+            "#BA9594FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13207",
+          "name": "Pink",
+          "rgba": [
+            "#F7ADA6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13110",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13404",
+          "name": "Champagne",
+          "rgba": [
+            "#F3CFB2FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13405",
+          "name": "Gold",
+          "rgba": [
+            "#F4A925FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA08",
+      "name": "Bambu PLA Sparkle",
+      "base_profile": "Bambu PLA Sparkle @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Sparkle @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13700",
+          "name": "Royal Purple Sparkle",
+          "rgba": [
+            "#483D8BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13102",
+          "name": "Slate Gray Sparkle",
+          "rgba": [
+            "#8E9089FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13501",
+          "name": "Alpine Green Sparkle",
+          "rgba": [
+            "#3F5443FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13101",
+          "name": "Onyx Black Sparkle",
+          "rgba": [
+            "#2D2B28FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13200",
+          "name": "Crimson Red Sparkle",
+          "rgba": [
+            "#792B36FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13402",
+          "name": "Classic Gold Sparkle",
+          "rgba": [
+            "#CEA629FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA09",
+      "name": "Bambu PLA Tough",
+      "base_profile": "Bambu PLA Tough @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Tough @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "28.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "12300",
+          "name": "Orange",
+          "rgba": [
+            "#FF7F41FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12600",
+          "name": "Light Blue",
+          "rgba": [
+            "#0085ADFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12700",
+          "name": "Lavender Blue",
+          "rgba": [
+            "#6667ABFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12102",
+          "name": "Gray",
+          "rgba": [
+            "#515A6CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12103",
+          "name": "Silver",
+          "rgba": [
+            "#898D8DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12500",
+          "name": "Pine Green",
+          "rgba": [
+            "#00482BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12101",
+          "name": "Black",
+          "rgba": [
+            "#25282AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12200",
+          "name": "Vermilion Red",
+          "rgba": [
+            "#DD3C22FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12100",
+          "name": "White",
+          "rgba": [
+            "#F9F7F4FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12400",
+          "name": "Yellow",
+          "rgba": [
+            "#FEDB00FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA10",
+      "name": "Bambu PLA Tough+",
+      "base_profile": "Bambu PLA Tough+ @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Tough+ @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "20.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.21"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "12104",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12105",
+          "name": "Gray",
+          "rgba": [
+            "#AFB1AEFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12106",
+          "name": "Silver",
+          "rgba": [
+            "#959698FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12107",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12301",
+          "name": "Orange",
+          "rgba": [
+            "#DC3A27FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12401",
+          "name": "Yellow",
+          "rgba": [
+            "#F4D53FFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "12601",
+          "name": "Cyan",
+          "rgba": [
+            "#009BD8FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA17",
+      "name": "Bambu PLA Translucent",
+      "base_profile": "Bambu PLA Translucent @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Translucent @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "19.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13210",
+          "name": "Red",
+          "rgba": [
+            "#B5001180"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13211",
+          "name": "Cherry Pink",
+          "rgba": [
+            "#F5B6CD80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13301",
+          "name": "Orange",
+          "rgba": [
+            "#F74E0280"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13410",
+          "name": "Mellow Yellow",
+          "rgba": [
+            "#F5DBAB80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13510",
+          "name": "Light Jade",
+          "rgba": [
+            "#96D8AF80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13610",
+          "name": "Ice Blue",
+          "rgba": [
+            "#B8CDE980"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13611",
+          "name": "Blue",
+          "rgba": [
+            "#0047BB80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13612",
+          "name": "Teal",
+          "rgba": [
+            "#009FA180"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13710",
+          "name": "Purple",
+          "rgba": [
+            "#8344B080"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13711",
+          "name": "Lavender",
+          "rgba": [
+            "#B8ACD680"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA16",
+      "name": "Bambu PLA Wood",
+      "base_profile": "Bambu PLA Wood @base",
+      "p1p_04_profiles": [
+        "Bambu PLA Wood @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "21.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.21"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "13505",
+          "name": "Classic Birch",
+          "rgba": [
+            "#918669FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13107",
+          "name": "Black Walnut",
+          "rgba": [
+            "#4F3F24FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13801",
+          "name": "Clay Brown",
+          "rgba": [
+            "#995F11FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13204",
+          "name": "Rosewood",
+          "rgba": [
+            "#4C241CFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13106",
+          "name": "White Oak",
+          "rgba": [
+            "#D6CCA3FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "13403",
+          "name": "Ochre Yellow",
+          "rgba": [
+            "#C98935FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFA50",
+      "name": "Bambu PLA-CF",
+      "base_profile": "Bambu PLA-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PLA-CF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "31.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "PLA-CF"
+      ],
+      "colors": [
+        {
+          "code": "14601",
+          "name": "Royal Blue",
+          "rgba": [
+            "#2842ADFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14600",
+          "name": "Jeans Blue",
+          "rgba": [
+            "#6e88bcFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14101",
+          "name": "Lava Gray",
+          "rgba": [
+            "#4d5054FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14500",
+          "name": "Matcha Green",
+          "rgba": [
+            "#5c9748FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14700",
+          "name": "Iris Purple",
+          "rgba": [
+            "#69398EFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "14200",
+          "name": "Burgundy Red",
+          "rgba": [
+            "#951e23FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFN06",
+      "name": "Bambu PPA-CF",
+      "base_profile": "Bambu PPA-CF @base",
+      "p1p_04_profiles": [
+        "Bambu PPA-CF @BBL X1C"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "195.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.17"
+      ],
+      "type": [
+        "PPA-CF"
+      ],
+      "colors": [
+        {
+          "code": "73100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFT02",
+      "name": "Bambu PPS-CF",
+      "base_profile": "Bambu PPS-CF @base",
+      "p1p_04_profiles": [],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "169.32"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "PPS-CF"
+      ],
+      "colors": [
+        {
+          "code": "76100",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFS04",
+      "name": "Bambu PVA",
+      "base_profile": "Bambu PVA @base",
+      "p1p_04_profiles": [
+        "Bambu PVA @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "73.98"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.27"
+      ],
+      "type": [
+        "PVA"
+      ],
+      "colors": [
+        {
+          "code": "66400",
+          "name": "Clear",
+          "rgba": [
+            "#F0F1A880"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFS03",
+      "name": "Bambu Support For PA/PET",
+      "base_profile": "Bambu Support For PA/PET @base",
+      "p1p_04_profiles": [
+        "Bambu Support For PA/PET @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "34.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "PA"
+      ],
+      "colors": [
+        {
+          "code": "65500",
+          "name": "Green",
+          "rgba": [
+            "#C0DF16FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFS02",
+      "name": "Bambu Support For PLA",
+      "base_profile": "Bambu Support For PLA @base",
+      "p1p_04_profiles": [
+        "Bambu Support For PLA @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "39.98"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.30"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "65104",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFS05",
+      "name": "Bambu Support For PLA/PETG",
+      "base_profile": "Bambu Support For PLA/PETG @base",
+      "p1p_04_profiles": [
+        "Bambu Support For PLA/PETG @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "63.98"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.19"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": [
+        {
+          "code": "65102",
+          "name": "Nature",
+          "rgba": [
+            "#00000000"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "65103",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFS01",
+      "name": "Bambu Support G",
+      "base_profile": "Bambu Support G @base",
+      "p1p_04_profiles": [
+        "Bambu Support G @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "34.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "PA"
+      ],
+      "colors": []
+    },
+    {
+      "id": "GFS00",
+      "name": "Bambu Support W",
+      "base_profile": "Bambu Support W @base",
+      "p1p_04_profiles": [
+        "Bambu Support W @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "69.98"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.30"
+      ],
+      "type": [
+        "PLA"
+      ],
+      "colors": []
+    },
+    {
+      "id": "GFS06",
+      "name": "Bambu Support for ABS",
+      "base_profile": "Bambu Support for ABS @base",
+      "p1p_04_profiles": [
+        "Bambu Support for ABS @BBL X1C"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "23.98"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.16"
+      ],
+      "type": [
+        "ABS"
+      ],
+      "colors": [
+        {
+          "code": "66100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFU04",
+      "name": "Bambu TPU 85A",
+      "base_profile": "Bambu TPU 85A @base",
+      "p1p_04_profiles": [],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "41.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.18"
+      ],
+      "type": [
+        "TPU"
+      ],
+      "colors": [
+        {
+          "code": "51305",
+          "name": "Neon Orange",
+          "rgba": [
+            "#F68B1BFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51500",
+          "name": "Light Cyan",
+          "rgba": [
+            "#C3E2D6FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51201",
+          "name": "Rose Beige/Flesh",
+          "rgba": [
+            "#F3CFB2FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51107",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51501",
+          "name": "Lime Green",
+          "rgba": [
+            "#CDEA80FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFU03",
+      "name": "Bambu TPU 90A",
+      "base_profile": "Bambu TPU 90A @base",
+      "p1p_04_profiles": [
+        "Bambu TPU 90A @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "38.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.24"
+      ],
+      "type": [
+        "TPU"
+      ],
+      "colors": [
+        {
+          "code": "51103",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51105",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51900",
+          "name": "Frozen",
+          "rgba": [
+            "#40B6E4FF",
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51901",
+          "name": "Blaze",
+          "rgba": [
+            "#D21B3CFF",
+            "#F1AAA8FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51601",
+          "name": "Crystal Blue",
+          "rgba": [
+            "#7eb4e180"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51106",
+          "name": "Quicksilver",
+          "rgba": [
+            "#9ea2a2FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51700",
+          "name": "Grape Jelly",
+          "rgba": [
+            "#D6ABFF80"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51800",
+          "name": "Cocoa Brown",
+          "rgba": [
+            "#5C4738FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFU01",
+      "name": "Bambu TPU 95A",
+      "base_profile": "Bambu TPU 95A @base",
+      "p1p_04_profiles": [
+        "Bambu TPU 95A @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "41.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "TPU"
+      ],
+      "colors": [
+        {
+          "code": "50101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "50100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFU00",
+      "name": "Bambu TPU 95A HF",
+      "base_profile": "Bambu TPU 95A HF @base",
+      "p1p_04_profiles": [
+        "Bambu TPU 95A HF @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "38.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.22"
+      ],
+      "type": [
+        "TPU"
+      ],
+      "colors": [
+        {
+          "code": "51600",
+          "name": "Blue",
+          "rgba": [
+            "#0072CEFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51101",
+          "name": "Gray",
+          "rgba": [
+            "#898D8DFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51100",
+          "name": "Black",
+          "rgba": [
+            "#101820FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51200",
+          "name": "Red",
+          "rgba": [
+            "#C8102EFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51102",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "51400",
+          "name": "Yellow",
+          "rgba": [
+            "#F3E600FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    },
+    {
+      "id": "GFU02",
+      "name": "Bambu TPU for AMS",
+      "base_profile": "Bambu TPU for AMS @base",
+      "p1p_04_profiles": [
+        "Bambu TPU for AMS @BBL P1P"
+      ],
+      "production_enabled": false,
+      "purchase_price_net_pln_per_kg": null,
+      "slicer_default_cost": [
+        "34.99"
+      ],
+      "slicer_cost_currency": null,
+      "density_g_cm3": [
+        "1.26"
+      ],
+      "type": [
+        "TPU-AMS"
+      ],
+      "colors": [
+        {
+          "code": "53600",
+          "name": "Blue",
+          "rgba": [
+            "#5898DDFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53102",
+          "name": "Gray",
+          "rgba": [
+            "#939393FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53500",
+          "name": "Neon Green",
+          "rgba": [
+            "#90FF1AFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53101",
+          "name": "Black",
+          "rgba": [
+            "#000000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53200",
+          "name": "Red",
+          "rgba": [
+            "#ED0000FF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53100",
+          "name": "White",
+          "rgba": [
+            "#FFFFFFFF"
+          ],
+          "in_stock": false
+        },
+        {
+          "code": "53400",
+          "name": "Yellow",
+          "rgba": [
+            "#F9EF41FF"
+          ],
+          "in_stock": false
+        }
+      ]
+    }
+  ],
+  "unmatched_colors": [],
+  "profiles_sha256": "9f1f362d15b2edd1e685e8370de9c267a30185f3cc513e7b6c81d8abefece092"
+}
