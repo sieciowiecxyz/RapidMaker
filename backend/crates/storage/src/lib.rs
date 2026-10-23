@@ -13,6 +13,7 @@ mod models;
 pub use jobs::SlicerJob;
 mod passkeys;
 pub use passkeys::{PasskeyInfo, PasskeyStart};
+mod order_files;
 mod orders;
 pub use admin::{MaterialInput, validate_color};
 pub use auth::{AuthSession, AuthUser};

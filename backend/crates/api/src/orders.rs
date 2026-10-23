@@ -3,6 +3,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
+    response::Response,
     routing::{get, post},
 };
 use rapidmaker_storage::Storage;
@@ -14,6 +15,8 @@ pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/api/account/orders", get(list))
         .route("/api/account/orders/{id}", get(detail))
+        .route("/api/account/orders/{id}/files", get(files))
+        .route("/api/account/orders/{id}/files/{model}/{kind}", get(file))
         .route(
             "/api/account/orders/{id}/messages",
             get(messages).post(message),
@@ -28,6 +31,11 @@ pub fn router(auth: Arc<Auth>) -> Router {
 pub fn admin_router<S: Clone + Send + Sync + 'static>(db: Option<Storage>) -> Router<S> {
     Router::new()
         .route("/api/admin/orders", get(admin_list))
+        .route("/api/admin/orders/{id}/files", get(admin_files))
+        .route(
+            "/api/admin/orders/{id}/files/{model}/{kind}",
+            get(admin_file),
+        )
         .route("/api/admin/orders/{id}/status", post(status))
         .route(
             "/api/admin/orders/{id}/messages",
@@ -256,4 +264,95 @@ async fn stats(State(db): State<Option<Storage>>) -> Result<Json<Value>, Error> 
         )
         .map_err(|_| unavailable())?,
     ))
+}
+
+async fn owned_order_db<'a>(
+    auth: &'a Auth,
+    headers: &HeaderMap,
+    id: &str,
+) -> Result<&'a Storage, Error> {
+    let (user, owner) = scope(auth, headers, false).await?;
+    let db = auth.database()?;
+    db.order(id, user.as_deref(), owner.as_deref())
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(not_found)?;
+    Ok(db)
+}
+async fn file_list(db: &Storage, id: &str, admin: bool) -> Result<Json<Value>, Error> {
+    let mut files = db.order_files(id, now()).await.map_err(|_| unavailable())?;
+    let prefix = if admin { "admin" } else { "account" };
+    for file in &mut files {
+        if file["available"] == true {
+            let model = file["model_id"].as_str().ok_or_else(unavailable)?;
+            let base = format!("/api/{prefix}/orders/{id}/files/{model}");
+            file["source_url"] = json!(format!("{base}/source"));
+            if file["preview_bytes"].as_i64().is_some_and(|size| size > 0) {
+                file["preview_url"] = json!(format!("{base}/preview.glb"));
+            }
+            if admin {
+                file["mesh_url"] = json!(format!("{base}/mesh"));
+            }
+        }
+    }
+    Ok(Json(json!({"files":files})))
+}
+async fn order_artifact(
+    db: &Storage,
+    id: &str,
+    model: &str,
+    kind: &str,
+    admin: bool,
+) -> Result<Response, Error> {
+    let record = db
+        .order_model(id, model, now())
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(|| {
+            error(
+                StatusCode::GONE,
+                "Plik zamówienia jest niedostępny lub minął czas jego przechowywania.",
+            )
+        })?;
+    super::files::order_artifact(record, kind, admin)
+}
+async fn files(
+    State(auth): State<Arc<Auth>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Error> {
+    file_list(owned_order_db(&auth, &headers, &id).await?, &id, false).await
+}
+async fn file(
+    State(auth): State<Arc<Auth>>,
+    Path((id, model, kind)): Path<(String, String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, Error> {
+    order_artifact(
+        owned_order_db(&auth, &headers, &id).await?,
+        &id,
+        &model,
+        &kind,
+        false,
+    )
+    .await
+}
+async fn admin_files(
+    State(db): State<Option<Storage>>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, Error> {
+    file_list(db.as_ref().ok_or_else(unavailable)?, &id, true).await
+}
+async fn admin_file(
+    State(db): State<Option<Storage>>,
+    Path((id, model, kind)): Path<(String, String, String)>,
+) -> Result<Response, Error> {
+    order_artifact(
+        db.as_ref().ok_or_else(unavailable)?,
+        &id,
+        &model,
+        &kind,
+        true,
+    )
+    .await
 }

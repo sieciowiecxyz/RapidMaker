@@ -44,3 +44,7 @@ B6 PASS: zadania/snapshot w PostgreSQL, lokalne pliki, lease/retry i polling fro
 ## Podglądy GLB — 2026-10-23
 
 B7 PASS: backend GLB dla STL/STEP/3MF, metry/Y-up, chroniony endpoint i quota z preview_bytes. Rzeczywisty upload/pobranie trzech formatów, restart i odmowy dostępu/uszkodzeń PASS. Rust: 30 testów (geometria/API/storage), izolowana regresja PostgreSQL limitów, fmt/Clippy/build PASS. Pozostałych 7 ignorowanych testów PG nie powtarzano. Frontend GLB do podłączenia; starsze uploady wymagają ponownego przesłania. Rust backend/crates: 11156 → 11391 (+235), razem z testami inline, bez komentarzy/pustych/generowanych plików. Nowa migracja 0010; bez nowych zależności. [Kontrakt](../../backend/README.md#podgląd-glb).
+
+## Retencja zamówień — 2026-10-23
+
+B8 PASS: pliki chronione przed Stripe i przez realizację, 90 dni po completed; pobieranie z zamówienia niezależne od roboczego TTL. Test HTTP: rzeczywisty upload/cleanup, restart, uprawnienia i statusy admina; PostgreSQL: nowa retencja oraz istniejący backend zamówień (2 testy) PASS. Build/fmt/Clippy i 16 testów jednostkowych API/storage PASS; pozostałych 7 ignorowanych testów PG nie powtarzano. Płatności/nadania NOT RUN. Niepewne/porzucone próby zachowują pliki do rozstrzygnięcia; brak automatycznego backfillu starych zamówień. Rust backend/crates: 11391 → 11865 (+474), razem z testami inline, bez komentarzy/pustych/generowanych plików. Nowe order_files.rs i migracja0011 przechowują powiązania/retencję; bez nowych zależności. [Kontrakt](../../backend/README.md#pliki-zamówień).

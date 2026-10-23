@@ -34,10 +34,18 @@ impl Storage {
             .as_str()
             .filter(|s| s.len() <= 254 && s.contains('@') && !s.chars().any(char::is_control))
             .ok_or("invalid order email")?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.queue_transaction().await?;
         sqlx::query("SELECT pg_advisory_xact_lock(72617069801)")
             .execute(&mut *tx)
             .await?;
+        let held_owner: Option<String> =
+            sqlx::query_scalar("SELECT owner_hash FROM order_file_holds WHERE order_id=$1")
+                .bind(o.id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if held_owner.as_deref() != Some(o.owner_hash) {
+            return Err("order files unavailable or owner changed".into());
+        }
         let existing = sqlx::query(
             "SELECT owner_hash,amount_grosze,provider_id FROM orders WHERE id=$1 FOR UPDATE",
         )
@@ -147,7 +155,7 @@ impl Storage {
         status: &str,
         now: i64,
     ) -> Result<bool, StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.queue_transaction().await?;
         let row = sqlx::query(
             "SELECT status,user_id,contact,guest_updates FROM orders WHERE id=$1 FOR UPDATE",
         )
@@ -174,6 +182,16 @@ impl Storage {
             .bind(status)
             .execute(&mut *tx)
             .await?;
+        if status == "completed" {
+            let until = now
+                .checked_add(crate::order_files::COMPLETED_FILE_RETENTION)
+                .ok_or("retention overflow")?;
+            sqlx::query("UPDATE order_files SET retain_until=$2 WHERE order_id=$1")
+                .bind(id)
+                .bind(until)
+                .execute(&mut *tx)
+                .await?;
+        }
         enqueue(
             &mut tx,
             id,
@@ -332,6 +350,28 @@ mod tests {
             provider_id: &format!("pi_{}", id.replace('-', "")),
             guest_updates: true,
         };
+        assert!(db.create_order(&o, 1000).await.is_err());
+        let model = crate::StoredModel {
+            id: uuid::Uuid::new_v4().to_string(),
+            owner_hash: owner.clone(),
+            user_id: Some(user.clone()),
+            filename: "order.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 100,
+            mesh_bytes: 100,
+            preview_bytes: 0,
+            sha256: "a".repeat(64),
+            dimensions_mm: [20.0; 3],
+            expires_at: 2000,
+        };
+        assert!(db.insert_model(&model).await.unwrap());
+        let quote = uuid::Uuid::new_v4().to_string();
+        db.save_quote(&quote, &json!({"model_id":model.id,"model_sha256":model.sha256,"owner_hash":owner,"user_id":user,"expires_at":2000}), &json!({})).await.unwrap();
+        assert!(
+            db.hold_order_files(&id, &owner, &[quote], 1000)
+                .await
+                .unwrap()
+        );
         db.create_order(&o, 1000).await.unwrap();
         db.create_order(&o, 1000).await.unwrap();
         assert!(db.poll_order_payment(&id, 1000).await.unwrap());

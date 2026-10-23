@@ -59,3 +59,10 @@ Auth backend PASS: klient email, admin passkey, trwałe sesje, HTTPS cookie i w�
 - Jeden odczyt STL/STEP/3MF w sandboxie daje siatkę produkcyjną i samodzielny GLB w metrach/Y-up.
 - Chroniony endpoint, preview_url w metadanych, limit 25 MiB i rozliczanie miejsca.
 - Sprawdzone: trzy formaty, restart, obca własność/wygaśnięcie, uszkodzenie/symlink i błędny upload. Frontend GLB do podłączenia.
+
+## B8 — Retencja plików zamówień: PASS lokalnie
+
+- Trwała ochrona własnych snapshotów przed wywołaniem Stripe; brak hold blokuje utworzenie zamówienia.
+- Niepewna płatność/realizacja chronią oryginał/STL/GLB; completed ustawia 90 dni. Inne zamówienie może nadal chronić model.
+- Autoryzowane pobranie klienta/admina po roboczych 24 h; snapshot/nazwa zostają po fizycznym sprzątaniu.
+- PostgreSQL i HTTP: współdzielenie modelu, granice dostępu, restart, zakończenie/retencja/cleanup PASS. Nie wykonywano płatności ani nadania. Webhooki i rozstrzyganie porzuconych płatności pozostają następnym etapem.

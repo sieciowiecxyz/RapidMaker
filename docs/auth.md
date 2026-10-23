@@ -8,7 +8,7 @@ Stan 2026-10-23: backend klienta i admina działa. Frontend logowania/paneli wym
 - Klient dostaje sesję. Admin po kodzie dostaje tylko sesję oczekującą, maks. 10 min; dostęp administracyjny wymaga passkey z PIN/biometrią (WebAuthn UV Required).
 - Role i aktywność pochodzą z PostgreSQL, nigdy z formularza/localStorage. Każdy endpoint admina sprawdza aktualną rolę i MFA; zapis dodatkowo Origin i CSRF.
 - Modele, wyceny i zamówienia sprawdzają własność. `claim-guest` wymaga jednocześnie sesji konta i oryginalnego cookie gościa, przenosi tylko własne aktywne/nieprzypisane zasoby w jednej transakcji. Bez przejmowania zakupów po samym emailu.
-- Po claim istniejące oferty checkoutu w RAM mogą wymagać ponownego przeliczenia. Robocze modele nadal wygasają po 24 h; retencja plików opłaconych zamówień pozostaje osobnym zadaniem.
+- Po claim istniejące oferty checkoutu w RAM mogą wymagać ponownego przeliczenia. Robocze modele nadal wygasają po 24 h; nowe zamówienia mają osobną ochronę plików przed płatnością, przez realizację i 90 dni po zakończeniu. Dostęp przez endpointy plików zamówienia wymaga jego autoryzacji.
 
 ## Sesje i kryptografia
 

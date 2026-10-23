@@ -95,6 +95,17 @@ Upload STL/STEP/3MF tworzy oryginał, `canonical.stl` i `preview.glb` w jednym p
 
 GLB maks. 25 MiB; rozmiar oryginału + siatki + GLB liczy się do wspólnych limitów. Zapis i pobieranie są prywatne, retencja i ochrona aktywnych zadań wspólne dla całego katalogu. Oryginał i STL nadal służą produkcji, GLB wyłącznie podglądowi. Backend jest gotowy; frontend GLTFLoader/Three.js wymaga osobnego podłączenia.
 
+## Pliki zamówień
+
+Przed zewnętrznym wywołaniem Stripe backend trwale wiąże zamówienie z własnymi snapshotami wycen i ich modelami. Bez ochrony plików nie utworzy zamówienia. Powtórzenie wymaga identycznego właściciela i zestawu snapshotów; cudze, wygasłe, zmienione lub już usuwane modele są odrzucane. Maks. 20 snapshotów/zamówienie i 30 nowych zabezpieczeń/właściciela/dobę.
+
+Ochrona obejmuje oryginał, STL i GLB: przed płatnością, przy niepewnym wyniku i przez realizację. Przejście do `completed` ustawia 90 dni retencji w tej samej transakcji co status/email. Inne zamówienie tego samego modelu może nadal go chronić. Pliki nadal liczą się do limitów dysku. Niepewność Stripe nie zwalnia miejsca; automatyczne rozstrzyganie porzuconych prób wymaga kolejnego etapu webhooków/uzgadniania płatności.
+
+- `GET /api/account/orders/{id}/files`: własne pliki, materiał/kolor/ilość/opcje i adresy pobrania. Pobranie `/files/{model_id}/source` lub `/preview.glb` działa niezależnie od roboczych 24 h; zasady dostępu do zamówienia pozostają wymagane.
+- `GET /api/admin/orders/{id}/files`: to samo dla admina po MFA; dodatkowo `/files/{model_id}/mesh` daje STL do produkcji. Klient nie ma dostępu do tej trasy siatki.
+
+Po zakończeniu retencji sprzątanie może usunąć pliki, ale zachowuje snapshoty/parametry/nazwy w historii zamówienia (`available:false`, pobranie 410). Restart nie usuwa powiązań. Starsze zamówienia bez wiarygodnego powiązania nie są automatycznie przypisywane do plików; nie odgadujemy go z identyfikatorów UI. Fizyczne katalogi nadal są prywatne; endpointy stosują tę samą kontrolę rozmiaru, typów i dowiązań co pobieranie modelu.
+
 ## Krótkie sprawdzenie
 
 ```sh

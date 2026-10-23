@@ -109,7 +109,7 @@ impl Storage {
 
     pub async fn expired_model_ids(&self, now: i64) -> Result<Vec<String>, StorageError> {
         let mut tx = self.queue_transaction().await?;
-        let ids = sqlx::query_scalar("UPDATE private_models m SET deletion_started=true WHERE expires_at<=$1 AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.model_id=m.id AND j.status IN ('queued','running') AND (j.expires_at>$1 OR j.lease_until>$1)) RETURNING id")
+        let ids = sqlx::query_scalar("UPDATE private_models m SET deletion_started=true WHERE expires_at<=$1 AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.model_id=m.id AND j.status IN ('queued','running') AND (j.expires_at>$1 OR j.lease_until>$1)) AND NOT EXISTS(SELECT 1 FROM order_files f WHERE f.model_id=m.id AND (f.retain_until IS NULL OR f.retain_until>$1)) RETURNING id")
             .bind(now).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         Ok(ids)
@@ -153,6 +153,8 @@ impl Storage {
         let models = sqlx::query("UPDATE private_models SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND expires_at>$4 AND NOT deletion_started")
             .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();
         sqlx::query("UPDATE slicer_jobs j SET owner_hash=$3 WHERE owner_hash=$2 AND EXISTS(SELECT 1 FROM private_models m WHERE m.id=j.model_id AND m.user_id=$1 AND m.owner_hash=$3)")
+            .bind(user).bind(guest).bind(&account).execute(&mut *tx).await?;
+        sqlx::query("UPDATE order_file_holds h SET owner_hash=$3 WHERE owner_hash=$2 AND EXISTS(SELECT 1 FROM order_files f JOIN private_models m ON m.id=f.model_id WHERE f.order_id=h.order_id AND m.user_id=$1 AND m.owner_hash=$3) AND NOT EXISTS(SELECT 1 FROM order_files f LEFT JOIN private_models m ON m.id=f.model_id WHERE f.order_id=h.order_id AND (m.id IS NULL OR m.owner_hash<>$3))")
             .bind(user).bind(guest).bind(&account).execute(&mut *tx).await?;
         let quotes = sqlx::query("UPDATE quotes q SET user_id=$1,request=jsonb_set(jsonb_set(request,'{owner_hash}',to_jsonb($3::text)),'{user_id}',to_jsonb($1::text)) WHERE user_id IS NULL AND request->>'owner_hash'=$2 AND (request->>'expires_at')::bigint>$4 AND EXISTS(SELECT 1 FROM private_models m WHERE m.id=q.request->>'model_id' AND m.user_id=$1 AND m.owner_hash=$3)")
             .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();

@@ -741,6 +741,7 @@ async fn session(
         return Ok(Json(json!({"url":existing.url,"session_id":existing.id})));
     }
     validate_payment(&app, quote).await?;
+    hold_order_files(&app, &request.quote_id, quote).await?;
     let result = bounded_json(
         app.client
             .post(STRIPE)
@@ -847,6 +848,7 @@ async fn intent(
             "payment_intent_id":existing.id,"total_grosze":existing.total})));
     }
     validate_payment(&app, quote).await?;
+    hold_order_files(&app, &request.quote_id, quote).await?;
     let form = [
         ("amount", total.to_string()),
         ("currency", "pln".into()),
@@ -1124,6 +1126,32 @@ async fn validate_payment(app: &App, quote: &StoredQuote) -> Result<(), Error> {
     Ok(())
 }
 
+async fn hold_order_files(app: &App, id: &str, quote: &StoredQuote) -> Result<(), Error> {
+    let db = app.storage.as_ref().ok_or_else(|| {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Magazyn modeli jest niedostępny.",
+        )
+    })?;
+    // A provider timeout can still mean a payable intent exists; keep this durable hold.
+    let held = db
+        .hold_order_files(id, &quote.owner, &quote.quote_ids, now() as i64)
+        .await
+        .map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Nie można zabezpieczyć modeli zamówienia.",
+            )
+        })?;
+    if !held {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Modele zamówienia wygasły lub zmieniły właściciela. Przelicz zamówienie.",
+        ));
+    }
+    Ok(())
+}
+
 async fn persist_order(
     app: &App,
     id: &str,
@@ -1135,7 +1163,13 @@ async fn persist_order(
 ) -> Result<(), Error> {
     let db = app.storage.as_ref().ok_or_else(unavailable)?;
     let data = quote.order_data.as_ref().ok_or_else(unavailable)?;
-    let (_, user) = super::cart::identity(Some(db), headers).await?;
+    let (owner, user) = super::cart::identity(Some(db), headers).await?;
+    if owner != quote.owner {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Sesja właściciela zmieniła się podczas płatności. Wczytaj zamówienie ponownie.",
+        ));
+    }
     db.create_order(
         &rapidmaker_storage::OrderInput {
             id,

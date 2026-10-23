@@ -25,7 +25,7 @@ Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie o
 
 Model roboczy żyje 24 h. Przyjęcie zadania zapewnia co najmniej 30 min dostępności modelu; sukces co najmniej ważność wyceny. Aktywne zadanie chroni pliki przed sprzątaniem. Worker sprząta co minutę, upload również uruchamia sprzątanie. DB oznacza wygasły model jako usuwany przed usunięciem plików: nowe zadanie nie może go przejąć. Nieudane usunięcie jest ponawiane, plik nadal liczy się do limitu. Claim gościa przenosi także zadania; działający worker korzysta z aktualnej własności.
 
-Retencja plików opłaconych zamówień i sprzątanie osieroconych katalogów po twardej awarii pozostają osobnym zakresem. Kolejka nie zastępuje backupu plików i DB.
+Pliki nowych zamówień mają osobną trwałą ochronę przed płatnością, przez realizację i 90 dni po zakończeniu. Szczegóły: [pliki zamówień](../backend/README.md#pliki-zamówień). Sprzątanie osieroconych katalogów po twardej awarii pozostaje osobnym zakresem. Kolejka nie zastępuje backupu plików i DB.
 
 ## Uruchamianie
 

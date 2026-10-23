@@ -462,6 +462,10 @@ async fn source(
     RoutePath(id): RoutePath<String>,
 ) -> Result<Response, Error> {
     let handle = resolve(database(&state)?, &headers, &id).await?;
+    source_response(&handle)
+}
+
+fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
     let bytes = private_bytes(&handle.source, handle.record.source_bytes, MAX_BYTES)?;
     let disposition = HeaderValue::from_str(&format!(
         "attachment; filename=\"model.{}\"; filename*=UTF-8''{}",
@@ -501,6 +505,10 @@ async fn preview(
     RoutePath(id): RoutePath<String>,
 ) -> Result<Response, Error> {
     let handle = resolve(database(&state)?, &headers, &id).await?;
+    preview_response(&handle)
+}
+
+fn preview_response(handle: &ModelHandle) -> Result<Response, Error> {
     if handle.record.preview_bytes == 0 {
         return Err(error(
             StatusCode::CONFLICT,
@@ -528,6 +536,35 @@ async fn preview(
         bytes,
     )
         .into_response())
+}
+
+pub(super) fn order_artifact(
+    record: StoredModel,
+    kind: &str,
+    admin: bool,
+) -> Result<Response, Error> {
+    let handle = handle(record)?;
+    match kind {
+        "source" => source_response(&handle),
+        "preview.glb" => preview_response(&handle),
+        "mesh" if admin => Ok((
+            [
+                (header::CONTENT_TYPE, "application/octet-stream"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=production.stl",
+                ),
+                (header::CACHE_CONTROL, "private, no-store"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            private_bytes(&handle.mesh, handle.record.mesh_bytes, 50 * 1024 * 1024)?,
+        )
+            .into_response()),
+        _ => Err(error(
+            StatusCode::NOT_FOUND,
+            "Nie znaleziono pliku zamówienia.",
+        )),
+    }
 }
 
 fn private_bytes(path: &Path, expected: i64, limit: usize) -> Result<Vec<u8>, Error> {
