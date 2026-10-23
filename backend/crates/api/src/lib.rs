@@ -2,6 +2,7 @@ mod admin;
 mod auth;
 mod cart;
 mod checkout;
+mod docs;
 mod email;
 mod files;
 mod models;
@@ -51,6 +52,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
     let router = checkout::protect(
         packing::router()
+            .merge(docs::router())
             .merge(checkout::router(storage.clone()))
             .merge(models::router())
             .merge(quotes::router(storage.clone())?)

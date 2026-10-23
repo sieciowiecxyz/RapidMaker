@@ -87,6 +87,12 @@ Koszty części sumowane przed naliczeniem jednej opłaty przygotowania, marży,
 
 Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utworzenie, status i wznowienie płatności sprawdzają właściciela; przed utworzeniem także ważność wyceny i dostępność. Oferty/sekrety wznowienia Stripe nadal są w RAM. Zamówienie, referencja płatności, status, rozmowa i powiadomienia są w PostgreSQL. Własny `/api/account/orders/{id}/payment-status` sprawdza Stripe także po restarcie; potwierdzenie płatności zapisuje z mailem atomowo. Nie ma jeszcze produkcyjnych webhooków ani automatycznego monitorowania Stripe bez odpytywania. Frontend klienta trzeba podłączyć do nowego auth i zamówień.
 
+## Spis API
+
+Otwórz `http://127.0.0.1:18430/api` (Vite) lub `http://127.0.0.1:18432/api` (bezpośrednio backend). Strona pokazuje wszystkie zarejestrowane metody/ścieżki, grupy funkcji, wymagany dostęp i wyszukiwarkę. `GET /api/routes` zwraca spis JSON. GET obejmuje również HEAD.
+
+`api/build.rs` odczytuje rzeczywiste rejestracje `.route` przez AST Rust; `syn` jest zależnością wyłącznie czasu budowania, już obecną w lockfile. Spis aktualizuje się przy kompilacji. Generator obsługuje obecne literalne trasy; zagnieżdżone routery, makra lub dynamiczne ścieżki wymagają rozszerzenia generatora. Zakres strony: metody, ścieżki i opisy dostępu; kontrakty danych opisują sekcje backendu. Strona korzysta z lokalnych CSS/JS z CSP nonce, odczytuje wyłącznie spis, a uprawnienia operacji nadal egzekwują ich endpointy.
+
 ## Podgląd GLB
 
 Upload STL/STEP/3MF tworzy oryginał, `canonical.stl` i `preview.glb` w jednym prywatnym katalogu. Siatka i GLB powstają z jednego odczytu źródła w izolowanym procesie. GLB zawiera wyłącznie geometrię i własny BIN, bez materiałów, tekstur ani zewnętrznych URL. Podgląd ma metry/Y-up (transformacja węzła), siatka produkcyjna i `dimensions_mm` pozostają w mm/Z-up.
