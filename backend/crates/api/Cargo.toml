@@ -22,5 +22,6 @@ rapidmaker-auth.workspace = true
 sha2 = "0.10"
 percent-encoding = "2"
 
-[build-dependencies]
-syn = { version = "2", features = ["full", "visit"] }
+utoipa.workspace = true
+utoipa-axum.workspace = true
+utoipa-swagger-ui = { version = "10", default-features = false, features = ["axum", "vendored"] }

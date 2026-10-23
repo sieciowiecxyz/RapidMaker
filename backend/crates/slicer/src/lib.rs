@@ -47,7 +47,7 @@ pub fn material_supported(id: &str) -> bool {
         .is_ok_and(|profiles| profiles.contains_key(id))
 }
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
     Draft,
@@ -56,7 +56,7 @@ pub enum Quality {
     Fine,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Options {
     pub quantity: u32,

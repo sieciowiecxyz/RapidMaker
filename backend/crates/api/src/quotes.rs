@@ -1,9 +1,8 @@
 //! Durable measured quotes; only the worker invokes the isolated slicer.
 use axum::{
-    Json, Router,
+    Json,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
 };
 use rapidmaker_pricing::Rates;
 use rapidmaker_slicer::Options;
@@ -12,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use utoipa_axum::{router::OpenApiRouter as Router, routes};
 
 type Error = (StatusCode, Json<Value>);
 struct App {
@@ -41,16 +41,16 @@ pub fn router(
     let admin = super::admin::router(storage.clone(), rates.clone())?;
     let files = super::files::router(storage.clone())?;
     Ok(Router::new()
-        .route("/api/catalog/materials", get(materials))
-        .route(
-            "/api/quotes/estimate",
-            post(estimate).layer(DefaultBodyLimit::max(8192)),
-        )
-        .route("/api/quotes/jobs/{id}", get(status))
+        .routes(routes!(materials))
+        .routes(routes!(estimate))
+        .routes(routes!(status))
+        .layer(DefaultBodyLimit::max(8192))
         .with_state(Arc::new(App { storage, rates }))
         .merge(admin)
         .merge(files))
 }
+#[utoipa::path(operation_id = "quotes_materials", get, path = "/api/catalog/materials", tag = "Katalog",
+    responses((status = 200, description = "Materiały, kolory i dostępność", body = Value)))]
 async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     let catalog = app
         .storage
@@ -70,6 +70,8 @@ async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = SlicerEstimateRequest)]
 struct EstimateRequest {
     model_id: String,
     material_id: String,
@@ -89,6 +91,10 @@ pub(super) struct SliceInput {
     pub profiles_sha256: Value,
     pub slicer_profile_version: String,
 }
+#[utoipa::path(operation_id = "quotes_estimate", post, path = "/api/quotes/estimate", tag = "Wycena", request_body = EstimateRequest,
+    responses((status = 202, description = "Trwałe zadanie: id, status, poll_url i opcjonalny wynik", body = Value),
+        (status = 400, description = "Nieprawidłowe opcje", body = Value), (status = 429, description = "Pełna kolejka", body = Value)),
+    security(("session" = []), ("guest" = [])))]
 async fn estimate(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -178,6 +184,9 @@ async fn estimate(
         })?;
     Ok((StatusCode::ACCEPTED, Json(public_job(job))))
 }
+#[utoipa::path(operation_id = "quotes_status", get, path = "/api/quotes/jobs/{id}", tag = "Wycena", params(("id" = String, Path)),
+    responses((status = 200, description = "queued/running/succeeded/failed; result po ukończeniu", body = Value),
+        (status = 404, description = "Cudze lub wygasłe zadanie", body = Value)), security(("session" = []), ("guest" = [])))]
 async fn status(
     State(app): State<Arc<App>>,
     headers: HeaderMap,

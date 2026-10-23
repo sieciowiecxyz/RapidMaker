@@ -7,7 +7,7 @@ const MAX_PARCELS: usize = 30;
 // per-part padding. Volume alone never proves that parts can be packed.
 const MAX_FILL_PERCENT: u64 = 67;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Part {
     pub id: String,
@@ -17,7 +17,7 @@ pub struct Part {
     pub dimensions_mm: Option<[u32; 3]>,
     pub weight_g: Option<u32>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Delivery {
     Courier,
@@ -25,27 +25,27 @@ pub enum Delivery {
     #[serde(alias = "collection")]
     Pickup,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EstimateRequest {
     pub parts: Vec<Part>,
     pub delivery: Delivery,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Placement {
     pub part_id: String,
     /// Position and occupied dimensions include protective padding, in millimetres.
     pub position_mm: [u32; 3],
     pub dimensions_mm: [u32; 3],
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Parcel {
     pub box_id: &'static str,
     pub outer_mm: [u32; 3],
     pub weight_g: u32,
     pub placements: Vec<Placement>,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Estimate {
     pub status: &'static str,
     pub parcels: Vec<Parcel>,

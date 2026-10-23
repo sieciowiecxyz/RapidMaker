@@ -50,19 +50,18 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         None
     };
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
-    let router = checkout::protect(
-        packing::router()
-            .merge(docs::router())
-            .merge(checkout::router(storage.clone()))
-            .merge(models::router())
-            .merge(quotes::router(storage.clone())?)
-            .merge(auth::router(auth.clone()))
-            .merge(passkeys::router(auth.clone()))
-            .merge(orders::router(auth.clone())),
-        auth.clone(),
-    )
-    .layer(axum::Extension(mailer.clone()))
-    .layer(axum::Extension(auth));
+    let api = utoipa_axum::router::OpenApiRouter::new()
+        .merge(packing::router())
+        .merge(checkout::router(storage.clone()))
+        .merge(models::router())
+        .merge(quotes::router(storage.clone())?)
+        .merge(auth::router(auth.clone()))
+        .merge(passkeys::router(auth.clone()))
+        .merge(orders::router(auth.clone()));
+    let (router, document) = api.split_for_parts();
+    let router = checkout::protect(router.merge(docs::router(document)), auth.clone())
+        .layer(axum::Extension(mailer.clone()))
+        .layer(axum::Extension(auth));
     let worker = storage
         .as_ref()
         .filter(|_| mailer.enabled())

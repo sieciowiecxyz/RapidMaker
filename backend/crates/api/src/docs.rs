@@ -1,141 +1,59 @@
-//! Read-only reference generated from actual router registrations at build time.
-use axum::{
-    Json, Router,
-    http::{HeaderMap, HeaderValue, header},
-    response::Html,
-    routing::get,
+use utoipa::openapi::{
+    OpenApi, Server,
+    security::{ApiKey, ApiKeyValue, SecurityScheme},
 };
-use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use utoipa_swagger_ui::{Config, SwaggerUi};
 
-include!(concat!(env!("OUT_DIR"), "/api_routes.rs"));
+pub(super) struct BinaryFile;
 
-const GROUPS: [(&str, &str, &str); 8] = [
-    (
-        "/api/auth",
-        "Logowanie",
-        "Kody email, sesje, passkey i przypisanie plików gościa.",
-    ),
-    (
-        "/api/models",
-        "Modele i podgląd",
-        "Upload, analiza, prywatne oryginały i podglądy GLB.",
-    ),
-    (
-        "/api/quotes",
-        "Wycena",
-        "Trwałe zadania slicera oraz wyniki wycen.",
-    ),
-    ("/api/catalog", "Katalog", "Materiały, kolory i dostępność."),
-    (
-        "/api/checkout",
-        "Checkout i płatności",
-        "Wycena koszyka, konfiguracja i płatności Stripe.",
-    ),
-    (
-        "/api/shipping",
-        "Dostawa",
-        "Szacowanie paczek i wyszukiwanie punktów odbioru.",
-    ),
-    (
-        "/api/account",
-        "Konto klienta",
-        "Własne zamówienia, pliki, wiadomości, powiadomienia i status płatności.",
-    ),
-    (
-        "/api/admin",
-        "Administracja",
-        "Katalog, cennik, zamówienia, pliki, rozmowy i powiadomienia.",
-    ),
-];
-
-pub fn router() -> Router {
-    Router::new()
-        .route("/api", get(index))
-        .route("/api/routes", get(routes))
-}
-fn access(path: &str) -> &'static str {
-    match path {
-        "/api/admin/session" => "Status sesji",
-        p if p.starts_with("/api/admin/") => "Admin · MFA",
-        "/api"
-        | "/api/routes"
-        | "/api/auth/start"
-        | "/api/catalog/materials"
-        | "/api/shipping/estimate"
-        | "/api/shipping/points" => "Publiczny",
-        "/api/account/notifications" => "Sesja konta",
-        "/api/auth/verify" => "Kod + cookie próby",
-        "/api/auth/claim-guest" => "Konto + cookie gościa",
-        p if p.starts_with("/api/auth/") => "Sesja konta",
-        p if p.starts_with("/api/account/") => "Właściciel zamówienia",
-        "/api/models" => "Gość lub konto",
-        "/api/models/analyze" => "Publiczny",
-        p if p.starts_with("/api/models/") || p.starts_with("/api/quotes/") => "Właściciel modelu",
-        "/api/checkout/status" | "/api/checkout/config" => "Publiczny",
-        p if p.starts_with("/api/checkout/") => "Właściciel koszyka",
-        _ => "Sprawdź kontrakt",
+impl utoipa::PartialSchema for BinaryFile {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaFormat, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .format(Some(SchemaFormat::Custom("binary".into())))
+            .into()
     }
 }
-fn in_group(path: &str, prefix: &str) -> bool {
-    path == prefix
-        || path
-            .strip_prefix(prefix)
-            .is_some_and(|rest| rest.starts_with('/'))
-}
-async fn routes() -> Json<Value> {
-    Json(json!({"routes":ROUTES.iter().map(|(method,path)| json!({
-        "method":method,"path":path,"access":access(path)
-    })).collect::<Vec<_>>()}))
-}
-fn escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
-async fn index() -> Result<(HeaderMap, Html<String>), super::auth::Error> {
-    let nonce = rapidmaker_auth::random_token().map_err(|_| super::auth::unavailable())?;
-    let mut sections = String::new();
-    for (prefix, title, description) in GROUPS.into_iter().chain([(
-        "/api",
-        "Dokumentacja i pozostałe",
-        "Spis tras aktualnego buildu i pomocnicze endpointy.",
-    )]) {
-        let rows: Vec<_> = ROUTES
-            .iter()
-            .filter(|(_, path)| {
-                if prefix == "/api" {
-                    !GROUPS.iter().any(|(prefix, _, _)| in_group(path, prefix))
-                } else {
-                    in_group(path, prefix)
-                }
-            })
-            .collect();
-        if rows.is_empty() {
-            continue;
-        }
-        sections.push_str(&format!("<section data-title=\"{}\"><h2>{title}<span>{}</span></h2><p>{description}</p><div class=\"table-scroll\"><table><thead><tr><th>Metoda</th><th>Endpoint</th><th>Dostęp</th></tr></thead><tbody>",escape(title),rows.len()));
-        for (method, path) in rows {
-            sections.push_str(&format!("<tr><td><span class=\"method {method}\">{method}</span></td><td><code>{}</code></td><td class=\"access\">{}</td></tr>", escape(path),escape(access(path))));
-        }
-        sections.push_str("</tbody></table></div></section>");
-    }
-    let paths = ROUTES.iter().map(|(_, p)| p).collect::<BTreeSet<_>>().len();
-    let html = include_str!("../assets/api.html")
-        .replace("{{nonce}}", &nonce)
-        .replace("{{sections}}", &sections)
-        .replace("{{operations}}", &ROUTES.len().to_string())
-        .replace("{{paths}}", &paths.to_string());
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_str(&format!(
-        "default-src 'none'; style-src 'nonce-{nonce}'; script-src 'nonce-{nonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
-    )).map_err(|_| super::auth::unavailable())?);
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
+impl utoipa::ToSchema for BinaryFile {}
+
+pub fn router(mut document: OpenApi) -> axum::Router {
+    document.info.title = "Rapidmaker API".into();
+    document.info.version = env!("CARGO_PKG_VERSION").into();
+    document.info.contact = None;
+    document.info.license = None;
+    document.info.description = Some("Logowanie lokalne: otwórz http://localhost:18430/api zgodnie z AUTH_ORIGIN. Cookie HttpOnly ustawia backend po logowaniu. Dla zapisu sesyjnego podaj X-CSRF-Token z /api/auth/me przez Authorize. Administracja dodatkowo wymaga passkey. Wywołania Try it out wykonują rzeczywiste operacje API.".into());
+    document.servers = Some(vec![Server::new("/")]);
+    let components = document.components.get_or_insert_with(Default::default);
+    components.add_security_scheme(
+        "session",
+        SecurityScheme::ApiKey(ApiKey::Cookie(
+            ApiKeyValue::new(super::auth::session_name()),
+        )),
     );
-    Ok((headers, Html(html)))
+    components.add_security_scheme(
+        "guest",
+        SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new(
+            if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+                "__Host-rapidmaker_guest"
+            } else {
+                "rapidmaker_guest"
+            },
+        ))),
+    );
+    components.add_security_scheme(
+        "csrf",
+        SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-CSRF-Token"))),
+    );
+    axum::Router::new().merge(
+        SwaggerUi::new("/api")
+            .url("/api/openapi.json", document)
+            .config(
+                Config::default()
+                    .filter(true)
+                    .validator_url("")
+                    .with_credentials(true)
+                    .persist_authorization(false),
+            ),
+    )
 }

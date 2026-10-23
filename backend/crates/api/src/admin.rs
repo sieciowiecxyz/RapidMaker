@@ -1,16 +1,16 @@
 //! Operator endpoints require the shared database session and verified passkey.
 use axum::{
-    Extension, Json, Router,
+    Extension, Json,
     extract::{Path, Request, State},
     http::{HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, put},
 };
 use rapidmaker_pricing::Rates;
 use rapidmaker_storage::{Color, MaterialInput, Storage, validate_color};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 struct App {
     storage: Option<Storage>,
@@ -33,23 +33,29 @@ fn storage(app: &App) -> Result<&Storage, Error> {
 pub fn router(
     database: Option<Storage>,
     fallback_rates: Option<Rates>,
-) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<OpenApiRouter, Box<dyn std::error::Error + Send + Sync>> {
     let orders = super::orders::admin_router(database.clone());
     let app = Arc::new(App {
         storage: database,
         fallback_rates,
     });
-    Ok(Router::new()
+    Ok(OpenApiRouter::new()
         .merge(orders)
-        .route("/api/admin/materials", get(materials))
-        .route("/api/admin/materials/{id}", put(save_material))
-        .route("/api/admin/materials/{id}/colors/{code}", put(save_color))
-        .route("/api/admin/pricing", get(pricing).put(save_pricing))
+        .routes(routes!(materials))
+        .routes(routes!(save_material))
+        .routes(routes!(save_color))
+        .routes(routes!(pricing))
+        .routes(routes!(save_pricing))
         .route_layer(middleware::from_fn(authorize))
-        .route("/api/admin/session", get(session))
+        .routes(routes!(session))
         .with_state(app))
 }
 
+#[utoipa::path(operation_id = "admin_session", get,
+    path = "/api/admin/session",
+    tag = "Admin",
+    summary = "Sprawdź sesję operatora",
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn session(
     Extension(auth): Extension<Arc<super::auth::Auth>>,
     headers: HeaderMap,
@@ -82,11 +88,25 @@ async fn authorize(
     }
 }
 
+#[utoipa::path(operation_id = "admin_materials", get,
+    path = "/api/admin/materials",
+    tag = "Admin",
+    summary = "Pobierz katalog operatora",
+    security(("session" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     Ok(Json(
         json!({"materials": storage(&app)?.materials().await.map_err(|_| unavailable())?}),
     ))
 }
+#[utoipa::path(operation_id = "admin_save_material", put,
+    path = "/api/admin/materials/{id}",
+    tag = "Admin",
+    summary = "Zapisz materiał",
+    request_body = MaterialInput,
+    params(("id" = String, Path)),
+    security(("session" = [], "csrf" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn save_material(
     State(app): State<Arc<App>>,
     Path(id): Path<String>,
@@ -109,6 +129,14 @@ async fn save_material(
         })?;
     Ok(Json(json!({"saved":true})))
 }
+#[utoipa::path(operation_id = "admin_save_color", put,
+    path = "/api/admin/materials/{id}/colors/{code}",
+    tag = "Admin",
+    summary = "Zapisz kolor materiału",
+    request_body = Color,
+    params(("id" = String, Path), ("code" = String, Path)),
+    security(("session" = [], "csrf" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn save_color(
     State(app): State<Arc<App>>,
     Path((id, code)): Path<(String, String)>,
@@ -134,6 +162,12 @@ async fn save_color(
     })?;
     Ok(Json(json!({"saved":true})))
 }
+#[utoipa::path(operation_id = "admin_pricing", get,
+    path = "/api/admin/pricing",
+    tag = "Admin",
+    summary = "Pobierz stawki wyceny",
+    security(("session" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn pricing(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     let configured = storage(&app)?
         .pricing_config()
@@ -145,6 +179,13 @@ async fn pricing(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     };
     Ok(Json(json!({"rates":rates})))
 }
+#[utoipa::path(operation_id = "admin_save_pricing", put,
+    path = "/api/admin/pricing",
+    tag = "Admin",
+    summary = "Zapisz nową wersję stawek",
+    request_body = Rates,
+    security(("session" = [], "csrf" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 401, body = Value, description = "Wymagana sesja operatora"), (status = 403, body = Value, description = "Wymagany administrator z MFA; zapis wymaga CSRF"), (status = 503, body = Value, description = "Baza niedostępna")))]
 async fn save_pricing(
     State(app): State<Arc<App>>,
     Json(input): Json<Rates>,

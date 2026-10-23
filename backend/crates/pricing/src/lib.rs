@@ -1,7 +1,7 @@
 //! Integer costs and aggregate order pricing from measured slicer results.
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct PrintLine {
     pub model_id: String,
     pub quantity: u32,
@@ -10,7 +10,7 @@ pub struct PrintLine {
 }
 
 /// All rates are net PLN grosze. No guessed purchase prices or implicit defaults.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rates {
     pub version: String,
@@ -25,7 +25,7 @@ pub struct Rates {
     pub minimum_net_grosze: u32,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct Price {
     pub filament_grosze: u32,
     pub machine_grosze: u32,

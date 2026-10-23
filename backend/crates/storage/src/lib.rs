@@ -39,7 +39,7 @@ pub struct Material {
     pub colors: Vec<Color>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Color {
     pub code: String,

@@ -3,10 +3,9 @@ use super::auth::{
     Auth, Error, error, now, response, session_cookie, session_name, set_cookie, unavailable,
 };
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
 };
 use rapidmaker_auth::{
     passkeys::{PublicKeyCredential, RegisterPublicKeyCredential},
@@ -15,15 +14,16 @@ use rapidmaker_auth::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use utoipa_axum::router::OpenApiRouter as Router;
 
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
-        .route("/api/auth/passkey/register/start", post(register_start))
-        .route("/api/auth/passkey/register/finish", post(register_finish))
-        .route("/api/auth/passkey/login/start", post(login_start))
-        .route("/api/auth/passkey/login/finish", post(login_finish))
-        .route("/api/auth/passkeys", get(list))
-        .route("/api/auth/passkeys/{id}", axum::routing::delete(remove))
+        .routes(utoipa_axum::routes!(register_start))
+        .routes(utoipa_axum::routes!(register_finish))
+        .routes(utoipa_axum::routes!(login_start))
+        .routes(utoipa_axum::routes!(login_finish))
+        .routes(utoipa_axum::routes!(list))
+        .routes(utoipa_axum::routes!(remove))
         .with_state(auth)
 }
 fn denied() -> Error {
@@ -35,11 +35,23 @@ fn denied() -> Error {
 fn token(headers: &HeaderMap) -> Result<&str, Error> {
     session_cookie(headers)?.ok_or_else(denied)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = PasskeyRegistrationStart)]
 #[serde(deny_unknown_fields)]
 struct Start {
     bootstrap: Option<String>,
 }
+#[utoipa::path(
+    operation_id = "passkeys_register_start",
+    post,
+    path = "/api/auth/passkey/register/start",
+    tag = "Passkey",
+    summary = "Rozpocznij rejestrację passkey.",
+    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    request_body = Start,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn register_start(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
@@ -68,11 +80,13 @@ async fn register_start(
         json!({"challenge_id":start.id,"options":start.options}),
     ))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = PasskeyRegistration)]
 #[serde(deny_unknown_fields)]
 struct Register {
     challenge_id: String,
     #[serde(deserialize_with = "registration_credential")]
+    #[schema(value_type = Object)]
     credential: RegisterPublicKeyCredential,
     name: String,
 }
@@ -94,6 +108,17 @@ fn registration_credential<'de, D: serde::Deserializer<'de>>(
     }
     serde_json::from_value(value).map_err(serde::de::Error::custom)
 }
+#[utoipa::path(
+    operation_id = "passkeys_register_finish",
+    post,
+    path = "/api/auth/passkey/register/finish",
+    tag = "Passkey",
+    summary = "Zweryfikuj rejestrację passkey i obróć sesję.",
+    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    request_body = Register,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn register_finish(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
@@ -117,10 +142,21 @@ async fn register_finish(
         .ok_or_else(denied)?;
     finish(&auth, &new_token, session)
 }
+#[utoipa::path(
+    operation_id = "passkeys_login_start",
+    post,
+    path = "/api/auth/passkey/login/start",
+    tag = "Passkey",
+    summary = "Rozpocznij potwierdzenie administratora passkey.",
+    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    request_body = Value,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn login_start(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
-    Json(_): Json<Value>,
+    Json(_input): Json<Value>,
 ) -> Result<Json<Value>, Error> {
     auth.mutation(&headers).await?;
     let start = auth
@@ -137,12 +173,25 @@ async fn login_start(
         json!({"challenge_id":start.id,"options":start.options}),
     ))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = PasskeyLogin)]
 #[serde(deny_unknown_fields)]
 struct Login {
     challenge_id: String,
+    #[schema(value_type = Object)]
     credential: PublicKeyCredential,
 }
+#[utoipa::path(
+    operation_id = "passkeys_login_finish",
+    post,
+    path = "/api/auth/passkey/login/finish",
+    tag = "Passkey",
+    summary = "Zweryfikuj passkey administratora i obróć sesję.",
+    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    request_body = Login,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn login_finish(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
@@ -179,6 +228,16 @@ fn finish(
         )],
     )
 }
+#[utoipa::path(
+    operation_id = "passkeys_list",
+    get,
+    path = "/api/auth/passkeys",
+    tag = "Passkey",
+    summary = "Lista passkeys administratora.",
+    description = "Wymaga administratora i świeżego potwierdzenia MFA.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn list(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     auth.administrator(&headers, false).await?;
     let keys = auth
@@ -189,6 +248,17 @@ async fn list(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<
         .ok_or_else(denied)?;
     Ok(Json(json!({"passkeys":keys})))
 }
+#[utoipa::path(
+    operation_id = "passkeys_remove",
+    delete,
+    path = "/api/auth/passkeys/{id}",
+    tag = "Passkey",
+    summary = "Usuń passkey; ostatni klucz jest chroniony.",
+    description = "Wymaga administratora i świeżego potwierdzenia MFA.",
+    params(("id" = String, Path, description = "Identyfikator passkey.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn remove(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,

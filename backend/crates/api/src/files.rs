@@ -1,12 +1,11 @@
 //! Guest-owned private models. Cookies authorize reads; filenames never choose disk paths.
 use axum::{
-    Json, Router,
+    Json,
     body::Bytes,
     extract::{DefaultBodyLimit, Path as RoutePath, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use percent_encoding::{NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 use rapidmaker_storage::{Storage, StoredModel};
@@ -20,6 +19,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Semaphore;
+use utoipa_axum::{router::OpenApiRouter as Router, routes};
 use uuid::Uuid;
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -54,14 +54,14 @@ pub fn router(storage: Option<Storage>) -> Result<Router, String> {
         }
     }
     let state = FileState { storage, root };
+    let uploads = Router::new()
+        .routes(routes!(upload))
+        .route_layer(middleware::from_fn_with_state(state.clone(), admit_upload));
     Ok(Router::new()
-        .route(
-            "/api/models",
-            post(upload).layer(middleware::from_fn_with_state(state.clone(), admit_upload)),
-        )
-        .route("/api/models/{id}", get(metadata))
-        .route("/api/models/{id}/source", get(source))
-        .route("/api/models/{id}/preview.glb", get(preview))
+        .merge(uploads)
+        .routes(routes!(metadata))
+        .routes(routes!(source))
+        .routes(routes!(preview))
         .layer(DefaultBodyLimit::max(MAX_BYTES))
         .with_state(state))
 }
@@ -243,6 +243,11 @@ fn filename(headers: &HeaderMap) -> Result<(String, String), Error> {
     Ok((name, extension))
 }
 
+#[utoipa::path(operation_id = "files_upload", post, path = "/api/models", tag = "Modele",
+    params(("x-model-filename" = String, Header, description = "Zakodowana procentowo nazwa STL, STEP lub 3MF")),
+    request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream", description = "Oryginał do 32 MiB"),
+    responses((status = 201, description = "Prywatny model i adres GLB", body = Value),
+        (status = 413, description = "Przekroczony limit pliku"), (status = 422, description = "Nieprawidłowa geometria", body = Value)))]
 async fn upload(
     State(state): State<FileState>,
     headers: HeaderMap,
@@ -443,6 +448,9 @@ fn public_metadata(record: &StoredModel) -> Value {
         "preview_url":(record.preview_bytes > 0).then(|| format!("/api/models/{}/preview.glb",record.id))})
 }
 
+#[utoipa::path(operation_id = "files_metadata", get, path = "/api/models/{id}", tag = "Modele", params(("id" = String, Path)),
+    responses((status = 200, description = "Wymiary, ważność i preview_url", body = Value), (status = 404, description = "Model nie istnieje, wygasł lub jest cudzy", body = Value)),
+    security(("session" = []), ("guest" = [])))]
 async fn metadata(
     State(state): State<FileState>,
     headers: HeaderMap,
@@ -456,6 +464,10 @@ async fn metadata(
         .into_response())
 }
 
+#[utoipa::path(operation_id = "files_source", get, path = "/api/models/{id}/source", tag = "Modele", params(("id" = String, Path)),
+    responses((status = 200, description = "Oryginał", body = super::docs::BinaryFile, content_type = "application/octet-stream"),
+        (status = 404, description = "Brak własnego modelu", body = Value), (status = 410, description = "Plik jest niedostępny", body = Value)),
+    security(("session" = []), ("guest" = [])))]
 async fn source(
     State(state): State<FileState>,
     headers: HeaderMap,
@@ -499,6 +511,10 @@ fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
         .into_response())
 }
 
+#[utoipa::path(operation_id = "files_preview", get, path = "/api/models/{id}/preview.glb", tag = "Modele", params(("id" = String, Path)),
+    responses((status = 200, description = "GLB w metrach/Y-up", body = super::docs::BinaryFile, content_type = "model/gltf-binary"),
+        (status = 404, description = "Brak własnego modelu", body = Value), (status = 409, description = "Starszy upload wymaga ponownego przesłania", body = Value)),
+    security(("session" = []), ("guest" = [])))]
 async fn preview(
     State(state): State<FileState>,
     headers: HeaderMap,

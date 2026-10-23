@@ -1,11 +1,10 @@
 //! Bounded geometry analysis in a disposable subprocess. The shipping mass is a
 //! conservative solid estimate, never a slicer result or customer-provided value.
 use axum::{
-    Json, Router,
+    Json,
     body::Bytes,
     extract::DefaultBodyLimit,
     http::{HeaderMap, StatusCode},
-    routing::post,
 };
 use rapidmaker_geometry::{
     ConversionLimits, ThreeMfLimits, source_to_preview_glb, source_to_production,
@@ -21,12 +20,13 @@ use std::{
     time::Duration,
 };
 use tokio::sync::Semaphore;
+use utoipa_axum::{router::OpenApiRouter as Router, routes};
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 static BUSY: Semaphore = Semaphore::const_new(1);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ModelAnalysis {
     pub id: String,
     pub dimensions_mm: [f64; 3],
@@ -38,7 +38,7 @@ pub struct ModelAnalysis {
 
 pub fn router() -> Router {
     Router::new()
-        .route("/api/models/analyze", post(analyze))
+        .routes(routes!(analyze))
         .layer(DefaultBodyLimit::max(MAX_BYTES))
 }
 
@@ -53,6 +53,11 @@ impl Drop for Workspace {
     }
 }
 
+#[utoipa::path(operation_id = "models_analyze", post, path = "/api/models/analyze", tag = "Modele",
+    params(("x-model-filename" = String, Header, description = "Nazwa pliku STL, STEP lub 3MF")),
+    request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream"),
+    responses((status = 200, description = "Analiza geometrii", body = ModelAnalysis),
+        (status = 422, description = "Nieprawidłowy lub zbyt złożony model", body = Value)))]
 async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>, Error> {
     let filename = headers
         .get("x-model-filename")

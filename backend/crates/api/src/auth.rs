@@ -1,10 +1,9 @@
-//! Client email-code authentication. Local operator authorization remains separate.
+//! Email-code authentication and shared client/operator sessions.
 use axum::{
-    Json, Router,
+    Json,
     extract::{ConnectInfo, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use rapidmaker_auth::passkeys::{Url, Webauthn, WebauthnBuilder};
 use rapidmaker_auth::{AuthKey, hash_token, random_code, random_token, valid_token};
@@ -17,6 +16,7 @@ use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
+use utoipa_axum::router::OpenApiRouter as Router;
 
 pub(crate) type Error = (StatusCode, Json<Value>);
 pub(crate) fn error(status: StatusCode, message: &str) -> Error {
@@ -291,22 +291,30 @@ pub(super) fn set_cookie(name: &str, value: &str, age: u32) -> String {
 
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
-        .route("/api/auth/start", post(start))
-        .route("/api/auth/verify", post(verify))
-        .route("/api/auth/me", get(me))
-        .route("/api/auth/logout", post(logout))
-        .route("/api/auth/logout-all", post(logout_all))
-        .route(
-            "/api/account/notifications",
-            get(preferences).put(save_preferences),
-        )
+        .routes(utoipa_axum::routes!(start))
+        .routes(utoipa_axum::routes!(verify))
+        .routes(utoipa_axum::routes!(me))
+        .routes(utoipa_axum::routes!(logout))
+        .routes(utoipa_axum::routes!(logout_all))
+        .routes(utoipa_axum::routes!(preferences, save_preferences))
         .with_state(auth)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = AuthStart)]
 #[serde(deny_unknown_fields)]
 struct Start {
     email: String,
 }
+#[utoipa::path(
+    operation_id = "auth_start",
+    post,
+    path = "/api/auth/start",
+    tag = "Auth",
+    summary = "Wyślij kod logowania na email.",
+    description = "Wymaga dozwolonego Origin; ustawia HttpOnly cookie próby logowania. Kod i próba są powiązane z przeglądarką.",
+    request_body = Start,
+    responses((status = 202, description = "Przyjęto; dalszy krok wymaga kodu z emaila.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value))
+)]
 async fn start(
     State(auth): State<Arc<Auth>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -361,12 +369,23 @@ async fn start(
     *r.status_mut() = StatusCode::ACCEPTED;
     Ok(r)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = AuthVerify)]
 #[serde(deny_unknown_fields)]
 struct Verify {
     challenge_id: String,
     code: String,
 }
+#[utoipa::path(
+    operation_id = "auth_verify",
+    post,
+    path = "/api/auth/verify",
+    tag = "Auth",
+    summary = "Zweryfikuj kod i utwórz sesję.",
+    description = "Wymaga cookie próby z /auth/start i tego samego Origin. Zwraca csrf_token; administrator nadal musi potwierdzić passkey.",
+    request_body = Verify,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value))
+)]
 async fn verify(
     State(auth): State<Arc<Auth>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -419,16 +438,35 @@ async fn verify(
         ],
     )
 }
+#[utoipa::path(
+    operation_id = "auth_me",
+    get,
+    path = "/api/auth/me",
+    tag = "Auth",
+    summary = "Bieżąca sesja, użytkownik i token CSRF.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn me(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     let s = auth.current(&headers).await?;
     Ok(Json(
         json!({"user":s.user,"expires_at":s.expires_at,"csrf_token":auth.key()?.csrf(session_cookie(&headers)?.ok_or_else(unavailable)?),"admin_verified":s.admin_verified_at.is_some()}),
     ))
 }
+#[utoipa::path(
+    operation_id = "auth_logout",
+    post,
+    path = "/api/auth/logout",
+    tag = "Auth",
+    summary = "Zakończ bieżącą sesję.",
+    request_body = Value,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn logout(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
-    Json(_): Json<Value>,
+    Json(_input): Json<Value>,
 ) -> Result<Response, Error> {
     auth.mutation(&headers).await?;
     auth.database()?
@@ -437,10 +475,20 @@ async fn logout(
         .map_err(|_| unavailable())?;
     response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
+#[utoipa::path(
+    operation_id = "auth_logout_all",
+    post,
+    path = "/api/auth/logout-all",
+    tag = "Auth",
+    summary = "Zakończ wszystkie sesje użytkownika.",
+    request_body = Value,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn logout_all(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
-    Json(_): Json<Value>,
+    Json(_input): Json<Value>,
 ) -> Result<Response, Error> {
     let s = auth.mutation(&headers).await?;
     auth.database()?
@@ -449,6 +497,15 @@ async fn logout_all(
         .map_err(|_| unavailable())?;
     response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
+#[utoipa::path(
+    operation_id = "auth_preferences",
+    get,
+    path = "/api/account/notifications",
+    tag = "Konto",
+    summary = "Pobierz preferencje powiadomień email.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn preferences(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
@@ -458,12 +515,23 @@ async fn preferences(
         json!({"email_order_updates":s.user.email_order_updates,"email_chat_messages":s.user.email_chat_messages}),
     ))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = NotificationPreferences)]
 #[serde(deny_unknown_fields)]
 struct Preferences {
     email_order_updates: bool,
     email_chat_messages: bool,
 }
+#[utoipa::path(
+    operation_id = "auth_save_preferences",
+    put,
+    path = "/api/account/notifications",
+    tag = "Konto",
+    summary = "Zapisz preferencje powiadomień email.",
+    request_body = Preferences,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn save_preferences(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,

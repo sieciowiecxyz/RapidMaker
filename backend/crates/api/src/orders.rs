@@ -1,47 +1,35 @@
 use super::auth::{Auth, Error, error, now, unavailable};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::Response,
-    routing::{get, post},
 };
 use rapidmaker_storage::Storage;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use utoipa_axum::router::OpenApiRouter as Router;
 
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
-        .route("/api/account/orders", get(list))
-        .route("/api/account/orders/{id}", get(detail))
-        .route("/api/account/orders/{id}/files", get(files))
-        .route("/api/account/orders/{id}/files/{model}/{kind}", get(file))
-        .route(
-            "/api/account/orders/{id}/messages",
-            get(messages).post(message),
-        )
-        .route(
-            "/api/account/orders/{id}/payment-status",
-            post(payment_status),
-        )
-        .route("/api/auth/claim-guest", post(claim))
+        .routes(utoipa_axum::routes!(list))
+        .routes(utoipa_axum::routes!(detail))
+        .routes(utoipa_axum::routes!(files))
+        .routes(utoipa_axum::routes!(file))
+        .routes(utoipa_axum::routes!(messages, message))
+        .routes(utoipa_axum::routes!(payment_status))
+        .routes(utoipa_axum::routes!(claim))
         .with_state(auth)
 }
 pub fn admin_router<S: Clone + Send + Sync + 'static>(db: Option<Storage>) -> Router<S> {
     Router::new()
-        .route("/api/admin/orders", get(admin_list))
-        .route("/api/admin/orders/{id}/files", get(admin_files))
-        .route(
-            "/api/admin/orders/{id}/files/{model}/{kind}",
-            get(admin_file),
-        )
-        .route("/api/admin/orders/{id}/status", post(status))
-        .route(
-            "/api/admin/orders/{id}/messages",
-            get(admin_messages).post(admin_message),
-        )
-        .route("/api/admin/notifications", get(stats))
+        .routes(utoipa_axum::routes!(admin_list))
+        .routes(utoipa_axum::routes!(admin_files))
+        .routes(utoipa_axum::routes!(admin_file))
+        .routes(utoipa_axum::routes!(status))
+        .routes(utoipa_axum::routes!(admin_messages, admin_message))
+        .routes(utoipa_axum::routes!(stats))
         .with_state(db)
 }
 async fn scope(
@@ -74,12 +62,33 @@ async fn scope(
     }
     Ok((user, owner))
 }
+#[utoipa::path(
+    operation_id = "orders_list",
+    get,
+    path = "/api/account/orders",
+    tag = "Zamówienia",
+    summary = "Lista własnych zamówień.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []), ("guest" = []))
+)]
 async fn list(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     let (user, owner) = scope(&auth, &headers, false).await?;
     Ok(Json(
         json!({"orders":auth.database()?.orders(user.as_deref(),owner.as_deref()).await.map_err(|_|unavailable())?}),
     ))
 }
+#[utoipa::path(
+    operation_id = "orders_detail",
+    get,
+    path = "/api/account/orders/{id}",
+    tag = "Zamówienia",
+    summary = "Szczegóły własnego zamówienia.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []), ("guest" = []))
+)]
 async fn detail(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
@@ -97,6 +106,17 @@ async fn detail(
 fn not_found() -> Error {
     error(StatusCode::NOT_FOUND, "Nie znaleziono zamówienia.")
 }
+#[utoipa::path(
+    operation_id = "orders_messages",
+    get,
+    path = "/api/account/orders/{id}/messages",
+    tag = "Zamówienia",
+    summary = "Rozmowa własnego zamówienia.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []), ("guest" = []))
+)]
 async fn messages(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
@@ -111,11 +131,24 @@ async fn messages(
         .ok_or_else(not_found)?;
     Ok(Json(json!({"messages":messages})))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = OrderMessage)]
 #[serde(deny_unknown_fields)]
 struct Message {
     body: String,
 }
+#[utoipa::path(
+    operation_id = "orders_message",
+    post,
+    path = "/api/account/orders/{id}/messages",
+    tag = "Zamówienia",
+    summary = "Wyślij wiadomość do obsługi.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    request_body = Message,
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []), ("guest" = []))
+)]
 async fn message(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
@@ -163,10 +196,21 @@ fn valid_body(body: &str) -> Result<(), Error> {
         Ok(())
     }
 }
+#[utoipa::path(
+    operation_id = "orders_claim",
+    post,
+    path = "/api/auth/claim-guest",
+    tag = "Zamówienia",
+    summary = "Przypisz zasoby gościa do zalogowanego konta.",
+    description = "Wymaga obu cookies: zalogowanej sesji konta i sesji gościa. Atomowo przypisuje własne modele, wyceny i zamówienia gościa. Wymaga CSRF i dozwolonego Origin.",
+    request_body = Value,
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "guest" = [], "csrf" = []))
+)]
 async fn claim(
     State(auth): State<Arc<Auth>>,
     headers: HeaderMap,
-    Json(_): Json<Value>,
+    Json(_input): Json<Value>,
 ) -> Result<Json<Value>, Error> {
     let user = auth.mutation(&headers).await?.user;
     let owner = super::files::owner(&headers)
@@ -178,11 +222,23 @@ async fn claim(
         .map_err(|_| unavailable())?;
     Ok(Json(json!({"resources_claimed":count})))
 }
+#[utoipa::path(
+    operation_id = "orders_payment_status",
+    post,
+    path = "/api/account/orders/{id}/payment-status",
+    tag = "Zamówienia",
+    summary = "Sprawdź płatność zamówienia u operatora.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    request_body = Value,
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []), ("guest" = []))
+)]
 async fn payment_status(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
     headers: HeaderMap,
-    Json(_): Json<Value>,
+    Json(_input): Json<Value>,
 ) -> Result<Json<Value>, Error> {
     let (user, owner) = scope(&auth, &headers, true).await?;
     let db = auth.database()?;
@@ -199,16 +255,39 @@ async fn payment_status(
             .ok_or_else(not_found)?,
     ))
 }
+#[utoipa::path(
+    operation_id = "orders_admin_list",
+    get,
+    path = "/api/admin/orders",
+    tag = "Admin",
+    summary = "Lista zamówień operatora.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn admin_list(State(db): State<Option<Storage>>) -> Result<Json<Value>, Error> {
     Ok(Json(
         json!({"orders":db.as_ref().ok_or_else(unavailable)?.admin_orders().await.map_err(|_|unavailable())?}),
     ))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = OrderStatus)]
 #[serde(deny_unknown_fields)]
 struct Status {
     status: String,
 }
+#[utoipa::path(
+    operation_id = "orders_status",
+    post,
+    path = "/api/admin/orders/{id}/status",
+    tag = "Admin",
+    summary = "Zmień status realizacji zamówienia.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    request_body = Status,
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn status(
     State(db): State<Option<Storage>>,
     Path(id): Path<String>,
@@ -228,6 +307,17 @@ async fn status(
     }
     Ok(Json(json!({"ok":true})))
 }
+#[utoipa::path(
+    operation_id = "orders_admin_messages",
+    get,
+    path = "/api/admin/orders/{id}/messages",
+    tag = "Admin",
+    summary = "Pobierz rozmowę zamówienia.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn admin_messages(
     State(db): State<Option<Storage>>,
     Path(id): Path<String>,
@@ -236,6 +326,18 @@ async fn admin_messages(
         json!({"messages":db.as_ref().ok_or_else(unavailable)?.order_messages(&id,None,None,true).await.map_err(|_|unavailable())?.ok_or_else(not_found)?}),
     ))
 }
+#[utoipa::path(
+    operation_id = "orders_admin_message",
+    post,
+    path = "/api/admin/orders/{id}/messages",
+    tag = "Admin",
+    summary = "Wyślij wiadomość do klienta.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    request_body = Message,
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = [], "csrf" = []))
+)]
 async fn admin_message(
     State(db): State<Option<Storage>>,
     Path(id): Path<String>,
@@ -253,6 +355,16 @@ async fn admin_message(
     }
     Ok(Json(json!({"ok":true})))
 }
+#[utoipa::path(
+    operation_id = "orders_stats",
+    get,
+    path = "/api/admin/notifications",
+    tag = "Admin",
+    summary = "Statystyki kolejki powiadomień email.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn stats(State(db): State<Option<Storage>>) -> Result<Json<Value>, Error> {
     Ok(Json(
         serde_json::to_value(
@@ -316,6 +428,17 @@ async fn order_artifact(
         })?;
     super::files::order_artifact(record, kind, admin)
 }
+#[utoipa::path(
+    operation_id = "orders_files",
+    get,
+    path = "/api/account/orders/{id}/files",
+    tag = "Zamówienia",
+    summary = "Lista dostępnych plików zamówienia.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []), ("guest" = []))
+)]
 async fn files(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
@@ -323,6 +446,17 @@ async fn files(
 ) -> Result<Json<Value>, Error> {
     file_list(owned_order_db(&auth, &headers, &id).await?, &id, false).await
 }
+#[utoipa::path(
+    operation_id = "orders_file",
+    get,
+    path = "/api/account/orders/{id}/files/{model}/{kind}",
+    tag = "Zamówienia",
+    summary = "Pobierz własny plik zamówienia.",
+    description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia."), ("model" = String, Path, description = "Identyfikator modelu."), ("kind" = String, Path, description = "source albo preview.glb; mesh dostępne tylko administratorowi.")),
+    responses((status = 200, description = "Powodzenie.", body = Vec<u8>, content_type = "application/octet-stream"), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 410, description = "Plik wygasł lub jest niedostępny.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []), ("guest" = []))
+)]
 async fn file(
     State(auth): State<Arc<Auth>>,
     Path((id, model, kind)): Path<(String, String, String)>,
@@ -337,12 +471,34 @@ async fn file(
     )
     .await
 }
+#[utoipa::path(
+    operation_id = "orders_admin_files",
+    get,
+    path = "/api/admin/orders/{id}/files",
+    tag = "Admin",
+    summary = "Lista plików zamówienia dla operatora.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
+    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn admin_files(
     State(db): State<Option<Storage>>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
     file_list(db.as_ref().ok_or_else(unavailable)?, &id, true).await
 }
+#[utoipa::path(
+    operation_id = "orders_admin_file",
+    get,
+    path = "/api/admin/orders/{id}/files/{model}/{kind}",
+    tag = "Admin",
+    summary = "Pobierz plik zamówienia jako operator.",
+    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    params(("id" = String, Path, description = "Identyfikator zamówienia."), ("model" = String, Path, description = "Identyfikator modelu."), ("kind" = String, Path, description = "source, preview.glb albo mesh.")),
+    responses((status = 200, description = "Powodzenie.", body = Vec<u8>, content_type = "application/octet-stream"), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 410, description = "Plik wygasł lub jest niedostępny.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    security(("session" = []))
+)]
 async fn admin_file(
     State(db): State<Option<Storage>>,
     Path((id, model, kind)): Path<(String, String, String)>,

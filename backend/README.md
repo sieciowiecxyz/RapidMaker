@@ -89,9 +89,9 @@ Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utw
 
 ## Spis API
 
-Otwórz `http://127.0.0.1:18430/api` (Vite) lub `http://127.0.0.1:18432/api` (bezpośrednio backend). Strona pokazuje wszystkie zarejestrowane metody/ścieżki, grupy funkcji, wymagany dostęp i wyszukiwarkę. `GET /api/routes` zwraca spis JSON. GET obejmuje również HEAD.
+Otwórz [Swagger UI](http://localhost:18430/api). Specyfikacja OpenAPI: `/api/openapi.json`. UI i zasoby są serwowane lokalnie przez Rust, bez CDN. `utoipa` generuje schematy z typów, a `utoipa-axum` rejestruje jednocześnie trasę i jej dokumentację przez `routes!`; nie utrzymujemy osobnego spisu endpointów.
 
-`api/build.rs` odczytuje rzeczywiste rejestracje `.route` przez AST Rust; `syn` jest zależnością wyłącznie czasu budowania, już obecną w lockfile. Spis aktualizuje się przy kompilacji. Generator obsługuje obecne literalne trasy; zagnieżdżone routery, makra lub dynamiczne ścieżki wymagają rozszerzenia generatora. Zakres strony: metody, ścieżki i opisy dostępu; kontrakty danych opisują sekcje backendu. Strona korzysta z lokalnych CSS/JS z CSP nonce, odczytuje wyłącznie spis, a uprawnienia operacji nadal egzekwują ich endpointy.
+Rozwiń endpoint, aby zobaczyć parametry, body i odpowiedzi. `Try it out` wykonuje rzeczywiste żądanie. Logowanie ustawia cookie HttpOnly; dla operacji sesyjnych wymagających CSRF podaj token z `/api/auth/me` w `Authorize`. Admin wymaga również passkey. Używaj hosta `localhost` zgodnego z `AUTH_ORIGIN`. Jawne DTO mają wygenerowane schematy; odpowiedzi zwracane jako dynamiczny JSON pozostają ogólne.
 
 ## Podgląd GLB
 

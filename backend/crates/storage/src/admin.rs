@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialInput {
     pub name: String,

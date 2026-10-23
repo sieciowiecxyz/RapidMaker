@@ -72,7 +72,7 @@ pub async fn identity(
 pub async fn owner(storage: Option<&Storage>, headers: &HeaderMap) -> Result<String, Error> {
     identity(storage, headers).await.map(|(owner, _)| owner)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CartPart {
     id: String,

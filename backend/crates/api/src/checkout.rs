@@ -1,10 +1,9 @@
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, Request, State},
     http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use rapidmaker_packing::{Delivery, Estimate, EstimateRequest, estimate};
 use rapidmaker_pricing::PrintLine;
@@ -17,6 +16,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 const FURGONETKA: &str = "https://api.sandbox.furgonetka.pl";
 const STRIPE: &str = "https://api.stripe.com/v1/checkout/sessions";
@@ -40,8 +40,9 @@ fn now() -> u64 {
         .as_secs()
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
+#[schema(as = CheckoutContact)]
 struct Contact {
     #[serde(rename = "emailOrderUpdates", default = "yes")]
     email_order_updates: bool,
@@ -105,8 +106,9 @@ impl Contact {
         "street":self.street,"city":self.city,"country_code":"PL","postcode":self.postal_code})
     }
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
+#[schema(as = ShippingPointSearch)]
 struct PointSearch {
     search: String,
 }
@@ -166,6 +168,12 @@ async fn locker_points(app: &App, search: &str, exact: bool) -> Result<Vec<Value
         })
         .collect())
 }
+#[utoipa::path(operation_id = "checkout_points", post,
+    path = "/api/shipping/points",
+    tag = "Shipping",
+    summary = "Wyszukaj punkty odbioru",
+    request_body = PointSearch,
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna")))]
 async fn points(
     State(app): State<Arc<App>>,
     Json(input): Json<PointSearch>,
@@ -174,8 +182,9 @@ async fn points(
         json!({"points":locker_points(&app,input.search.trim(),false).await?}),
     ))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
+#[schema(as = CheckoutQuoteRequest)]
 struct QuoteRequest {
     parts: Vec<super::cart::CartPart>,
     delivery: Delivery,
@@ -183,13 +192,15 @@ struct QuoteRequest {
     #[serde(default)]
     manual: bool,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, utoipa::ToSchema)]
+#[schema(as = ShippingOffer)]
 struct Offer {
     id: String,
     name: String,
     price_grosze: u32,
 }
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
+#[schema(as = CheckoutQuote)]
 struct QuoteResponse {
     id: String,
     expires_at: u64,
@@ -516,6 +527,13 @@ async fn carrier_offers(
     }
     Ok(validated)
 }
+#[utoipa::path(operation_id = "checkout_quote", post,
+    path = "/api/checkout/quote",
+    tag = "Checkout",
+    summary = "Wyceń dostawę i zamówienie",
+    request_body = QuoteRequest,
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = QuoteResponse), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan"), (status = 422, body = Value, description = "Pola odbiorcy wymagają poprawy"), (status = 429, body = Value, description = "Limit ofert")))]
 async fn quote(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -626,8 +644,9 @@ async fn quote(
         field_errors,
     }))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
+#[schema(as = CheckoutSessionRequest)]
 struct SessionRequest {
     quote_id: String,
     offer_id: String,
@@ -690,6 +709,13 @@ fn stripe_form(quote_id: &str, total: u32) -> Vec<(String, String)> {
     ])
     .collect()
 }
+#[utoipa::path(operation_id = "checkout_session", post,
+    path = "/api/checkout/session",
+    tag = "Checkout",
+    summary = "Utwórz testową sesję Stripe Checkout",
+    request_body = SessionRequest,
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan")))]
 async fn session(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -785,6 +811,11 @@ async fn session(
     });
     Ok(Json(json!({"url":url,"session_id":id})))
 }
+#[utoipa::path(operation_id = "checkout_payment_config", get,
+    path = "/api/checkout/config",
+    tag = "Checkout",
+    summary = "Pobierz publiczny klucz Stripe",
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna")))]
 async fn payment_config(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     let key = app
         .publishable_key
@@ -804,6 +835,13 @@ fn intent_matches(result: &Value, quote_id: &str, total: u32) -> bool {
         && result["currency"] == "pln"
         && result["metadata"]["quote_id"] == quote_id
 }
+#[utoipa::path(operation_id = "checkout_intent", post,
+    path = "/api/checkout/intent",
+    tag = "Checkout",
+    summary = "Utwórz testowy PaymentIntent",
+    request_body = SessionRequest,
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan")))]
 async fn intent(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -903,6 +941,13 @@ async fn intent(
         json!({"client_secret":secret,"payment_intent_id":id,"total_grosze":total}),
     ))
 }
+#[utoipa::path(operation_id = "checkout_intent_status", get,
+    path = "/api/checkout/intent/{id}",
+    tag = "Checkout",
+    summary = "Sprawdź testową płatność",
+    params(("id" = String, Path, description = "Identyfikator płatności Stripe")),
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan")))]
 async fn intent_status(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -953,6 +998,13 @@ async fn intent_status(
     ))
 }
 // Resume requires the model owner cookie and the provider's current payment state.
+#[utoipa::path(operation_id = "checkout_resume_intent", get,
+    path = "/api/checkout/intent/{id}/resume",
+    tag = "Checkout",
+    summary = "Wznów własną otwartą płatność testową",
+    params(("id" = String, Path, description = "Identyfikator płatności Stripe")),
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan")))]
 async fn resume_intent(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -989,6 +1041,13 @@ fn session_matches(result: &Value, quote_id: &str, total: u32) -> bool {
         && result["currency"] == "pln"
         && result["metadata"]["quote_id"] == quote_id
 }
+#[utoipa::path(operation_id = "checkout_session_status", get,
+    path = "/api/checkout/session/{id}",
+    tag = "Checkout",
+    summary = "Sprawdź własną sesję Stripe Checkout",
+    params(("id" = String, Path, description = "Identyfikator płatności Stripe")),
+    security(("session" = []), ("guest" = [])),
+    responses((status = 200, body = Value), (status = 400, body = Value, description = "Nieprawidłowe dane"), (status = 502, body = Value, description = "Błąd integracji testowej"), (status = 503, body = Value, description = "Integracja lub baza niedostępna"), (status = 401, body = Value, description = "Wymagana własna sesja"), (status = 404, body = Value, description = "Nie znaleziono własnego zasobu"), (status = 409, body = Value, description = "Wycena wygasła lub płatność zmieniła stan")))]
 async fn session_status(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
@@ -1248,22 +1307,29 @@ pub(super) async fn refresh_order(db: &Storage, id: &str, order: &Value) -> Resu
     Ok(())
 }
 
-pub fn router(storage: Option<Storage>) -> Router {
-    Router::new()
-        .route("/api/shipping/points", post(points))
-        .route("/api/checkout/status", get(|State(app): State<Arc<App>>| async move {
-            Json(json!({"stripe_configured":app.stripe_key.is_some(),"furgonetka_configured":app.carrier_configured()}))
-        }))
-        .route("/api/checkout/config", get(payment_config))
-        .route("/api/checkout/intent", post(intent))
-        .route("/api/checkout/intent/{id}", get(intent_status))
-        .route("/api/checkout/intent/{id}/resume", get(resume_intent))
-        .route("/api/checkout/quote", post(quote))
-        .route("/api/checkout/session", post(session))
-        .route("/api/checkout/session/{id}", get(session_status))
+#[utoipa::path(operation_id = "checkout_status", get, path = "/api/checkout/status", tag = "Checkout",
+    summary = "Sprawdź konfigurację integracji testowych",
+    responses((status = 200, body = Value, description = "Dostępność Stripe i Furgonetki")))]
+async fn status(State(app): State<Arc<App>>) -> Json<Value> {
+    Json(
+        json!({"stripe_configured":app.stripe_key.is_some(),"furgonetka_configured":app.carrier_configured()}),
+    )
+}
+
+pub fn router(storage: Option<Storage>) -> OpenApiRouter {
+    OpenApiRouter::new()
+        .routes(routes!(points))
+        .routes(routes!(status))
+        .routes(routes!(payment_config))
+        .routes(routes!(intent))
+        .routes(routes!(intent_status))
+        .routes(routes!(resume_intent))
+        .routes(routes!(quote))
+        .routes(routes!(session))
+        .routes(routes!(session_status))
         .with_state(Arc::new(App::from_env(storage)))
 }
-pub fn protect(router: Router, auth: Arc<super::auth::Auth>) -> Router {
+pub fn protect(router: axum::Router, auth: Arc<super::auth::Auth>) -> axum::Router {
     router
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(auth, local_only))
