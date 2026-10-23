@@ -8,13 +8,14 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 
 - `backend/crates/app`: start serwera na localhost:18432, start trybu workera geometrii.
 - `api`: wspólny router, lokalna ochrona Host/Origin, upload, katalog, wycena slicerem i checkout sandboxów. `cart.rs` sprawdza snapshoty i składa koszt zamówienia. `checkout.rs` wciąż zawiera adaptery Stripe/Furgonetki.
-- `storage`: SQLx/PostgreSQL; migracje `catalog_materials`, `catalog_colors`, `quotes`, `pricing_config`, `private_models`. Import transakcyjny zachowuje ceny i dostępność operatora. Snapshot wyniku wyceny jest niezmienny przez API.
+- `storage`: SQLx/PostgreSQL; katalog/wyceny/modele oraz `users`, `auth_challenges`, `sessions`, `auth_limits`, `orders`, `order_messages`, `email_outbox`. Zmiana zamówienia i odpowiadający email w jednej transakcji. Import zachowuje konfigurację operatora, wyceny pozostają snapshotami.
 - `slicer`: Bambu Studio w osobnym procesie bubblewrap/prlimit; P1P hardened 0,4 mm, Textured PEI, standard 0,20 mm; STL po bezpiecznej konwersji z STL/STEP/3MF; profile materiałów z zaufanego katalogu, oddzielne dopuszczenie operatora. Materiały podporowe nie są osobną ofertą. Nasze presety z `data/bambu`, rozwiązywane `inherits`/`include`. Bez sieci i sekretów, RAM 4 GiB, CPU 60 s, timeout 65 s, limit pliku 128 MiB, jedno zadanie naraz. Odczyt rzeczywistego czasu i zużycia filamentu. Slicer układa kopie na płytach; wynik pełnej płyty jest powtarzany, reszta mierzona osobno (maks. dwa przebiegi/512 kopii w układaniu). Kontrolowane draft/standard/fine, 2–8 ścian i 5–100% wypełnienia; automatyczne podpory z zaufanego presetu są wliczone.
 - `pricing`: całkowitoliczbowe koszty netto w groszach, energia, maszyna, obsługa płyt, przygotowanie raz, rezerwa strat, marża, minimum i VAT. Stawki wymagają jawnej konfiguracji. Wejście to zmierzone sumy partii i liczba płyt, bez ponownego mnożenia przez ilość. Plan układania jest wykonalny, bez gwarancji globalnego optimum.
 - `geometry`: analiza STL/STEP/3MF i GLB. Worker bez sieci/sekretów, 30 s/2 GiB. STEP ograniczony do pojedynczej części w mm. Masa z analizy jest oszacowaniem pełnej bryły, nie wynikiem slicera.
 - `packing`: algorytm układania obwiedni z zapasem, 6 obrotów, katalog kartonów; do 2000 sztuk/30 paczek. Nie obiecuje minimum paczek. Furgonetka sandbox waliduje/wycenia usługi i punkty; aplikacja nie nadaje przesyłek.
-- `notifications`: klient iCloud SMTP (`lettre`/Tokio/rustls), tekstowe wiadomości, tryby disabled/test/live i ograniczona wysyłka. API udostępnia współdzielony Mailer modułom przez Extension; lokalne `--mail-test` wysyła wyłącznie do skonfigurowanej skrzynki testowej. Bez publicznej trasy wysyłki, IMAP i trwałej kolejki. Plan podłączenia zdarzeń: [email](email.md).
-- `orders`, `auth`, `payments`, `shipping`, `observability`: nadal szkielety bez własnej implementacji. Nie oznaczają gotowych kont, webhooków ani monitoringu.
+- `auth`: CSPRNG, HMAC kodów/CSRF, hash tokenów; bez HTTP/SQL. `api/auth.rs` obsługuje logowanie klienta i preferencje; sesje w PostgreSQL. Admin nadal używa lokalnej sesji operatora; passkey i publiczny auth pozostają planem.
+- `notifications`: iCloud SMTP (`lettre`/Tokio/rustls), tekstowe wiadomości, disabled/test/live. `api/email.rs` uruchamia jeden worker outboxa, 10 prób/min, lease/CAS/retry i kontrola preferencji. App kończy go po SIGINT/SIGTERM z limitem 25 s. Kody nie trafiają do outboxa. Lokalny `--mail-test` nie wymaga DB/HTTP. Szczegóły: [email](email.md).
+- Zamówienia/rozmowy: `api/orders.rs` i `storage/orders.rs`, kontrola własności w SQL, chronione trasy operatora. Potwierdzenie płatności tylko z odpowiedzi Stripe sprawdzonej przez backend. Dedykowane crate’y `orders`, `payments`, `shipping`, `observability` pozostają rezerwą, bez osobnych implementacji.
 
 ## Nowa wycena a istniejący checkout
 
@@ -24,7 +25,7 @@ Pojedynczy snapshot nie otwiera płatności. Checkout przyjmuje jego ID, sprawdz
 
 `POST /api/checkout/quote` przyjmuje części `{id,quantity,analysis_id,quote_id}`, dostawę i kontakt. Sumuje koszty różnych modeli; przygotowanie, rezerwa, marża, minimum i VAT naliczane raz. Pozycje i przygotowanie sumują się dokładnie w groszach. Każdy model ma własne partie; brak wspólnego układania różnych modeli na jednej płycie. Pakowanie używa serwerowych wymiarów i ostrożnej masy na sztukę ze zużycia filamentu (z podporami/purge), nie masy pełnej bryły ani danych przeglądarki. Opakowanie i dostawa osobno.
 
-Oferty i sesje Stripe pozostają w ograniczonym RAM; restart je traci. Płatność/resume/status wymagają cookie właściciela. Przed otwarciem płatności backend ponownie sprawdza snapshoty; Stripe dostaje wyłącznie ustaloną kwotę. Ręczna wycena nie ma ofert płatnych. Trwałe zamówienia i webhooki pozostają planem.
+Oferty i sesje Stripe pozostają w ograniczonym RAM; restart je traci. Płatność/resume/status wymagają cookie właściciela. Przed otwarciem płatności backend ponownie sprawdza snapshoty; Stripe dostaje wyłącznie ustaloną kwotę. Ręczna wycena nie ma ofert płatnych. Zamówienia i referencje płatności są w PostgreSQL; własny endpoint zamówienia może sprawdzić płatność po restarcie. Produkcyjne webhooki pozostają planem.
 
 ## Frontend i dane
 
@@ -36,8 +37,8 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 
 ## Uruchomienie i granice
 
-[Backend: konfiguracja i kontrakt API](../backend/README.md). Lokalny PostgreSQL 16 na localhost:18434; API:18432, Vite:18430. Jedna `.env`, SOPS i hook przed commitem. Brak Dockerfile/Taskfile/Kubernetes i publicznego wdrożenia. iCloud SMTP/IMAP, trwałe zamówienia, role, logi/metryki Grafany są planem. Kolejność i dowody w [PLAN.md](PLAN.md) oraz [MILESTONES.md](MILESTONES.md).
+[Backend: konfiguracja i kontrakt API](../backend/README.md). Lokalny PostgreSQL 16 na localhost:18434; API:18432, Vite:18430. Jedna `.env`, SOPS i hook przed commitem. Brak Dockerfile/Taskfile/Kubernetes i publicznego wdrożenia. Działają SMTP, klient auth i trwałe zamówienia/rozmowy. IMAP, publiczny admin auth i logi/metryki Grafany pozostają planem. Kolejność i dowody w [PLAN.md](PLAN.md) oraz [MILESTONES.md](MILESTONES.md).
 
 ## Następny projekt: auth
 
-[Auth](auth.md): jednorazowy kod email klienta, passkey admina, sesje PostgreSQL/cookie i własność danych. To projekt, nie aktualna implementacja; obecna sesja operatora i mock klienta nadal działają bez zmian.
+[Auth](auth.md): backend kodów/sesji klienta działa w localhost; frontend nadal używa mocka. Dalszy zakres: passkey admina, publiczny tryb cookie oraz własność plików/wycen przez konto. Obecna sesja operatora pozostaje lokalnym mechanizmem przejściowym.

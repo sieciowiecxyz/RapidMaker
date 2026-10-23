@@ -6,9 +6,15 @@ use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 use std::{collections::HashSet, error::Error, time::Duration};
 
 mod admin;
+mod auth;
+mod email;
 mod models;
+mod orders;
 pub use admin::{MaterialInput, validate_color};
+pub use auth::{AuthSession, AuthUser};
+pub use email::{EmailOutcome, EmailStats, QueuedEmail};
 pub use models::StoredModel;
+pub use orders::OrderInput;
 
 pub type StorageError = Box<dyn Error + Send + Sync>;
 

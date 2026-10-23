@@ -40,9 +40,11 @@ fn now() -> u64 {
         .as_secs()
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 struct Contact {
+    #[serde(rename = "emailOrderUpdates", default = "yes")]
+    email_order_updates: bool,
     name: String,
     email: String,
     phone: String,
@@ -56,6 +58,9 @@ struct Contact {
     _nip: String,
     #[serde(rename = "pickupPoint")]
     pickup_point: String,
+}
+fn yes() -> bool {
+    true
 }
 impl Contact {
     fn valid_identity(&self) -> bool {
@@ -216,6 +221,7 @@ struct Intent {
     total: u32,
 }
 struct StoredQuote {
+    order_data: Option<Value>,
     owner: String,
     quote_ids: Vec<String>,
     expires_at: u64,
@@ -591,6 +597,7 @@ async fn quote(
     quotes.insert(
         id.clone(),
         StoredQuote {
+            order_data: Some(json!({"contact":request.contact,"lines":print_lines})),
             owner: cart.owner,
             quote_ids: cart.quote_ids,
             expires_at,
@@ -759,6 +766,16 @@ async fn session(
     if !session_matches(&result, &request.quote_id, total) {
         return Err(unavailable());
     }
+    persist_order(
+        &app,
+        &request.quote_id,
+        quote,
+        &headers,
+        "session",
+        id,
+        total,
+    )
+    .await?;
     quote.session = Some(Session {
         id: id.into(),
         url: url.into(),
@@ -865,6 +882,16 @@ async fn intent(
     if !intent_matches(&result, &request.quote_id, total) {
         return Err(unavailable());
     }
+    persist_order(
+        &app,
+        &request.quote_id,
+        quote,
+        &headers,
+        "intent",
+        id,
+        total,
+    )
+    .await?;
     quote.intent = Some(Intent {
         id: id.into(),
         client_secret: secret.into(),
@@ -912,6 +939,11 @@ async fn intent_status(
         return Err(unavailable());
     }
     let paid = result["status"] == "succeeded";
+    if paid && let Some(db) = &app.storage {
+        db.order_paid(&quote_id, &intent.id, i64::from(intent.total), now() as i64)
+            .await
+            .map_err(|_| unavailable())?;
+    }
     Ok(Json(
         json!({"status":if paid {"paid"} else {"unpaid"},"livemode":false,
         "total_grosze":intent.total,"currency":"pln","quote_id":quote_id,
@@ -997,6 +1029,18 @@ async fn session_status(
     if !session_matches(&result, &quote_id, session.total) || result["id"] != session.id {
         return Err(unavailable());
     }
+    if result["payment_status"] == "paid"
+        && let Some(db) = &app.storage
+    {
+        db.order_paid(
+            &quote_id,
+            &session.id,
+            i64::from(session.total),
+            now() as i64,
+        )
+        .await
+        .map_err(|_| unavailable())?;
+    }
     Ok(Json(
         json!({"status":if result["payment_status"]=="paid" {"paid"} else {"unpaid"},
         "livemode":false,"total_grosze":session.total,"currency":"pln","quote_id":quote_id,
@@ -1061,7 +1105,120 @@ fn authorize(quote: &StoredQuote, owner: &str) -> Result<(), Error> {
 }
 async fn validate_payment(app: &App, quote: &StoredQuote) -> Result<(), Error> {
     let storage = app.storage.as_ref().ok_or_else(unavailable)?;
+    if !quote
+        .order_data
+        .as_ref()
+        .and_then(|d| d["contact"]["email"].as_str())
+        .is_some_and(rapidmaker_notifications::valid_address)
+    {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Podaj poprawny email odbiorcy przed płatnością.",
+        ));
+    }
     super::cart::validate(storage, &quote.owner, &quote.quote_ids).await?;
+    Ok(())
+}
+
+async fn persist_order(
+    app: &App,
+    id: &str,
+    quote: &StoredQuote,
+    headers: &HeaderMap,
+    kind: &str,
+    provider: &str,
+    total: u32,
+) -> Result<(), Error> {
+    let db = app.storage.as_ref().ok_or_else(unavailable)?;
+    let data = quote.order_data.as_ref().ok_or_else(unavailable)?;
+    let user = if let Some(token) = super::auth::cookie(headers, "rapidmaker_session") {
+        Some(
+            db.auth_session(token, now() as i64)
+                .await
+                .map_err(|_| unavailable())?
+                .filter(|s| s.user.role == "client")
+                .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się ponownie."))?
+                .user
+                .id,
+        )
+    } else {
+        None
+    };
+    db.create_order(
+        &rapidmaker_storage::OrderInput {
+            id,
+            owner_hash: &quote.owner,
+            user_id: user.as_deref(),
+            contact: &data["contact"],
+            lines: &data["lines"],
+            amount_grosze: i64::from(total),
+            provider_kind: kind,
+            provider_id: provider,
+            guest_updates: data["contact"]["emailOrderUpdates"]
+                .as_bool()
+                .unwrap_or(true),
+        },
+        now() as i64,
+    )
+    .await
+    .map_err(|_| unavailable())
+}
+
+pub(super) async fn refresh_order(db: &Storage, id: &str, order: &Value) -> Result<(), Error> {
+    if order["status"] != "awaiting_payment" {
+        return Ok(());
+    }
+    if !db
+        .poll_order_payment(id, now() as i64)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        return Ok(());
+    }
+    let app = App::from_env(None);
+    let key = app.stripe_key.as_ref().ok_or_else(unavailable)?;
+    let provider = order["provider_id"]
+        .as_str()
+        .filter(|p| p.len() <= 128 && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+        .ok_or_else(unavailable)?;
+    let total = order["amount_grosze"]
+        .as_u64()
+        .and_then(|v| u32::try_from(v).ok())
+        .ok_or_else(unavailable)?;
+    let intent = order["provider_kind"] == "intent";
+    if !(if intent {
+        provider.starts_with("pi_")
+    } else {
+        provider.starts_with("cs_test_")
+    }) {
+        return Err(unavailable());
+    }
+    let endpoint = if intent { STRIPE_INTENTS } else { STRIPE };
+    let result = bounded_json(
+        app.client
+            .get(format!("{endpoint}/{provider}"))
+            .bearer_auth(key)
+            .send()
+            .await
+            .map_err(|_| unavailable())?,
+    )
+    .await?;
+    if result["id"] != provider
+        || !(if intent {
+            intent_matches(&result, id, total)
+        } else {
+            session_matches(&result, id, total)
+        })
+    {
+        return Err(unavailable());
+    }
+    if (intent && result["status"] == "succeeded")
+        || (!intent && result["payment_status"] == "paid")
+    {
+        db.order_paid(id, provider, i64::from(total), now() as i64)
+            .await
+            .map_err(|_| unavailable())?;
+    }
     Ok(())
 }
 
@@ -1124,6 +1281,7 @@ mod tests {
     #[test]
     fn server_total_expires_and_rejects_tampering() {
         let quote = StoredQuote {
+            order_data: None,
             owner: super::super::files::owner(&test_headers()).unwrap(),
             quote_ids: Vec::new(),
             expires_at: 100,
@@ -1211,6 +1369,7 @@ mod tests {
         app.quotes.lock().await.insert(
             "q".into(),
             StoredQuote {
+                order_data: None,
                 owner: super::super::files::owner(&test_headers()).unwrap(),
                 quote_ids: Vec::new(),
                 expires_at: now() + TTL,
@@ -1304,6 +1463,7 @@ mod tests {
         app.quotes.lock().await.insert(
             "q".into(),
             StoredQuote {
+                order_data: None,
                 owner: super::super::files::owner(&test_headers()).unwrap(),
                 quote_ids: Vec::new(),
                 expires_at: now() + TTL,

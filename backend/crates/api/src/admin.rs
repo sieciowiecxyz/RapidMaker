@@ -54,6 +54,7 @@ pub fn router(
             Ok(Sha256::digest(token.as_bytes()).into())
         })
         .transpose()?;
+    let orders = super::orders::admin_router(database.clone());
     let app = Arc::new(App {
         storage: database,
         token_hash,
@@ -62,6 +63,7 @@ pub fn router(
         attempts: Mutex::new((Instant::now(), 0)),
     });
     Ok(Router::new()
+        .merge(orders)
         .route("/api/admin/materials", get(materials))
         .route("/api/admin/materials/{id}", put(save_material))
         .route("/api/admin/materials/{id}/colors/{code}", put(save_color))

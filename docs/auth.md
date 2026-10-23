@@ -1,6 +1,6 @@
 # Auth — projekt
 
-Status: propozycja do implementacji. Obecnie klient jest mockiem, operator ma osobną sesję RAM i `ADMIN_API_TOKEN`. Ten dokument nie oznacza działającego nowego logowania.
+Status: backend kodów i sesji klienta zaimplementowany lokalnie jako E2 [email](email.md), razem z preferencjami i własnością zamówień. Frontend klienta nadal jest mockiem. Operator zachowuje osobną sesję RAM i `ADMIN_API_TOKEN`; passkey, produkcyjny tryb cookie i własność modeli przez konto pozostają projektem opisanym poniżej.
 
 ## Zachowanie
 
@@ -21,7 +21,9 @@ Produkcja: `__Host-rapidmaker_session; Secure; HttpOnly; SameSite=Lax; Path=/`, 
 - Nowy sekret po logowaniu i podniesieniu uprawnień; poprzednia sesja unieważniana atomowo. Wylogowanie usuwa sesję w DB oraz cookie; dostępne też „wyloguj wszystkie urządzenia”.
 - Zablokowanie konta, zmiana roli lub procedura odzyskania dostępu unieważniają jego sesje. Restart serwera nie wylogowuje użytkowników.
 
-## Minimalne tabele PostgreSQL
+## Docelowe tabele PostgreSQL
+
+Obecnie istnieją users/auth_challenges/sessions/auth_limits; bez passkeys i admin_verified_at. Login służy wyłącznie klientom. `claim-guest` przypisuje obecnie zamówienia, modele i snapshoty nadal mają właściciela przez cookie gościa. Te ograniczenia nie oznaczają gotowego pełnego planu auth.
 
 | Tabela | Najważniejsze pola i ograniczenia |
 | --- | --- |

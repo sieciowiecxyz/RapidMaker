@@ -2,11 +2,11 @@
 
 Mode: goal
 Status: B1–B5 zrealizowane jako lokalny POC
-Active: brak — mały moduł email E1 ukończony
+Active: brak — backend email E1–E4 ukończony lokalnie
 
-## Następny plan: email
+## Email i backend klienta
 
-[Email i powiadomienia](email.md): E1 klient SMTP i adresy PASS, także rzeczywisty odbiór przez IMAP → E2 kody logowania → E3 trwała kolejka PostgreSQL → E4 preferencje i powiadomienia. E2–E4 wymagają osobnej implementacji auth i trwałych zdarzeń biznesowych. Szczegóły, zależności i kryteria w jednym dokumencie.
+[Email i powiadomienia](email.md): E1–E4 PASS w lokalnym backendzie. Kod logowania przez iCloud, sesje PostgreSQL, trwałe zamówienia/rozmowy, outbox i preferencje mają API. Dowody i ograniczenia w jednym dokumencie. UI nie jest jeszcze podłączone; pełne admin auth/passkey i produkcyjne webhooki pozostają planem.
 
 ## Cel
 
@@ -27,7 +27,7 @@ Klient dodaje STL, STEP lub 3MF, wybiera materiał, kolor, jakość i ilość. S
 
 [B1–B5 i kryteria](MILESTONES.md). Najpierw działający backend i jeden rzeczywisty przebieg PLA, potem kolejne zatwierdzone materiały, admin i checkout. Nie przepisujemy teraz frontendu.
 
-Po tym zakresie pozostają: trwałe zamówienia i webhooki Stripe, konta/role, chat i email, logi/metryki do Grafany oraz publiczne wdrożenie. Istniejące sandboxy Stripe/Furgonetki zachowujemy; nie są gotową sprzedażą produkcyjną.
+Dalszy zakres: podłączenie UI do backendu kont/zamówień/rozmów, pełny admin auth/passkey, produkcyjne webhooki Stripe, logi/metryki Grafany i publiczne wdrożenie. Istniejące sandboxy Stripe/Furgonetki zachowujemy; nie są gotową sprzedażą produkcyjną.
 
 ## Sposób pracy
 

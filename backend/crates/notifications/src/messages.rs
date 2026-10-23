@@ -56,3 +56,58 @@ impl Notification<'_> {
         })
     }
 }
+
+/// Versioned, bounded snapshots; login codes must never enter the durable outbox.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmailPayload {
+    pub version: u8,
+    pub notification: EmailNotification,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EmailNotification {
+    OrderConfirmed {
+        reference: String,
+    },
+    PaymentReceived {
+        reference: String,
+        amount_grosze: u64,
+    },
+    StatusChanged {
+        reference: String,
+        status: String,
+    },
+    ChatMessage {
+        reference: String,
+    },
+}
+
+impl EmailPayload {
+    pub fn validate(&self) -> Result<(), MailError> {
+        if self.version != 1 {
+            return Err(MailError::InvalidMessage);
+        }
+        self.notification.borrowed().render().map(|_| ())
+    }
+}
+
+impl EmailNotification {
+    pub(crate) fn borrowed(&self) -> Notification<'_> {
+        match self {
+            Self::OrderConfirmed { reference } => Notification::OrderConfirmed { reference },
+            Self::PaymentReceived {
+                reference,
+                amount_grosze,
+            } => Notification::PaymentReceived {
+                reference,
+                amount_grosze: *amount_grosze,
+            },
+            Self::StatusChanged { reference, status } => {
+                Notification::StatusChanged { reference, status }
+            }
+            Self::ChatMessage { reference } => Notification::ChatMessage { reference },
+        }
+    }
+}

@@ -29,11 +29,26 @@ async fn serve() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18432")
         .await
         .expect("bind localhost");
-    let router = api::router().await.unwrap_or_else(|_| {
+    let (router, worker) = api::router().await.unwrap_or_else(|_| {
         eprintln!(
             "Cannot initialize database, pricing or mail configuration; check local configuration."
         );
         std::process::exit(1);
     });
-    axum::serve(listener, router).await.expect("serve");
+    let result = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await;
+    if let Some(worker) = worker {
+        worker.shutdown().await;
+    }
+    result.expect("serve");
+}
+
+async fn shutdown() {
+    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("signal handler");
+    tokio::select! {_=tokio::signal::ctrl_c()=>{},_=term.recv()=>{}}
 }

@@ -1,6 +1,6 @@
 //! Small SMTP sender. Callers own authorization, rate limits and delivery policy.
 mod messages;
-pub use messages::Notification;
+pub use messages::{EmailNotification, EmailPayload, Notification};
 
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
@@ -51,6 +51,10 @@ struct Sender {
 }
 
 impl Mailer {
+    pub fn enabled(&self) -> bool {
+        self.enabled.is_some()
+    }
+
     pub fn from_env() -> Result<Self, MailError> {
         Self::from_values(|key| match std::env::var(key) {
             Ok(value) => Ok(Some(value)),
@@ -116,9 +120,39 @@ impl Mailer {
         recipient: &str,
         notification: Notification<'_>,
     ) -> Result<(), MailError> {
+        self.send_inner(recipient, notification, None).await
+    }
+
+    pub async fn send_queued(
+        &self,
+        recipient: &str,
+        payload: &EmailPayload,
+        id: &str,
+    ) -> Result<(), MailError> {
+        payload.validate()?;
+        if id.is_empty()
+            || id.len() > 64
+            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
+            return Err(MailError::InvalidMessage);
+        }
+        self.send_inner(
+            recipient,
+            payload.notification.borrowed(),
+            Some(format!("<{id}@rapidmaker.pl>")),
+        )
+        .await
+    }
+
+    async fn send_inner(
+        &self,
+        recipient: &str,
+        notification: Notification<'_>,
+        message_id: Option<String>,
+    ) -> Result<(), MailError> {
         let deadline = Instant::now() + DEADLINE;
         let sender = self.enabled.as_ref().ok_or(MailError::Disabled)?;
-        let message = sender.message(recipient, notification)?;
+        let message = sender.message_with_id(recipient, notification, message_id)?;
         let _slot = timeout_at(deadline, self.slots.acquire())
             .await
             .map_err(|_| MailError::Busy)?
@@ -142,10 +176,20 @@ impl Mailer {
 }
 
 impl Sender {
+    #[cfg(test)]
     fn message(
         &self,
         recipient: &str,
         notification: Notification<'_>,
+    ) -> Result<Message, MailError> {
+        self.message_with_id(recipient, notification, None)
+    }
+
+    fn message_with_id(
+        &self,
+        recipient: &str,
+        notification: Notification<'_>,
+        message_id: Option<String>,
     ) -> Result<Message, MailError> {
         let to = address(recipient)?;
         if self.test_mode && self.test_to.as_ref().map(|v| &v.email) != Some(&to.email) {
@@ -161,9 +205,14 @@ impl Sender {
             .to(to)
             .subject(subject)
             .header(ContentType::TEXT_PLAIN)
+            .message_id(message_id)
             .body(body)
             .map_err(|_| MailError::InvalidMessage)
     }
+}
+
+pub fn valid_address(value: &str) -> bool {
+    address(value).is_ok()
 }
 
 fn address(value: &str) -> Result<Mailbox, MailError> {

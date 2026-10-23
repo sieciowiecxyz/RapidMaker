@@ -41,6 +41,6 @@ Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check dz
 
 ## Później
 
-[Email E1–E4](email.md): E1 PASS — SMTP i potwierdzony odbiór testu, mały moduł Rust i szablony. E2 zależy od auth, E3 od trwałych zdarzeń, E4 od kont/rozmów. Kryteria i dowody utrzymujemy w podlinkowanym planie.
+[Email E1–E4](email.md): PASS jako backend lokalny — SMTP, kody i sesje klienta, outbox, preferencje, trwałe zamówienia i rozmowy. Kryteria, dowody oraz granice przejścia do produkcji w podlinkowanym planie. UI pozostaje do podłączenia.
 
-Trwałe zamówienia i webhooki płatności, logowanie i role, panel klienta/admina z rozmową/statusami, iCloud SMTP/IMAP i preferencje powiadomień, logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.
+Podłączenie paneli do nowych API, pełny admin auth/passkey, produkcyjne webhooki płatności, IMAP/email → chat oraz logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.

@@ -104,3 +104,37 @@ fn templates_validate_codes_and_keep_payment_separate_from_order_confirmation() 
         .unwrap();
     assert!(body.contains("nie oznacza potwierdzenia płatności"));
 }
+
+#[test]
+fn outbox_payload_rejects_unknown_version_and_preserves_message_id() {
+    let payload = EmailPayload {
+        version: 1,
+        notification: EmailNotification::ChatMessage {
+            reference: "RM-1".into(),
+        },
+    };
+    assert!(payload.validate().is_ok());
+    assert!(
+        EmailPayload {
+            version: 2,
+            notification: EmailNotification::OrderConfirmed {
+                reference: "RM-1".into()
+            }
+        }
+        .validate()
+        .is_err()
+    );
+    let sender = configured(&[]).unwrap();
+    let message = sender
+        .enabled
+        .as_ref()
+        .unwrap()
+        .message_with_id(
+            "test@example.com",
+            payload.notification.borrowed(),
+            Some("<stable-id@rapidmaker.pl>".into()),
+        )
+        .unwrap();
+    let text = String::from_utf8(message.formatted()).unwrap();
+    assert!(text.contains("Message-ID: <stable-id@rapidmaker.pl>"));
+}

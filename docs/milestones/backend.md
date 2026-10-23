@@ -28,3 +28,7 @@ Ceny zakupu i zatwierdzenie sprzętu muszą pochodzić od operatora; normalnej b
 Oferty i płatniczy stan API są w RAM; trwałe zamówienia/webhooki, kolejka zadań, konta/role, chat/email i monitoring pozostają kolejnym zakresem. Koszyk i panele zamówień są prototypami. Masa pakowania obejmuje odpady/podpory, więc jest ostrożnym szacunkiem, nie dokładną masą gotowej części. Nie ma optymalizacji wspólnej płyty różnych modeli. Publiczne wdrożenie wymaga HTTPS/Secure i osobnego przygotowania.
 
 NOT RUN: realne obciążenie karty, nadanie przesyłki, pełny pentest/obciążenie/odtwarzanie po awarii. Starsze mockowe `flows.spec.ts` wymagają migracji; nie raportowano całego E2E jako PASS. Zachowano cudze dopiski `AGENTS.md` i nieśledzony `result.json`.
+
+## Email i backend klienta — 2026-10-23
+
+E1–E4 ukończone lokalnie; dowody i ograniczenia: [email](../email.md). Backend auth/sesji, zamówień/rozmów, kolejki i preferencji działa; UI jeszcze niepodłączone. Potwierdzenie płatności przez sprawdzony odczyt Stripe; bez produkcyjnego webhooka/passkey.

@@ -1,12 +1,22 @@
 # Email i powiadomienia — plan implementacji
 
-Status 2026-10-23: E1 PASS. Obecny zakres: mały moduł backendowy i gotowe typy wiadomości, bez zmian frontendu. E2–E4 pozostają integracjami zależnymi od auth, trwałych zamówień lub rozmów. B1–B5 pozostają zakończone.
+Status 2026-10-23: E1–E4 PASS jako lokalny backend. Wdrożone: logowanie klienta, trwałe zamówienia/rozmowy, outbox i preferencje. Frontend nadal wymaga podłączenia; admin używa obecnej sesji operatora. Pełna migracja auth/passkey i webhooki produkcyjne pozostają osobnym zakresem.
+
+Dowód E2–E4: rzeczywisty kod z iCloud odczytany przez IMAP został zużyty przez HTTP raz; inna przeglądarka i ponowienie odmówione. Sesja i zamówienie przetrwały restart. CSRF, cudze zamówienia/rozmowy i unieważnienie sesji sprawdzone. Wyłączenie preferencji zablokowało opcjonalne zdarzenia; chat klienta zapisał się i worker wysłał alert operatorowi. Odmowa SMTP unieważniła próbę. 20 zwykłych testów + 4 testy PostgreSQL, fmt/Clippy/build PASS. Rust +2233 linii łącznie z testami inline (tokei, cały backend/crates, bez pustych linii i komentarzy); crypto używa hmac/sha2/subtle/getrandom, bez nowych crate’ów aplikacji.
 
 Dowód E1: lokalna komenda Rust wysłała jedną wiadomość do `void@sieciowiec.xyz`; SMTP zaakceptowało ją, IMAP potwierdził odbiorcę/nadawcę, temat i tekst wiadomości. Build, fmt, Clippy oraz 4 testy notifications i 11 API PASS. Rust produkcyjny +249 LoC, testy +101 (tokei, nowe pliki oraz zmienione lib.rs API/main.rs app, bez pustych linii i komentarzy). Jedna nowa bezpośrednia zależność `lettre`; aktualizacja istniejących rustls-webpki/webpki-roots usuwa 2 zgłoszenia TLS. Audyt całego lockfile nadal zgłasza 9 wcześniejszych podatności w lz4_flex, quick-xml, rsa i zip — nie jest czysty.
 
 ## Cel i stan
 
-Jeden moduł Rust wysyła wiadomości przez iCloud SMTP. `notifications` zawiera klienta i tekstowe szablony; `backend/run.py` przekazuje konfigurację SMTP. API ma współdzielony Mailer, lokalna komenda `--mail-test` nie wymaga DB ani uruchamiania HTTP. Nie ma jeszcze wywołań z auth/zamówień ani trwałej kolejki.
+`notifications` wysyła przez iCloud SMTP. `auth` dostarcza crypto, `storage` zapisuje sesje, zamówienia, wiadomości i outbox; `api` orkiestruje HTTP i jeden worker. `app` zatrzymuje HTTP/workera po SIGINT/SIGTERM. Bez brokera i dodatkowej usługi. Lokalna komenda `--mail-test` nadal działa bez DB/HTTP.
+
+Konfiguracja klienta: `AUTH_MODE=localhost`, `AUTH_CODE_KEY` = 32 losowe bajty zapisane hex w `.env`/SOPS; `AUTH_ORIGIN` domyślnie `http://127.0.0.1:18430`. Brak trybu oznacza disabled. Publiczny tryb auth celowo nie jest jeszcze obsługiwany; ciasteczka tej implementacji są przeznaczone dla localhost.
+
+API: `/api/auth/{start,verify,me,logout,logout-all}`, `GET/PUT /api/account/notifications`, `/api/account/orders/{id}` i `/messages`, `POST /payment-status` z `{}`. Mutacje zalogowanego klienta wymagają Origin, JSON i `X-CSRF-Token` z `/me`. `POST /api/auth/claim-guest {}` przypisuje zamówienia tylko z jednoczesną sesją klienta i cookie gościa; nie wyszukuje zakupów po emailu. Gość ma dostęp cookie przez 24 h, zamówienie przypisane do konta wymaga tego konta.
+
+Operator: `/api/admin/orders`, `POST /{id}/status`, `GET/POST /{id}/messages`, `GET /api/admin/notifications` (liczby zaległych/błędnych zadań), pod istniejącą ochroną panelu. Wiadomość: `{body}`, status: `{status}`; statusów płatności nie nadaje operator.
+
+Zamówienie powstaje z serwerowej wyceny po utworzeniu Stripe intent/session. Potwierdzenie płatności zapisuje się z mailem atomowo dopiero po weryfikacji odpowiedzi Stripe (ID, metadata, kwota, waluta i test mode). Obecne endpointy statusu oraz własny `/payment-status` wykonują tę weryfikację; drugi działa po restarcie (limit raz/15 s na zamówienie). Nie jest to webhook ani automatyczne monitorowanie płatności bez odpytywania. Zmiany realizacji i chat mają własne trwałe zdarzenia i limity.
 
 Na start wysyłka tekstowa: kod logowania, potwierdzenie zamówienia/płatności, zmiana statusu i informacja o nowej wiadomości. Bez marketingu, załączników i silnika szablonów. Odpowiadanie na chat przez email to późniejszy, osobny zakres.
 
@@ -17,9 +27,9 @@ backend/crates/
   notifications/src/
     lib.rs          # Mailer, konfiguracja i wysyłka SMTP
     messages.rs     # konkretne treści wiadomości, bez SQL/HTTP
-  storage/src/      # SQL kolejki i preferencji, gdy wdrażamy E3/E4
+  storage/src/      # auth.rs, email.rs, orders.rs — SQL i transakcje
   api/              # odbiorca, uprawnienia, zdarzenie i orkiestracja
-  app/              # uruchomienie i zatrzymanie jednego workera kolejki
+  app/              # start i sygnał zakończenia; worker w api/email.rs
 ```
 
 Rozwijamy istniejące crate’y. Jedna nowa bezpośrednia zależność: `lettre` 0.11 do MIME, parsowania adresów i SMTP; Tokio/rustls, wyłącznie potrzebne features zgodne z obecnym backendem TLS. Bez własnego SMTP, interfejsu wielu dostawców, brokera i dodatkowego serwisu. `api` wybiera odbiorcę i rodzaj wiadomości; `notifications` składa i wysyła ją, nie ustala uprawnień ani statusu zamówienia.
@@ -77,7 +87,7 @@ Gotowe gdy: klient może wyłączyć opcjonalne wiadomości, nadal otrzymuje kod
 
 ## Warunki i późniejszy zakres
 
-- E1 można wdrożyć teraz. E2 potrzebuje auth, E3 trwałych zdarzeń/zamówień, E4 kont i rozmów. Nie podpinać tych zdarzeń pod obecne mocki jako gotowej integracji.
+- E1–E4 działają w backendzie. Widoki kont/chat/preferences nadal są mockami; pełny projekt admin auth/passkey, własność plików przez konto i produkcyjne webhooki wymagają osobnego wdrożenia. API nie wysyła wiadomości z frontendowych mocków.
 - Przed wysyłką do klientów sprawdzić uprawnienie `From`, odbiór na zewnętrznej skrzynce, SPF/DKIM/DMARC domeny oraz aktualne limity iCloud. Duży ruch może wymagać dostawcy transakcyjnego; nie budujemy teraz abstrakcji na zapas.
 - IMAP i odpowiedzi email → chat później: korelacja wątków, uwierzytelnienie nadawcy, deduplikacja, limity MIME i ochrona przed pętlami. Nagłówek `From` sam nie wystarcza do uprawnień.
 - Przy implementacji: fmt, Clippy i testy zmienionych crate’ów, bez pełnego E2E i testerów-subagentów. Zmierz Rust LOC przed/po, osobno produkcja/testy, jeśli narzędzie pozwala; nie deklaruj PASS bez wykonania.

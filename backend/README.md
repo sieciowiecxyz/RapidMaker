@@ -16,7 +16,8 @@ backend/
     ├── geometry/        # analiza STL/STEP/3MF, fixtures
     ├── packing/         # rozmieszczenie w paczkach
     ├── notifications/   # iCloud SMTP i tekstowe wiadomości
-    └── ...              # przyszłe orders/auth/payments/shipping/observability
+    ├── auth/            # crypto kodów, sesji i CSRF
+    └── ...              # rezerwa orders/payments/shipping/observability
 ```
 
 ## Start
@@ -30,7 +31,11 @@ API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko do
 
 ## Email
 
-`rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden `Arc<Mailer>` przez Axum Extension. Typy wiadomości: kod logowania, zamówienie, płatność, status, nowa wiadomość. Odbiorca i zdarzenie muszą pochodzić z uprawnionej logiki backendu; nie ma publicznego endpointu wysyłki. Szablony nie oznaczają gotowego auth, zamówień ani chatu.
+`rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden Mailer. Kody wysyła bezpośrednio; zdarzenia zamówień/rozmów zapisuje atomowo z outboxem w PostgreSQL. Jeden worker wykonuje maks. 10 prób wysyłki/min, odzyskuje lease po restarcie, honoruje preferencje i ma stały Message-ID. Brak publicznego endpointu wysyłki. Stan kolejki: chronione `GET /api/admin/notifications`.
+
+Backend klienta: `AUTH_MODE=localhost`, `AUTH_CODE_KEY` (32 losowe bajty hex w `.env`/SOPS), opcjonalnie `AUTH_ORIGIN` (domyślnie `http://127.0.0.1:18430`). Kod email jest jednorazowy, ważny 10 min; sesja HttpOnly/SameSite=Lax trwa do 30 dni, wygasa po 7 dniach bezczynności. Brak trybu oznacza disabled; publiczny tryb auth/passkey jest jeszcze planem. UI kont nadal korzysta z mocków.
+
+Trasy klienta: `/api/auth/{start,verify,me,logout,logout-all}`, `GET/PUT /api/account/notifications`, `/api/account/orders/{id}` i `/messages`, `POST /payment-status`. Mutacje wymagają JSON, dokładnego Origin i CSRF z `/me`; start/verify używają powiązania przeglądarki. Operator obsługuje `/api/admin/orders/{id}/{status,messages}` przez obecną autoryzację panelu. Szczegóły kontraktu: [email](../docs/email.md).
 
 Konfiguracja w `.env`: `MAIL_MODE=disabled|test|live` (domyślnie disabled), `MAIL_SMTP_HOST=smtp.mail.me.com`, `MAIL_SMTP_PORT=587`, `MAIL_USER`, hasło aplikacji `MAIL_PASSWORD`, dopuszczony alias `MAIL_FROM`, `MAIL_REPLY_TO`, `MAIL_TEST_TO`. STARTTLS jest wymagane. `test` przyjmuje wyłącznie dokładny adres `MAIL_TEST_TO`; niczego nie przekierowuje. Na tym stanowisku używamy `void@sieciowiec.xyz` w trybie testowym. Dane IMAP nie są potrzebne serwerowi do wysyłki.
 
@@ -80,7 +85,7 @@ Import aktualizuje źródłowe metadane materiału, zachowując konfigurację op
 
 Koszty części sumowane przed naliczeniem jednej opłaty przygotowania, marży, minimum i VAT. Podział brutto między pozycje zachowuje dokładną sumę groszy. Pakowanie bierze wymiary modelu i masę slicera na sztukę, łącznie z odpadami/podporami (konserwatywny szacunek). Różne modele mają oddzielne partie; brak optymalizacji wspólnej płyty. Nieobsługiwane wymagania/brak snapshotu → ręczna ocena bez płatnej oferty.
 
-Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utworzenie, status i wznowienie płatności sprawdzają właściciela; przed utworzeniem sprawdzamy też ważność wyceny i dostępność. Oferty i płatniczy stan API nadal są w ograniczonym RAM; restart wymaga nowej oferty (nie ponownego uploadu ważnego modelu). Trwałe zamówienia, webhooki i konta klientów pozostają poza tym POC.
+Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utworzenie, status i wznowienie płatności sprawdzają właściciela; przed utworzeniem także ważność wyceny i dostępność. Oferty/sekrety wznowienia Stripe nadal są w RAM. Zamówienie, referencja płatności, status, rozmowa i powiadomienia są w PostgreSQL. Własny `/api/account/orders/{id}/payment-status` sprawdza Stripe także po restarcie; potwierdzenie płatności zapisuje z mailem atomowo. Nie ma jeszcze produkcyjnych webhooków ani automatycznego monitorowania Stripe bez odpytywania. Frontend klienta trzeba podłączyć do nowego auth i zamówień.
 
 ## Krótkie sprawdzenie
 
