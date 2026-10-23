@@ -5,6 +5,11 @@
   let { onSession }: { onSession: () => void | Promise<void> } = $props();
   let email = $state(new URLSearchParams(location.search).get('email') ?? '');
   let register = $state(new URLSearchParams(location.search).get('register') === '1');
+  let operatorMode = $state(
+    location.pathname.startsWith('/admin/') ||
+      new URLSearchParams(location.search).get('operator') === '1',
+  );
+  let operatorKey = $state('');
   let challenge = $state<EmailChallenge | null>(null);
   let busy = $state(false),
     error = $state('');
@@ -12,6 +17,20 @@
   onMount(async () => {
     accounts = await api.getDemoAccounts();
   });
+  async function signInOperator() {
+    busy = true;
+    error = '';
+    const token = operatorKey;
+    operatorKey = '';
+    try {
+      await api.loginOperator(token);
+      await onSession();
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      busy = false;
+    }
+  }
   async function request() {
     busy = true;
     error = '';
@@ -41,12 +60,54 @@
 <section class="page login-page">
   <div class="page-heading">
     <span class="badge">Twoje projekty, w jednym miejscu</span>
-    <h1>{register ? 'Zacznijmy od emaila.' : 'Dobrze Cię widzieć.'}</h1>
-    <p class="muted">Zamówienia, wiadomości i wszystkie szczegóły Twoich wydruków.</p>
+    <h1>
+      {operatorMode
+        ? 'Panel administratora.'
+        : register
+          ? 'Zacznijmy od emaila.'
+          : 'Dobrze Cię widzieć.'}
+    </h1>
+    <p class="muted">
+      {operatorMode
+        ? 'Materiały, dostępność i koszty produkcji.'
+        : 'Zamówienia, wiadomości i wszystkie szczegóły Twoich wydruków.'}
+    </p>
   </div>
   <div class="panel stack login-panel">
     {#if error}<p class="alert error" role="alert">{error}</p>{/if}
-    {#if challenge}
+    {#if operatorMode}
+      <form
+        class="stack"
+        onsubmit={(event) => {
+          event.preventDefault();
+          signInOperator();
+        }}
+      >
+        <label class="field-label" for="operator-key"
+          >Klucz dostępu administratora
+          <input
+            id="operator-key"
+            type="password"
+            autocomplete="current-password"
+            required
+            minlength="32"
+            maxlength="256"
+            bind:value={operatorKey}
+          />
+        </label>
+        <button type="submit" class="button primary" disabled={busy}
+          >{busy ? 'Logowanie…' : 'Zaloguj się do panelu'}</button
+        >
+      </form>
+      <button
+        class="button ghost"
+        onclick={() => {
+          operatorMode = false;
+          operatorKey = '';
+          error = '';
+        }}>Logowanie klienta</button
+      >
+    {:else if challenge}
       <h2>Sprawdź swoją skrzynkę</h2>
       <p>
         Link do {challenge.isNew ? 'utworzenia konta' : 'logowania'} przygotowaliśmy dla
@@ -118,6 +179,14 @@
           >{/each}
       </div>
     {/if}
+    {#if !operatorMode}<button
+        class="button ghost"
+        onclick={() => {
+          operatorMode = true;
+          challenge = null;
+          error = '';
+        }}>Dostęp administratora</button
+      >{/if}
     <a href="/wycena">Możesz też zamówić jako gość →</a>
   </div>
 </section>

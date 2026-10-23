@@ -1,15 +1,10 @@
-// Jedyny punkt dostępu do danych widoków. Tu podłączymy rzeczywiste API.
+// Wspólny adapter: operator ma sesję serwerową; konta klientów nadal są prototypem.
 export {
   getPrintOptions,
   getMaterials,
   getDemoModel,
   getQuote,
   getCheckoutOrder,
-  getSession,
-  getDemoAccounts,
-  requestLogin,
-  confirmLogin,
-  logout,
   getCart,
   addModel,
   updateModel,
@@ -40,7 +35,47 @@ export {
 } from './mock';
 
 import * as mock from './mock';
-import type { CheckoutQuote, Contact, Quote, PickupPoint, StripeStatus, Order } from './types';
+import { operatorSession, logoutOperator } from './session';
+export { loginOperator } from './session';
+import type {
+  Session,
+  CheckoutQuote,
+  Contact,
+  Quote,
+  PickupPoint,
+  StripeStatus,
+  Order,
+} from './types';
+export async function getSession(): Promise<Session | null> {
+  const operator = await operatorSession();
+  if (operator) return operator;
+  const client = await mock.getSession();
+  return client?.role === 'client' ? client : null;
+}
+export async function getDemoAccounts() {
+  return (await mock.getDemoAccounts()).filter((account) => account.role === 'client');
+}
+export async function requestLogin(email: string, register = false) {
+  const account = (await mock.getDemoAccounts()).find(
+    (item) => item.email === email.trim().toLowerCase(),
+  );
+  if (account?.role === 'admin')
+    throw new Error('Administrator loguje się kluczem dostępu poniżej.');
+  return mock.requestLogin(email, register);
+}
+export async function confirmLogin(challengeId: string, expired = false) {
+  const session = await mock.confirmLogin(challengeId, expired);
+  if (session.role === 'admin') {
+    await mock.logout();
+    throw new Error('Administrator wymaga logowania przez serwer.');
+  }
+  return session;
+}
+export async function logout() {
+  await logoutOperator();
+  await mock.logout();
+}
+
 async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     signal,

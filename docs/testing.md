@@ -25,3 +25,9 @@ Frontend: `frontend/`, port 18430; preview E2E: 18431. Vite przekazuje `/api` do
 Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Stary checkout ma taryfę testową i masę szacowaną. Nowy endpoint wyceny używa rzeczywistego slicera oraz PostgreSQL; jego test wymaga osobnych, jawnych stawek testowych i nie potwierdza rentowności. Panele, login i prośby o wycenę pozostają mockami. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
 
 W `PLAN.md` zapisz krótko, co sprawdzono i czego nie. Nie wklejaj sekretów, modeli klientów ani dużych logów. Testy bezpieczeństwa kieruj tylko do własnego localhosta; dostawców sprawdzaj zwykłymi wywołaniami sandbox API. Publiczny deployment pozostaje poza zakresem.
+
+## Panel operatora
+
+Wybrana regresja formularza RGBA: z katalogu `frontend`: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npx playwright test operator.spec.ts`. Test stubuje granicę HTTP i sprawdza formularz; nie jest dowodem autoryzacji backendu. Pełny przebieg cookie/zapisu w PostgreSQL sprawdzono osobno na tymczasowej bazie, bez zmieniania cen normalnego środowiska.
+
+Starsze `flows.spec.ts` obejmuje mockowe logowanie admina i nie odpowiada już serwerowej sesji ani nowemu panelowi. Wymaga migracji wraz z resztą B5; nie raportuj całego zestawu E2E jako PASS na podstawie jednej regresji.

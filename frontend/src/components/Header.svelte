@@ -15,9 +15,13 @@
   <div class="account-actions">
     <a
       class="account-link"
-      aria-label={session?.role === 'admin' ? 'Panel admina' : session ? 'Moje konto' : 'Zaloguj się'}
+      aria-label={session?.role === 'admin'
+        ? 'Panel admina'
+        : session
+          ? 'Moje konto'
+          : 'Zaloguj się'}
       href={session?.role === 'admin'
-        ? '/admin/zamowienia'
+        ? '/admin/materialy'
         : session
           ? '/konto/zamowienia'
           : '/logowanie'}

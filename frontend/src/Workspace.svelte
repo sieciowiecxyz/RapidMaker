@@ -21,6 +21,7 @@
   let query = $state(location.search);
   let session = $state<Session | null>(null);
   let ready = $state(false);
+  let sessionError = $state('');
   let generation = $state(0);
   const adminArea = $derived(path.startsWith('/admin/'));
   const accountArea = $derived(path.startsWith('/konto/'));
@@ -30,8 +31,6 @@
   const tabs = $derived(
     adminArea
       ? [
-          ['Zamówienia', '/admin/zamowienia'],
-          ['Produkcja', '/admin/produkcja'],
           ['Materiały i ceny', '/admin/materialy'],
           ['Ustawienia', '/admin/ustawienia'],
         ]
@@ -56,17 +55,28 @@
           'Nie znaleziono strony'),
   );
   async function refreshSession() {
-    session = await getSession();
+    sessionError = '';
+    try {
+      session = await getSession();
+    } catch (error) {
+      session = null;
+      sessionError = 'Nie udało się sprawdzić sesji. Sprawdź połączenie z serwerem.';
+    }
     ready = true;
   }
   async function signedIn() {
     await refreshSession();
-    navigate(session?.role === 'admin' ? '/admin/zamowienia' : '/konto/zamowienia');
+    if (!session) throw new Error(sessionError || 'Nie udało się potwierdzić sesji.');
+    navigate(session?.role === 'admin' ? '/admin/materialy' : '/konto/zamowienia');
   }
   async function signedOut() {
-    await logout();
-    await refreshSession();
-    navigate('/');
+    try {
+      await logout();
+      await refreshSession();
+      navigate('/');
+    } catch {
+      sessionError = 'Nie udało się wylogować. Sprawdź połączenie z serwerem i spróbuj ponownie.';
+    }
   }
   async function demoChanged() {
     await refreshSession();
@@ -103,10 +113,12 @@
     void routeChanged();
     window.addEventListener('popstate', routeChanged);
     window.addEventListener('rapidmaker:navigate', routeChanged);
+    window.addEventListener('rapidmaker:session-expired', refreshSession);
     document.addEventListener('click', localLink);
     return () => {
       window.removeEventListener('popstate', routeChanged);
       window.removeEventListener('rapidmaker:navigate', routeChanged);
+      window.removeEventListener('rapidmaker:session-expired', refreshSession);
       document.removeEventListener('click', localLink);
     };
   });
@@ -117,6 +129,10 @@
 <a class="skip-link" href="#tresc">Przejdź do treści</a>
 <div class="site-shell" id="top">
   <Header {session} onLogout={signedOut} />
+  {#if sessionError}<div class="page">
+      <p class="alert error" role="alert">{sessionError}</p>
+      <button class="button secondary" onclick={refreshSession}>Spróbuj ponownie</button>
+    </div>{/if}
   {#if protectedArea && session && allowed}
     <nav class="account-tabs" aria-label={adminArea ? 'Panel administratora' : 'Panel klienta'}>
       {#each tabs as [label, href]}<a
@@ -132,7 +148,8 @@
       {:else if !allowed}<section class="page empty-state">
           <h1>Ten panel jest dla obsługi.</h1>
           <p>Przejdź do swoich zamówień albo zaloguj się kontem administratora.</p>
-          <a class="button primary" href="/konto/zamowienia">Moje zamówienia</a>
+          <a class="button primary" href="/logowanie?operator=1">Zaloguj się jako administrator</a>
+          <a class="button ghost" href="/konto/zamowienia">Moje zamówienia</a>
         </section>
       {:else if path === '/logowanie'}<Login onSession={signedIn} />
       {:else if path === '/wycena/zaawansowana'}<Configure />

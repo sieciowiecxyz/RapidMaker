@@ -1,6 +1,6 @@
 # Checkpoint backendu
 
-2026-10-23. Aktywny B5. Baza tego kroku: `573f1af`; stary plan M0–M6 pozostaje w historii Git.
+2026-10-23. Aktywny B5. Baza bieżącego kroku panelu: `9f7101d`; stary plan M0–M6 pozostaje w historii Git.
 
 ## Stan
 
@@ -24,9 +24,19 @@ Rust LOC: 4749 → 5555 (+806), łącznie z testami inline, bez komentarzy i pus
 
 ## Dalej — B5
 
-1. Sesja operatora i formularze panelu bez sekretu w bundle/localStorage; browser mock nigdy nie autoryzuje zapisu DB.
+1. PASS: sesja operatora i formularze materiałów/kolorów/cennika korzystają z API. Klucz wymieniany jest na cookie HttpOnly; nie trafia do bundle/localStorage. Browser mock nie autoryzuje zapisu DB.
 2. Konfigurator korzysta z katalogu i nowego silnika zamiast starych mocków/taryfy; przechowuje pliki prywatnie z jasną własnością i limitami.
 3. Wynik wyceny wiąże ilość/ustawienia/model z właściwą masą/wymiarami do pakowania, ofertą Furgonetki i kwotą Stripe. Zmiana koszyka unieważnia ofertę.
 4. Potrzebne rzeczywiste ceny zakupu i zatwierdzenie kosztów/sprzętu przed sprzedażą; nie zastępować ich domyślnym kosztem slicera.
 
 Niezależne dopiski użytkownika w `AGENTS.md` i nieśledzony `result.json` zachować.
+
+## B5 — panel operatora, 2026-10-23
+
+- PASS: rzeczywiste logowanie przez HttpOnly/SameSite cookie, sprawdzanie przy zapisie, wylogowanie unieważnia dostęp. Logowanie klienta w prototypie nadal działa; sfałszowana rola admina w localStorage nie daje panelu ani API. Brak/błędny klucz, fałszywe cookie, obcy Origin i logowanie zwykłym formularzem HTML są odrzucane; limit prób logowania działa.
+- PASS: UI dodaje materiał i własny kolor RGBA; zapisuje cenę zakupu 80,00 zł jako 8000 gr, dopuszczenie materiału, dostępność koloru i wersjonowany cennik; ponowne wczytanie odczytuje PostgreSQL. Cały zapis odbył się na usuniętej potem bazie testowej. Normalny katalog/cennik nie dostały fikcyjnych wartości.
+- PASS: TypeScript/Svelte + Vite build, Rust build/Clippy. Krótki przebieg Chromium i screenshoty desktop/mobile; bez poziomego overflow. Poprawiono za duży tekst cen i podwójne separatory wynikające z kolizji CSS.
+- Znaleziono i naprawiono rzeczywisty błąd: Svelte interpolował `{8}` w atrybucie pattern koloru, blokując zapis poprawnego RGBA. Regresja `operator.spec.ts` przechodzi; testuje formularz z HTTP stubem, nie backendowe uprawnienia.
+- Nadal otwarte: konfigurator/koszyk/checkout nowej wyceny, prywatne modele, masa z slicera do dostawy, powiązanie kwoty Stripe i migracja starych mockowych E2E. Pozostałe konta/panele zamówień/chat są prototypami, nie danymi PostgreSQL.
+
+Rust LOC bieżącego kroku: 5555 → 5671 (+116), razem z testami inline, bez komentarzy i pustych linii. Nowe pliki frontendowe: adapter sesji, adapter operatora i regresja formularza; brak nowych zależności.

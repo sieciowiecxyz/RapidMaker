@@ -46,8 +46,9 @@ Pomiar slicera jest cache’owany po modelu/formacie/materiale/ustawieniach/ilo�
 
 ## API operatora
 
-Wymaga `Authorization: Bearer <ADMIN_API_TOKEN>`. Token jest losowym sekretem w lokalnym `.env`/SOPS; nie umieszczaj go w kodzie, `VITE_*`, localStorage ani repo jawnym tekstem. Brak konfiguracji wyłącza API operatora, błędny token daje 401. Dostęp jest ograniczony do obecnego localhosta; sesja panelu w przeglądarce pozostaje do podłączenia.
+Skrypty używają `Authorization: Bearer <ADMIN_API_TOKEN>`; panel korzysta z sesji cookie. Token jest losowym sekretem w lokalnym `.env`/SOPS; nie umieszczaj go w kodzie, `VITE_*`, localStorage ani repo jawnym tekstem. Brak konfiguracji wyłącza API operatora, błędny token daje 401. Panel działa na `/admin/materialy` i `/admin/ustawienia`; logowanie `/logowanie?operator=1` używa prywatnego klucza z `.env`. Po logowaniu przeglądarka dostaje losową sesję HttpOnly/SameSite=Strict na 6 godzin. Aplikacja nie zapisuje klucza w localStorage/sessionStorage ani bundle; po logowaniu używa wyłącznie cookie. Sesje są ograniczone do 64, próby logowania do 10/min; restart API unieważnia sesje. Obecne HTTP/cookie bez Secure są przeznaczone tylko dla localhosta. Publiczne wdrożenie wymaga HTTPS/Secure.
 
+- `GET /api/admin/session`: stan sesji; `POST` z `{token}` tworzy sesję cookie, `DELETE` ją unieważnia. Browser mock nie nadaje uprawnień.
 - `GET /api/admin/materials`: pełny katalog z kosztami i metadanymi.
 - `PUT /api/admin/materials/{id}`: dodaj/edytuj `name`, `density_g_cm3`, `cost_net_grosze_per_kg` (liczba groszy lub null), `production_enabled`. Włączenie wymaga dodatniej ceny. Własny materiał bez zaufanego profilu nie otrzyma automatycznej wyceny.
 - `PUT /api/admin/materials/{id}/colors/{code}`: `code`, `name`, `rgba` (lista `#RRGGBBAA`), `in_stock`.
@@ -58,7 +59,7 @@ Import aktualizuje źródłowe metadane materiału, zachowując konfigurację op
 
 ## Istniejący checkout
 
-`api/checkout.rs` nadal obsługuje Stripe/Furgonetkę i starą taryfę demonstracyjną 24 zł/szt. + 15 zł przygotowania. Nie korzysta jeszcze z nowych wyników slicera. Jego analizy/oferty/sesje pozostają w RAM; restart je usuwa. Panele/logowanie/chat nadal mają mocki. Nie traktuj nowego endpointu jako gotowej sprzedaży.
+`api/checkout.rs` nadal obsługuje Stripe/Furgonetkę i starą taryfę demonstracyjną 24 zł/szt. + 15 zł przygotowania. Nie korzysta jeszcze z nowych wyników slicera. Jego analizy/oferty/sesje pozostają w RAM; restart je usuwa. Panel materiałów/cennika i logowanie operatora korzystają z backendu. Konta klientów, zamówienia, produkcja i chat nadal mają mocki; ich stare widoki admina nie są częścią działającego panelu konfiguracji. Nie traktuj nowego endpointu jako gotowej sprzedaży.
 
 ## Krótkie sprawdzenie
 
