@@ -264,21 +264,6 @@ impl Storage {
         tx.commit().await?;
         Ok(true)
     }
-    pub async fn claim_orders(&self, user: &str, owner: &str) -> Result<u64, StorageError> {
-        let mut tx = self.pool.begin().await?;
-        let rows: Vec<String> = sqlx::query_scalar(
-            "UPDATE orders SET user_id=$1 WHERE owner_hash=$2 AND user_id IS NULL AND created_at>extract(epoch from now())::bigint-86400 RETURNING id",
-        )
-        .bind(user)
-        .bind(owner)
-        .fetch_all(&mut *tx)
-        .await?;
-        for id in &rows {
-            sqlx::query("UPDATE email_outbox SET user_id=$1 WHERE event_key LIKE $2 AND user_id IS NULL AND status IN ('pending','sending')").bind(user).bind(format!("order:{id}:%")).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-        Ok(rows.len() as u64)
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -17,6 +17,7 @@ pub struct AuthUser {
 pub struct AuthSession {
     pub user: AuthUser,
     pub expires_at: i64,
+    pub admin_verified_at: Option<i64>,
 }
 
 impl Storage {
@@ -160,7 +161,7 @@ impl Storage {
         .bind(now)
         .execute(&mut *tx)
         .await?;
-        let row = sqlx::query("SELECT id,email,role,email_order_updates,email_chat_messages FROM users WHERE email=$1 AND disabled_at IS NULL AND role='client' FOR UPDATE")
+        let row = sqlx::query("SELECT id,email,role,email_order_updates,email_chat_messages FROM users WHERE email=$1 AND disabled_at IS NULL FOR UPDATE")
             .bind(email).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             tx.commit().await?;
@@ -176,12 +177,21 @@ impl Storage {
         // A bounded number of active sessions prevents unbounded state for frequent logins.
         sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY created_at DESC OFFSET 19)")
             .bind(&user.id).execute(&mut *tx).await?;
-        let expires_at = now + 30 * 86400;
+        let expires_at = now
+            + if user.role == "admin" {
+                600
+            } else {
+                30 * 86400
+            };
         sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)")
             .bind(hash_token(session_token).as_slice()).bind(&user.id).bind(now).bind(expires_at)
             .execute(&mut *tx).await?;
         tx.commit().await?;
-        Ok(Some(AuthSession { user, expires_at }))
+        Ok(Some(AuthSession {
+            user,
+            expires_at,
+            admin_verified_at: None,
+        }))
     }
 
     pub async fn auth_session(
@@ -193,14 +203,15 @@ impl Storage {
             return Ok(None);
         }
         let mut tx = self.pool.begin().await?;
-        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$3 AND u.disabled_at IS NULL")
-            .bind(hash_token(token).as_slice()).bind(now).bind(now-7*86400)
+        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,s.expires_at,s.admin_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL")
+            .bind(hash_token(token).as_slice()).bind(now)
             .fetch_optional(&mut *tx).await?;
         let result = row
             .map(|row| {
                 Ok::<_, StorageError>(AuthSession {
                     user: user(&row)?,
                     expires_at: row.try_get("expires_at")?,
+                    admin_verified_at: row.try_get("admin_verified_at")?,
                 })
             })
             .transpose()?;
@@ -246,7 +257,7 @@ impl Storage {
     }
 }
 
-fn user(row: &PgRow) -> Result<AuthUser, StorageError> {
+pub(crate) fn user(row: &PgRow) -> Result<AuthUser, StorageError> {
     Ok(AuthUser {
         id: row.try_get("id")?,
         email: row.try_get("email")?,
@@ -279,7 +290,7 @@ async fn limits(
     .await
 }
 
-async fn limit(
+pub(crate) async fn limit(
     tx: &mut Transaction<'_, Postgres>,
     scope: &str,
     value: &[u8],

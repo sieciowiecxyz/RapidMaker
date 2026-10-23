@@ -31,3 +31,5 @@ W `PLAN.md` zapisz krótko, co sprawdzono i czego nie. Nie wklejaj sekretów, mo
 Wybrana regresja formularza RGBA: z katalogu `frontend`: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npx playwright test operator.spec.ts`. Test stubuje granicę HTTP i sprawdza formularz; nie jest dowodem autoryzacji backendu. Pełny przebieg cookie/zapisu w PostgreSQL sprawdzono osobno na tymczasowej bazie, bez zmieniania cen normalnego środowiska.
 
 Starsze `flows.spec.ts` obejmuje mockowe logowanie admina i nie odpowiada już serwerowej sesji ani nowemu panelowi. Wymaga migracji wraz z resztą B5; nie raportuj całego zestawu E2E jako PASS na podstawie jednej regresji.
+
+Auth: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-auth -p rapidmaker-api -p rapidmaker-storage`. Ignorowane testy PG wymagają osobnej bazy: `AUTH_TEST_DATABASE_URL` oraz `TEST_DATABASE_URL` (prefiks rapidmaker_test); uruchamiaj sekwencyjnie. Dotychczasowe E2E operatora używające tokena wymagają migracji do wspólnej sesji/passkey.

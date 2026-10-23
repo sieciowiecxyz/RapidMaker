@@ -9,6 +9,7 @@ axum.workspace = true
 tokio.workspace = true
 rapidmaker-api.workspace = true
 rapidmaker-notifications.workspace = true
+rapidmaker-storage.workspace = true
 
 [[bin]]
 name = "rapidmaker-api"

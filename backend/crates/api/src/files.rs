@@ -119,6 +119,13 @@ fn now() -> Result<i64, Error> {
 }
 
 /// Only a complete opaque token is accepted; malformed/ambiguous cookies authorize nothing.
+fn guest_cookie_name() -> &'static str {
+    if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+        "__Host-rapidmaker_guest"
+    } else {
+        COOKIE
+    }
+}
 fn guest_token(headers: &HeaderMap) -> Option<&str> {
     let mut token = None;
     for cookie in headers.get_all(header::COOKIE) {
@@ -126,7 +133,7 @@ fn guest_token(headers: &HeaderMap) -> Option<&str> {
             let Some((name, value)) = pair.trim().split_once('=') else {
                 continue;
             };
-            if name != COOKIE {
+            if name != guest_cookie_name() {
                 continue;
             }
             if token.is_some() || value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit())
@@ -236,7 +243,11 @@ async fn upload(
     let token = guest_token(&headers)
         .map(str::to_owned)
         .unwrap_or_else(|| format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple()));
-    let owner_hash = format!("{:x}", Sha256::digest(token.as_bytes()));
+    let (owner_hash, user_id) = if super::auth::session_cookie(&headers)?.is_some() {
+        super::cart::identity(Some(storage), &headers).await?
+    } else {
+        (format!("{:x}", Sha256::digest(token.as_bytes())), None)
+    };
     let id = Uuid::new_v4().to_string();
     let directory = state.root.join(&id);
     DirBuilder::new()
@@ -296,6 +307,7 @@ async fn upload(
     let record = StoredModel {
         id,
         owner_hash,
+        user_id,
         filename,
         extension,
         source_bytes: input.len() as i64,
@@ -317,11 +329,22 @@ async fn upload(
     }
     pending.0 = None;
     let mut response = (StatusCode::CREATED, Json(public_metadata(&record))).into_response();
-    {
+    if record.user_id.is_none() {
         response.headers_mut().insert(
             header::SET_COOKIE,
             HeaderValue::from_str(&format!(
-                "{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=86400"
+                "{}={token}; HttpOnly; SameSite=Strict; Path={}; Max-Age=86400{}",
+                guest_cookie_name(),
+                if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+                    "/"
+                } else {
+                    "/api"
+                },
+                if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+                    "; Secure"
+                } else {
+                    ""
+                }
             ))
             .map_err(|_| {
                 error(
@@ -343,12 +366,7 @@ pub async fn resolve(
     headers: &HeaderMap,
     id: &str,
 ) -> Result<ModelHandle, Error> {
-    let owner = owner(headers).ok_or_else(|| {
-        error(
-            StatusCode::UNAUTHORIZED,
-            "Brak sesji modelu. Prześlij model ponownie.",
-        )
-    })?;
+    let owner = super::cart::owner(Some(storage), headers).await?;
     if !valid_id(id) {
         return Err(error(StatusCode::NOT_FOUND, "Nie znaleziono modelu."));
     }

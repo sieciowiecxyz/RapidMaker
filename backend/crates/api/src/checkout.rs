@@ -695,7 +695,7 @@ async fn session(
     headers: HeaderMap,
     Json(request): Json<SessionRequest>,
 ) -> Result<Json<Value>, Error> {
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::cart::owner(app.storage.as_ref(), &headers).await?;
     let key = app.stripe_key.as_ref().ok_or_else(|| {
         error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -808,7 +808,7 @@ async fn intent(
     headers: HeaderMap,
     Json(request): Json<SessionRequest>,
 ) -> Result<Json<Value>, Error> {
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::cart::owner(app.storage.as_ref(), &headers).await?;
     let key = app
         .stripe_key
         .as_ref()
@@ -906,7 +906,7 @@ async fn intent_status(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::cart::owner(app.storage.as_ref(), &headers).await?;
     let key = app.stripe_key.as_ref().ok_or_else(unavailable)?;
     let quotes = app.quotes.lock().await;
     let (quote_id, intent) = quotes
@@ -956,7 +956,7 @@ async fn resume_intent(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::cart::owner(app.storage.as_ref(), &headers).await?;
     let status = intent_status(State(app.clone()), headers, Path(id.clone()))
         .await?
         .0;
@@ -992,7 +992,7 @@ async fn session_status(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::cart::owner(app.storage.as_ref(), &headers).await?;
     let key = app.stripe_key.as_ref().ok_or_else(|| {
         error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1047,7 +1047,7 @@ async fn session_status(
         "checkout_status":result["status"],"url":session.url}),
     ))
 }
-fn local_authority(authority: &str) -> bool {
+pub(super) fn local_authority(authority: &str) -> bool {
     [
         "127.0.0.1:18430",
         "127.0.0.1:18431",
@@ -1058,20 +1058,18 @@ fn local_authority(authority: &str) -> bool {
     ]
     .contains(&authority)
 }
-async fn local_only(request: Request, next: Next) -> Response {
-    let host = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok());
-    let origin = request.headers().get(header::ORIGIN);
-    let allowed_origin = origin.is_none_or(|value| {
-        value
-            .to_str()
-            .ok()
-            .and_then(|s| s.strip_prefix("http://"))
-            .is_some_and(local_authority)
-    });
-    if !host.is_some_and(local_authority) || !allowed_origin {
+async fn local_only(
+    State(auth): State<Arc<super::auth::Auth>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if !auth.allows_request(
+        request.headers(),
+        !matches!(
+            *request.method(),
+            axum::http::Method::GET | axum::http::Method::HEAD
+        ),
+    ) {
         return error(
             StatusCode::FORBIDDEN,
             "Dozwolone wyłącznie lokalne środowisko testowe.",
@@ -1079,6 +1077,12 @@ async fn local_only(request: Request, next: Next) -> Response {
         .into_response();
     }
     let mut response = next.run(request).await;
+    if auth.production() {
+        response.headers_mut().insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            axum::http::HeaderValue::from_static("max-age=31536000"),
+        );
+    }
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         axum::http::HeaderValue::from_static("no-store"),
@@ -1131,19 +1135,7 @@ async fn persist_order(
 ) -> Result<(), Error> {
     let db = app.storage.as_ref().ok_or_else(unavailable)?;
     let data = quote.order_data.as_ref().ok_or_else(unavailable)?;
-    let user = if let Some(token) = super::auth::cookie(headers, "rapidmaker_session") {
-        Some(
-            db.auth_session(token, now() as i64)
-                .await
-                .map_err(|_| unavailable())?
-                .filter(|s| s.user.role == "client")
-                .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się ponownie."))?
-                .user
-                .id,
-        )
-    } else {
-        None
-    };
+    let (_, user) = super::cart::identity(Some(db), headers).await?;
     db.create_order(
         &rapidmaker_storage::OrderInput {
             id,
@@ -1237,10 +1229,10 @@ pub fn router(storage: Option<Storage>) -> Router {
         .route("/api/checkout/session/{id}", get(session_status))
         .with_state(Arc::new(App::from_env(storage)))
 }
-pub fn protect(router: Router) -> Router {
+pub fn protect(router: Router, auth: Arc<super::auth::Auth>) -> Router {
     router
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
-        .layer(middleware::from_fn(local_only))
+        .layer(middleware::from_fn_with_state(auth, local_only))
 }
 
 #[cfg(test)]

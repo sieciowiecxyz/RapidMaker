@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use rapidmaker_auth::passkeys::{Url, Webauthn, WebauthnBuilder};
 use rapidmaker_auth::{AuthKey, hash_token, random_code, random_token, valid_token};
 use rapidmaker_notifications::{Mailer, Notification};
 use rapidmaker_storage::{AuthSession, Storage};
@@ -33,14 +34,30 @@ pub(crate) fn now() -> i64 {
         .unwrap_or_default()
         .as_secs() as i64
 }
-const SESSION: &str = "rapidmaker_session";
-const ATTEMPT: &str = "rapidmaker_auth_attempt";
+pub(super) fn session_name() -> &'static str {
+    if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+        "__Host-rapidmaker_session"
+    } else {
+        "rapidmaker_session"
+    }
+}
+fn attempt_name() -> &'static str {
+    if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+        "__Host-rapidmaker_auth_attempt"
+    } else {
+        "rapidmaker_auth_attempt"
+    }
+}
 
 pub(crate) struct Auth {
     pub storage: Option<Storage>,
     key: Option<AuthKey>,
     origin: String,
     mailer: Arc<Mailer>,
+    production: bool,
+    authority: String,
+    pub webauthn: Option<Webauthn>,
+    trusted_proxy: Option<std::net::IpAddr>,
 }
 impl Auth {
     pub fn new(
@@ -48,32 +65,142 @@ impl Auth {
         mailer: Arc<Mailer>,
     ) -> Result<Arc<Self>, Box<dyn std::error::Error + Send + Sync>> {
         let mode = std::env::var("AUTH_MODE").unwrap_or_else(|_| "disabled".into());
-        let origin =
-            std::env::var("AUTH_ORIGIN").unwrap_or_else(|_| "http://127.0.0.1:18430".into());
-        let key = match mode.as_str() {
-            "disabled" => None,
-            "localhost"
-                if matches!(
-                    origin.as_str(),
-                    "http://127.0.0.1:18430" | "http://localhost:18430"
-                ) && storage.is_some() =>
-            {
-                Some(AuthKey::from_hex(&std::env::var("AUTH_CODE_KEY")?)?)
+        let production = mode == "production";
+        let raw_origin = std::env::var("AUTH_ORIGIN")
+            .or_else(|_| {
+                if production {
+                    Err(())
+                } else {
+                    Ok("http://localhost:18430".into())
+                }
+            })
+            .map_err(|_| "AUTH_ORIGIN required")?;
+        let url = Url::parse(&raw_origin)?;
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.path() != "/"
+        {
+            return Err("AUTH_ORIGIN must be an origin without path or credentials".into());
+        }
+        let valid = match mode.as_str() {
+            "disabled" | "localhost" => url.scheme() == "http" && url.domain() == Some("localhost"),
+            "production" => {
+                url.scheme() == "https"
+                    && url
+                        .domain()
+                        .is_some_and(|d| d != "localhost" && d.contains('.'))
             }
-            _ => return Err("Unsupported auth mode or missing local database/origin".into()),
+            _ => false,
         };
+        if !valid {
+            return Err(
+                "Invalid auth mode or origin; localhost passkeys require localhost hostname".into(),
+            );
+        }
+        let origin = url.origin().ascii_serialization();
+        let authority = origin
+            .split_once("://")
+            .ok_or("invalid origin")?
+            .1
+            .to_owned();
+        let key = if mode == "disabled" {
+            None
+        } else {
+            if storage.is_none() {
+                return Err("Auth requires PostgreSQL".into());
+            }
+            Some(AuthKey::from_hex(&std::env::var("AUTH_CODE_KEY")?)?)
+        };
+        let webauthn = if key.is_some() {
+            Some(
+                WebauthnBuilder::new(url.domain().ok_or("invalid RP domain")?, &url)?
+                    .rp_name("Rapidmaker")
+                    .build()?,
+            )
+        } else {
+            None
+        };
+        let trusted_proxy = std::env::var("AUTH_TRUSTED_PROXY")
+            .ok()
+            .map(|v| v.parse())
+            .transpose()?;
         Ok(Arc::new(Self {
             storage,
             key,
             origin,
             mailer,
+            production,
+            authority,
+            webauthn,
+            trusted_proxy,
         }))
+    }
+    pub fn enabled(&self) -> bool {
+        self.key.is_some()
+    }
+    pub fn production(&self) -> bool {
+        self.production
+    }
+    pub fn allows_request(&self, headers: &HeaderMap, mutate: bool) -> bool {
+        let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+        let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
+        if headers.get_all(header::HOST).iter().count() != 1
+            || headers.get_all(header::ORIGIN).iter().count() > 1
+            || (headers.contains_key(header::ORIGIN) && origin.is_none())
+        {
+            return false;
+        }
+        if self.production {
+            return host == Some(self.authority.as_str())
+                && if mutate {
+                    origin == Some(self.origin.as_str())
+                } else {
+                    origin.is_none_or(|v| v == self.origin)
+                };
+        }
+        let local = |s: &str| super::checkout::local_authority(s) || s == self.authority;
+        host.is_some_and(local)
+            && origin.is_none_or(|v| v.strip_prefix("http://").is_some_and(local))
+    }
+    fn client_ip(&self, peer: SocketAddr, headers: &HeaderMap) -> Result<std::net::IpAddr, Error> {
+        if self.trusted_proxy == Some(peer.ip()) {
+            headers
+                .get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse().ok())
+                .ok_or_else(|| error(StatusCode::BAD_REQUEST, "Nieprawidłowy adres proxy."))
+        } else {
+            Ok(peer.ip())
+        }
+    }
+    pub async fn administrator(
+        &self,
+        headers: &HeaderMap,
+        mutate: bool,
+    ) -> Result<AuthSession, Error> {
+        let session = if mutate {
+            self.mutation(headers).await?
+        } else {
+            self.current(headers).await?
+        };
+        if session.user.role != "admin" || session.admin_verified_at.is_none() {
+            return Err(error(
+                StatusCode::FORBIDDEN,
+                "Potwierdź dostęp kluczem passkey.",
+            ));
+        }
+        Ok(session)
     }
     pub fn database(&self) -> Result<&Storage, Error> {
         self.storage.as_ref().ok_or_else(unavailable)
     }
     fn key(&self) -> Result<&AuthKey, Error> {
         self.key.as_ref().ok_or_else(unavailable)
+    }
+    pub fn csrf(&self, token: &str) -> Result<String, Error> {
+        Ok(self.key()?.csrf(token))
     }
     pub fn check_origin(&self, headers: &HeaderMap) -> Result<(), Error> {
         if headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) != Some(self.origin.as_str()) {
@@ -83,21 +210,20 @@ impl Auth {
     }
     pub async fn current(&self, headers: &HeaderMap) -> Result<AuthSession, Error> {
         self.key()?;
-        let token = cookie(headers, SESSION)
+        let token = session_cookie(headers)?
             .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się."))?;
         let session = self
             .database()?
             .auth_session(token, now())
             .await
             .map_err(|_| unavailable())?
-            .filter(|s| s.user.role == "client")
             .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Sesja wygasła."))?;
         Ok(session)
     }
     pub async fn mutation(&self, headers: &HeaderMap) -> Result<AuthSession, Error> {
         self.check_origin(headers)?;
         let session = self.current(headers).await?;
-        let token = cookie(headers, SESSION).ok_or_else(unavailable)?;
+        let token = session_cookie(headers)?.ok_or_else(unavailable)?;
         let csrf = headers
             .get("x-csrf-token")
             .and_then(|v| v.to_str().ok())
@@ -122,7 +248,29 @@ pub(crate) fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> 
             (k == name && valid_token(v)).then_some(v)
         })
 }
-fn response(body: Value, cookies: &[String]) -> Result<Response, Error> {
+
+pub(crate) fn session_cookie(headers: &HeaderMap) -> Result<Option<&str>, Error> {
+    let mut found = None;
+    for header in headers.get_all(header::COOKIE) {
+        for part in header
+            .to_str()
+            .map_err(|_| error(StatusCode::UNAUTHORIZED, "Nieprawidłowa sesja."))?
+            .split(';')
+        {
+            let Some((name, value)) = part.trim().split_once('=') else {
+                continue;
+            };
+            if matches!(name, "rapidmaker_session" | "__Host-rapidmaker_session") {
+                if name != session_name() || found.is_some() || !valid_token(value) {
+                    return Err(error(StatusCode::UNAUTHORIZED, "Nieprawidłowa sesja."));
+                }
+                found = Some(value);
+            }
+        }
+    }
+    Ok(found)
+}
+pub(super) fn response(body: Value, cookies: &[String]) -> Result<Response, Error> {
     let mut r = Json(body).into_response();
     for c in cookies {
         let v = c.parse().map_err(|_| unavailable())?;
@@ -130,8 +278,15 @@ fn response(body: Value, cookies: &[String]) -> Result<Response, Error> {
     }
     Ok(r)
 }
-fn set_cookie(name: &str, value: &str, age: u32) -> String {
-    format!("{name}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={age}")
+pub(super) fn set_cookie(name: &str, value: &str, age: u32) -> String {
+    format!(
+        "{name}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={age}{}",
+        if std::env::var("AUTH_MODE").as_deref() == Ok("production") {
+            "; Secure"
+        } else {
+            ""
+        }
+    )
 }
 
 pub fn router(auth: Arc<Auth>) -> Router {
@@ -179,7 +334,7 @@ async fn start(
             &email,
             &browser_hash,
             &verifier,
-            &hash_token(&peer.ip().to_string()),
+            &hash_token(&auth.client_ip(peer, &headers)?.to_string()),
             now(),
         )
         .await
@@ -201,7 +356,7 @@ async fn start(
     }
     let mut r = response(
         json!({"challenge_id":id}),
-        &[set_cookie(ATTEMPT, &browser, 600)],
+        &[set_cookie(attempt_name(), &browser, 600)],
     )?;
     *r.status_mut() = StatusCode::ACCEPTED;
     Ok(r)
@@ -225,7 +380,7 @@ async fn verify(
     {
         return Err(error(StatusCode::BAD_REQUEST, "Nieprawidłowy kod."));
     }
-    let browser = cookie(&headers, ATTEMPT).ok_or_else(|| {
+    let browser = cookie(&headers, attempt_name()).ok_or_else(|| {
         error(
             StatusCode::UNAUTHORIZED,
             "Rozpocznij logowanie w tej przeglądarce.",
@@ -240,8 +395,8 @@ async fn verify(
             browser,
             &input.code,
             &token,
-            &hash_token(&peer.ip().to_string()),
-            cookie(&headers, SESSION),
+            &hash_token(&auth.client_ip(peer, &headers)?.to_string()),
+            session_cookie(&headers)?,
             now(),
         )
         .await
@@ -253,17 +408,21 @@ async fn verify(
             )
         })?;
     response(
-        json!({"user":session.user,"csrf_token":auth.key()?.csrf(&token),"admin_verified":false}),
+        json!({"user":session.user,"csrf_token":auth.key()?.csrf(&token),"admin_verified":session.admin_verified_at.is_some()}),
         &[
-            set_cookie(SESSION, &token, 30 * 86400),
-            set_cookie(ATTEMPT, "", 0),
+            set_cookie(
+                session_name(),
+                &token,
+                (session.expires_at - now()).clamp(0, 30 * 86400) as u32,
+            ),
+            set_cookie(attempt_name(), "", 0),
         ],
     )
 }
 async fn me(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     let s = auth.current(&headers).await?;
     Ok(Json(
-        json!({"user":s.user,"expires_at":s.expires_at,"csrf_token":auth.key()?.csrf(cookie(&headers,SESSION).ok_or_else(unavailable)?),"admin_verified":false}),
+        json!({"user":s.user,"expires_at":s.expires_at,"csrf_token":auth.key()?.csrf(session_cookie(&headers)?.ok_or_else(unavailable)?),"admin_verified":s.admin_verified_at.is_some()}),
     ))
 }
 async fn logout(
@@ -273,10 +432,10 @@ async fn logout(
 ) -> Result<Response, Error> {
     auth.mutation(&headers).await?;
     auth.database()?
-        .auth_logout(cookie(&headers, SESSION).ok_or_else(unavailable)?)
+        .auth_logout(session_cookie(&headers)?.ok_or_else(unavailable)?)
         .await
         .map_err(|_| unavailable())?;
-    response(json!({"ok":true}), &[set_cookie(SESSION, "", 0)])
+    response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
 async fn logout_all(
     State(auth): State<Arc<Auth>>,
@@ -288,7 +447,7 @@ async fn logout_all(
         .auth_logout_all(&s.user.id)
         .await
         .map_err(|_| unavailable())?;
-    response(json!({"ok":true}), &[set_cookie(SESSION, "", 0)])
+    response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
 async fn preferences(
     State(auth): State<Arc<Auth>>,
@@ -320,4 +479,37 @@ async fn save_preferences(
     Ok(Json(
         json!({"email_order_updates":user.email_order_updates,"email_chat_messages":user.email_chat_messages}),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn session_cookies_are_opaque_mode_specific_and_unambiguous() {
+        let token = "ab".repeat(32);
+        let mut headers = HeaderMap::new();
+        assert!(session_cookie(&headers).unwrap().is_none());
+        headers.insert(
+            header::COOKIE,
+            format!("{}={token}", session_name()).parse().unwrap(),
+        );
+        assert_eq!(session_cookie(&headers).unwrap(), Some(token.as_str()));
+        headers.append(
+            header::COOKIE,
+            format!("{}={token}", session_name()).parse().unwrap(),
+        );
+        assert!(session_cookie(&headers).is_err());
+        headers.insert(
+            header::COOKIE,
+            format!("{}=bad", session_name()).parse().unwrap(),
+        );
+        assert!(session_cookie(&headers).is_err());
+        let other = if session_name().starts_with("__Host") {
+            "rapidmaker_session"
+        } else {
+            "__Host-rapidmaker_session"
+        };
+        headers.insert(header::COOKIE, format!("{other}={token}").parse().unwrap());
+        assert!(session_cookie(&headers).is_err());
+    }
 }

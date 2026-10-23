@@ -9,11 +9,13 @@ mod admin;
 mod auth;
 mod email;
 mod models;
+mod passkeys;
+pub use passkeys::{PasskeyInfo, PasskeyStart};
 mod orders;
 pub use admin::{MaterialInput, validate_color};
 pub use auth::{AuthSession, AuthUser};
 pub use email::{EmailOutcome, EmailStats, QueuedEmail};
-pub use models::StoredModel;
+pub use models::{StoredModel, account_owner};
 pub use orders::OrderInput;
 
 pub type StorageError = Box<dyn Error + Send + Sync>;
@@ -165,10 +167,11 @@ impl Storage {
         {
             return Err("invalid quote snapshot".into());
         }
-        sqlx::query("INSERT INTO quotes (id,request,result) VALUES ($1,$2,$3)")
+        sqlx::query("INSERT INTO quotes (id,request,result,user_id) VALUES ($1,$2,$3,$4)")
             .bind(id)
             .bind(request)
             .bind(result)
+            .bind(request.get("user_id").and_then(Value::as_str))
             .execute(&self.pool)
             .await?;
         Ok(())

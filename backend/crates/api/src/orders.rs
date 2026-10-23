@@ -41,7 +41,7 @@ async fn scope(
     headers: &HeaderMap,
     mutate: bool,
 ) -> Result<(Option<String>, Option<String>), Error> {
-    let user = if super::auth::cookie(headers, "rapidmaker_session").is_some() {
+    let user = if super::auth::session_cookie(headers)?.is_some() {
         Some(
             if mutate {
                 auth.mutation(headers).await?
@@ -161,13 +161,14 @@ async fn claim(
     Json(_): Json<Value>,
 ) -> Result<Json<Value>, Error> {
     let user = auth.mutation(&headers).await?.user;
-    let owner = super::cart::owner(&headers)?;
+    let owner = super::files::owner(&headers)
+        .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Brak sesji gościa."))?;
     let count = auth
         .database()?
-        .claim_orders(&user.id, &owner)
+        .claim_guest(&user.id, &owner, now())
         .await
         .map_err(|_| unavailable())?;
-    Ok(Json(json!({"orders_claimed":count})))
+    Ok(Json(json!({"resources_claimed":count})))
 }
 async fn payment_status(
     State(auth): State<Arc<Auth>>,

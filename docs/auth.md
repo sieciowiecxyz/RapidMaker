@@ -1,86 +1,67 @@
-# Auth — projekt
+# Auth — Rust API
 
-Status: backend kodów i sesji klienta zaimplementowany lokalnie jako E2 [email](email.md), razem z preferencjami i własnością zamówień. Frontend klienta nadal jest mockiem. Operator zachowuje osobną sesję RAM i `ADMIN_API_TOKEN`; passkey, produkcyjny tryb cookie i własność modeli przez konto pozostają projektem opisanym poniżej.
+Stan 2026-10-23: backend klienta i admina działa. Frontend logowania/paneli wymaga podłączenia. Stary Bearer `ADMIN_API_TOKEN` i sesja operatora nie dają już dostępu.
 
-## Zachowanie
+## Logowanie i uprawnienia
 
-- Jeden `/logowanie`, pole email → 8-cyfrowy kod → zalogowanie. Bez hasła, linków logujących i osobnej rejestracji: pierwsze poprawne potwierdzenie tworzy konto `client`.
-- Kod ważny 10 min, jednorazowy, maks. 5 prób. Powiązany z żądaniem i cookie przeglądarki, która rozpoczęła logowanie. Ponowne wysłanie po 60 s unieważnia poprzedni kod tej próby. Logowanie na innym urządzeniu wymaga własnej próby.
-- Ta sama odpowiedź dla nowego/istniejącego adresu. Roli nie wybiera użytkownik; backend odczytuje ją z DB. Normalizacja emaila: trim i świadoma polityka case-insensitive; nie usuwamy kropek ani `+suffix`.
-- Admin po kodzie musi użyć passkey (WebAuthn, wymagane user verification: PIN/biometria urządzenia). Do tego czasu sesja nie daje dostępu do żadnego endpointu admina. UI pokazuje następny krok; ukrycie przycisku nie jest kontrolą dostępu.
-- Konto klienta nie jest wymagane do wyceny/zakupu. Email odbiorcy, dane Stripe i status płatności nie stanowią potwierdzenia własności konta.
+- Email → 8-cyfrowy kod, 10 min, 5 prób, związany z przeglądarką. Pierwsze potwierdzenie tworzy klienta. Ta sama odpowiedź dla istniejącego/nowego adresu; SMTP failure unieważnia próbę. Adresy ASCII: trim + lowercase, bez usuwania kropek/`+suffix`.
+- Klient dostaje sesję. Admin po kodzie dostaje tylko sesję oczekującą, maks. 10 min; dostęp administracyjny wymaga passkey z PIN/biometrią (WebAuthn UV Required).
+- Role i aktywność pochodzą z PostgreSQL, nigdy z formularza/localStorage. Każdy endpoint admina sprawdza aktualną rolę i MFA; zapis dodatkowo Origin i CSRF.
+- Modele, wyceny i zamówienia sprawdzają własność. `claim-guest` wymaga jednocześnie sesji konta i oryginalnego cookie gościa, przenosi tylko własne aktywne/nieprzypisane zasoby w jednej transakcji. Bez przejmowania zakupów po samym emailu.
+- Po claim istniejące oferty checkoutu w RAM mogą wymagać ponownego przeliczenia. Robocze modele nadal wygasają po 24 h; retencja plików opłaconych zamówień pozostaje osobnym zadaniem.
 
-## Sesja
+## Sesje i kryptografia
 
-Losowy sekret 32 bajty z CSPRNG; do DB trafia SHA-256, do przeglądarki wyłącznie cookie. Bez JWT, refresh tokenów i sekretów w localStorage. Każde żądanie sprawdza sesję, aktywność użytkownika i aktualną rolę.
+Losowe tokeny 32 B z CSPRNG, w DB SHA-256, w przeglądarce wyłącznie HttpOnly cookie. Kod: HMAC-SHA-256 z `AUTH_CODE_KEY`, związany z wyzwaniem, adresem i przeglądarką. CSRF ma osobną domenę HMAC. Bez JWT i własnej implementacji WebAuthn.
 
-Produkcja: `__Host-rapidmaker_session; Secure; HttpOnly; SameSite=Lax; Path=/`, bez Domain. Lax pozwala wrócić z hosted Stripe do własnego zamówienia. Jawny tryb localhost ma inną nazwę cookie, bez Secure; nie może być automatycznym fallbackiem wdrożenia.
+- Klient: 30 dni absolutnie, 7 dni bezczynności. Admin po MFA: nowy token, 8 h absolutnie, 30 min bezczynności. Aktualizacja last_seen najwyżej raz/5 min.
+- Zmiana roli/blokada unieważnia sesje w DB; logout-all usuwa wszystkie własne sesje. Restart zachowuje logowanie.
+- Dodawanie/usuwanie passkey wymaga MFA z ostatnich 5 min albo lokalnego bootstrapu. Maks. 5 kluczy; ostatniego nie można usunąć. Ponowne potwierdzenie passkey odnawia świeżość i rotuje sesję.
+- Wyzwania WebAuthn: PostgreSQL, związane z sesją/użytkownikiem/celem, 5 min, jednorazowe, limity startów. Stan biblioteki nigdy nie trafia do klienta. Sprawdzane podpis, RP ID, dokładny Origin, UV oraz licznik; aktualizacje credential są trwałe.
+- Kody: 3 wysyłki/15 min/email, 20/IP, 100 globalnie; 20 błędnych weryfikacji/15 min/email i 5/kod. Stan auth ograniczony/sprzątany partiami. Brak sekretów, kodów i pełnych adresów w logach.
 
-- Klient: maks. 30 dni od logowania, wygaśnięcie po 7 dniach bezczynności. `last_seen_at` aktualizowane najwyżej raz na 5 min, nigdy nie przedłuża limitu absolutnego.
-- Admin: po passkey nowy sekret sesji; maks. 8 h, 30 min bezczynności. Wrażliwe akcje (np. zmiana passkey, przyszły zwrot płatności) wymagają potwierdzenia passkey z ostatnich 5 min.
-- Nowy sekret po logowaniu i podniesieniu uprawnień; poprzednia sesja unieważniana atomowo. Wylogowanie usuwa sesję w DB oraz cookie; dostępne też „wyloguj wszystkie urządzenia”.
-- Zablokowanie konta, zmiana roli lub procedura odzyskania dostępu unieważniają jego sesje. Restart serwera nie wylogowuje użytkowników.
+## Konfiguracja
 
-## Docelowe tabele PostgreSQL
-
-Obecnie istnieją users/auth_challenges/sessions/auth_limits; bez passkeys i admin_verified_at. Login służy wyłącznie klientom. `claim-guest` przypisuje obecnie zamówienia, modele i snapshoty nadal mają właściciela przez cookie gościa. Te ograniczenia nie oznaczają gotowego pełnego planu auth.
-
-| Tabela | Najważniejsze pola i ograniczenia |
+| Klucz | Znaczenie |
 | --- | --- |
-| `users` | `id uuid`, `email text UNIQUE` (znormalizowany), `role` CHECK client/admin, `disabled_at`, `created_at`. Istnienie rekordu oznacza zweryfikowany email. |
-| `auth_challenges` | `id uuid`, `email`, `purpose` (login/passkey_register/passkey_login), `user_id` nullable, `browser_hash`, `verifier`, `attempts`, `expires_at`, `consumed_at`, `created_at`. Dla WebAuthn ograniczony payload biblioteki, związany z użytkownikiem/sesją i jedną operacją. |
-| `sessions` | `token_hash bytea PRIMARY KEY`, `user_id` FK, `created_at`, `last_seen_at`, `expires_at`, `admin_verified_at` nullable. Indeksy user/expiry. |
-| `passkeys` | `credential_id bytea PRIMARY KEY`, `user_id` FK, zweryfikowany credential biblioteki, nazwa i czas utworzenia. Limit 5/użytkownika; klucz prywatny pozostaje na urządzeniu. |
-| `auth_limits` | hash zakresu email/IP/global jako PK, początek okna, licznik. Atomowe inkrementacje w PostgreSQL; limity działają także między procesami i po restarcie. |
+| `AUTH_MODE` | `disabled` domyślnie, `localhost` albo `production`. Brak automatycznego fallbacku do HTTP. |
+| `AUTH_ORIGIN` | Local: domyślnie `http://localhost:18430`. Production: wymagany dokładny origin HTTPS z nazwą domenową, bez ścieżki/loginu/query. |
+| `AUTH_CODE_KEY` | 32 losowe bajty hex, wyłącznie `.env`/SOPS. |
+| `AUTH_TRUSTED_PROXY` | Opcjonalnie jeden zaufany adres IP proxy. Tylko od niego przyjmowany pojedynczy IP w X-Forwarded-For; łańcuch jest odrzucany. Bez konfiguracji używamy adresu połączenia. |
 
-Zużycie kodu, policzenie błędnej próby, utworzenie użytkownika i sesji są transakcyjne; równoległe użycie kodu daje jeden sukces. Osobne, losowe identyfikatory nie zastępują sprawdzania właściciela.
+RP ID to hostname Origin. WebAuthn lokalnie wymaga **localhost**, nie `127.0.0.1`. Klucze localhost i domeny produkcyjnej są oddzielne. Production wymaga TLS na reverse proxy i zachowania publicznego Host; backend nadal słucha na loopback. Host i Origin są kontrolowane, bez CORS wildcard.
 
-Krótki kod ma mało entropii: zapisujemy HMAC-SHA-256 nad `challenge_id + email + browser_hash + code`, z jednoznacznym kodowaniem pól i osobnym `AUTH_CODE_KEY` w `.env`/SOPS. Porównanie stałoczasowe. Nie zapisujemy samego SHA-256 kodu; sesje mają wystarczająco losowe sekrety do zwykłego SHA-256. WebAuthn implementuje sprawdzona biblioteka, nie własna kryptografia; waliduje challenge, origin, RP ID i user verification.
+Production: `__Host-rapidmaker_session`/`__Host-rapidmaker_auth_attempt`, Secure/HttpOnly/SameSite=Lax/Path=/, bez Domain. Cookie gościa również ma __Host/Secure. Local ma osobne nazwy bez Secure. Nie traktować testów konfiguracji jako wdrożonego publicznego HTTPS.
 
 ## API
 
-| Metoda i ścieżka | Efekt |
+| Metoda / ścieżka | Działanie |
 | --- | --- |
-| `POST /api/auth/start {email}` | Tworzy próbę i cookie wiążące przeglądarkę; wysyła kod. `202 {challenge_id}` niezależnie od istnienia konta. Przekroczone limity → 429. |
-| `POST /api/auth/verify {challenge_id,code}` | Zużywa kod, tworzy konto w razie potrzeby i nową sesję. Zwraca użytkownika oraz `admin_verified:false`; admin przechodzi do passkey. |
-| `GET /api/auth/me` | Bieżący użytkownik/rola, stan potwierdzenia admina i CSRF token albo 401. Bez sekretu sesji. |
-| `POST /api/auth/logout` | Unieważnia bieżącą sesję, czyści cookie. |
-| `POST /api/auth/logout-all` | Unieważnia wszystkie sesje własnego konta. |
-| `POST /api/auth/passkey/{register,login}/{start,finish}` | Wyzwanie i wynik WebAuthn. Zapis wymaga świeżo potwierdzonego admina albo lokalnie przyznanego, jednorazowego bootstrapu. Udane login/finish rotuje sesję i nadaje ograniczony czas dostępu admina. |
-| `POST /api/auth/claim-guest` | Po zalogowaniu przypisuje tylko zasoby dostępne również przez aktualną sesję gościa. |
+| POST `/api/auth/start` `{email}` | Wysyła kod, ustawia cookie próby; 202 `{challenge_id}`. |
+| POST `/api/auth/verify` `{challenge_id,code}` | Zużywa kod, ustawia sesję; user, csrf_token, admin_verified. |
+| GET `/api/auth/me` | Aktualne konto, CSRF, termin i stan MFA albo 401. |
+| POST `/api/auth/logout`, `/logout-all` `{}` | Unieważnia sesję/sesje i czyści cookie. |
+| POST `/api/auth/passkey/register/start` `{bootstrap?}` | Opcje rejestracji + challenge_id; bootstrap tylko dla lokalnego zezwolenia. |
+| POST `/api/auth/passkey/register/finish` `{challenge_id,credential,name}` | Sprawdza odpowiedź WebAuthn i rotuje sesję. |
+| POST `/api/auth/passkey/login/start` `{}` | Opcje potwierdzenia passkey. |
+| POST `/api/auth/passkey/login/finish` `{challenge_id,credential}` | Weryfikuje podpis/UV, rotuje sesję, nadaje MFA. |
+| GET `/api/auth/passkeys`, DELETE `/{id}` | Zarządzanie własnymi kluczami przy świeżym MFA. |
+| POST `/api/auth/claim-guest` `{}` | Atomowe przypisanie modeli/wycen/zamówień; resources_claimed. |
 
-Mutacje są JSON POST/PUT/DELETE, nigdy GET. Same-origin frontend/API. Kontrola dokładnego Origin z konfiguracji serwera oraz `X-CSRF-Token` związany z sesją (np. HMAC z osobną domeną klucza nad hashem sesji); start/verify wymagają Origin/JSON i cookie próby. Bez CORS wildcard. Webhook Stripe ma osobną weryfikację podpisu, nie CSRF użytkownika.
+Mutacje wymagają dokładnego Origin i X-CSRF-Token z `/me`; start/verify zamiast CSRF korzystają z cookie próby. Payloady są JSON. Opcje WebAuthn trzeba przekazać do navigator.credentials z konwersją base64url ↔ ArrayBuffer; credential to standardowa odpowiedź przeglądarki. Pusty opcjonalny credProps z Chromium oznacza brak deklaracji, nie rk=false; podpisane dane/UV nadal weryfikuje biblioteka.
 
-## Własność i uprawnienia
+## Pierwszy admin i odzyskanie
 
-- Publiczne: katalog, rozpoczęcie logowania. Gość: własne modele, wyceny i checkout przez dotychczasowe cookie gościa. Zalogowanie nie kasuje tego cookie automatycznie.
-- Klient: własny profil, pliki, wyceny i zamówienia. Zapytanie SQL ogranicza wynik przez `user_id`; cudzy obiekt → 404. Nie pobieramy dowolnego obiektu, żeby filtrować go tylko w UI.
-- Przypisanie gościa wymaga jednocześnie zweryfikowanej sesji konta i cookie właściciela zasobu, jest atomowe i nie nadpisuje innego właściciela. Dodaj nullable `user_id` do modeli, snapshotów i przyszłych zamówień. Rozliczone zasoby zachowują własny okres retencji, niezależnie od roboczego uploadu 24 h.
-- Nie przejmujemy automatycznie wszystkich zamówień o pasującym emailu ani nie łączymy kont po nazwisku/telefonie. Dostęp do dawnego zakupu bez cookie wymaga osobnej procedury odzyskania, poza pierwszą implementacją.
-- Admin: aktualna rola DB + aktywne potwierdzenie passkey. Dostęp do katalogu/cennika i realizacji zamówień; pobieranie plików tylko w kontekście obsługi konkretnego zamówienia. Żadne pole formularza nie nadaje admina.
+1. Potwierdź email w przeglądarce (klient, świeża sesja do 10 min).
+2. Lokalnie: `python backend/run.py --auth-bootstrap ADRES_EMAIL`. Zwrócony sekret jest jednorazowy, ważny 10 min i związany z tą sesją; nie zapisuj go w logach/chacie.
+3. W tej samej przeglądarce rozpocznij register/start z sekretem i zakończ rejestrację przez WebAuthn. Dopiero podpisana odpowiedź nadaje admina i rotuje sesję. Zarejestruj drugi klucz jako zapas.
 
-## Ochrona i email
+Utrata kluczy: najpierw kod email tworzący świeżą sesję oczekującą, następnie lokalne `--auth-recover ADRES_EMAIL`. Polecenie unieważnia stare klucze i pozostałe sesje, wydaje nowy bootstrap. Sam email nigdy nie zastępuje MFA. Polecenia nie są endpointami HTTP.
 
-Początkowe limity do dostrojenia: 3 wysyłki/15 min na email, 20/15 min na IP, globalnie 100/15 min; 5 prób/kod i 20 błędnych prób/15 min na email. Brak trwałego blokowania konta przez obcą osobę. Retencja wygasłych wyzwań/limitów 24 h, maks. 10 tys. rekordów prób; admission przed generowaniem i wysyłką. Indeksy, cleanup partiami, ograniczona równoległość SMTP.
+## Moduły i dowody
 
-Adres źródłowy tylko z połączenia lub jawnie zaufanego reverse proxy; nie ufamy dowolnemu `X-Forwarded-For`. W obecnym proxy Vite wszystkie połączenia mogą wyglądać jak localhost — to tryb developerski, nie gotowa konfiguracja limitów produkcji.
+`auth`: CSPRNG/HMAC i webauthn-rs; `storage/auth.rs`, `passkeys.rs`, `models.rs`: SQL, transakcje i własność; `api/auth.rs`, `passkeys.rs`, `admin.rs`: HTTP/CSRF/autoryzacja. Jedyna nowa biblioteka bezpieczeństwa to webauthn-rs; serializacja stanu włączona wyłącznie na potrzeby zaufanego PostgreSQL.
 
-Kod wysyła `notifications` przez iCloud SMTP z hasłem aplikacji (na start `void@sieciowiec.xyz`). IMAP nie jest potrzebny do logowania. Pierwsza wersja wysyła z timeoutem, po zapisie wyzwania; błąd dostawcy unieważnia próbę i zwraca ogólny błąd bez ujawniania istnienia konta. Bez pozornego sukcesu i bez kodów w logach. Trwały outbox/retry można dodać wraz z powiadomieniami zamówień.
+Sprawdzone: testy Rust, izolowany PostgreSQL oraz Chromium z wirtualnym authenticatorem: bootstrap/rejestracja/login, odmowa podpisanej odpowiedzi bez UV, replay, rotacja, brak dostępu klienta/admina przed MFA/starego Bearer, CSRF, cookie produkcyjne i Origin/Host/proxy. Fizyczny klucz i publiczny TLS nie były testowane. Źródła: [webauthn-rs](https://docs.rs/webauthn-rs/0.5.3/webauthn_rs/struct.Webauthn.html), [WebAuthn](https://w3c.github.io/webauthn/), [sesje OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
 
-Nie logujemy kodów, cookie, tokenów ani pełnych nagłówków. Zdarzenia: start/weryfikacja/odmowa/wylogowanie, identyfikator żądania, użytkownika i powód techniczny bez sekretów. Zmiana emaila i usuwanie konta nie wchodzą do pierwszej wersji; wymagają osobnego potwierdzenia i zasad retencji.
-
-## Crate’y i wdrożenie
-
-- `auth`: generowanie/sprawdzanie wyzwań, reguły sesji i uprawnień; sprawdzone biblioteki CSPRNG/HMAC/WebAuthn. Bez HTTP i SQL.
-- `storage`: jawny SQL, migracje, transakcje, limity i cleanup.
-- `api/auth.rs`: endpointy, cookie/CSRF, ekstraktor bieżącego użytkownika; osobna kontrola admina. `api` orkiestruje `auth`, `storage`, `notifications`.
-- `notifications`: minimalny klient SMTP; konfiguracja wyłącznie backendowa.
-- Frontend: jeden adapter auth zamiast klienta mock + operatora; `/me` jest źródłem roli. Widok przechowuje tylko stan formularza.
-
-Kolejność: (1) sesje/kody/SMTP i klient, (2) własność gość/konto, (3) passkey i migracja admina. Przed publicznym panelem wymagane całe trzy kroki. Pierwszy admin jest nadawany lokalnym poleceniem operatora dla zweryfikowanego konta: jednorazowe zezwolenie na rejestrację passkey, 10 min, związane z kontem i sesją; rola/dostęp aktywowane dopiero po zapisaniu klucza. Odzyskanie po utracie wszystkich passkey: lokalna procedura operatora z unieważnieniem sesji, bez emailowego obejścia MFA. Warto zarejestrować drugi passkey jako zapas.
-
-Stare `ADMIN_API_TOKEN` i cookie operatora usuwamy po uruchomieniu nowej kontroli wszystkich tras admina; do tego są wyłącznie lokalnym mechanizmem przejściowym. Publiczny start nie może zostawić bocznej ścieżki Bearer omijającej passkey.
-
-Gotowe gdy: kod błędny/wygasły/powtórzony i dwa równoległe użycia są obsłużone; restart zachowuje sesję; logout/blokada ją unieważniają; cudzy model/zamówienie jest niedostępne; klient ani admin bez passkey nie zapisze katalogu; CSRF i próby ponad limit są odrzucone. Jeden krótki przebieg przeglądarki klient/admin. Nie wymaga pełnego pentestu przy każdej zmianie.
-
-Źródła: [OWASP — sesje](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP — MFA](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html). Czasy i limity powyżej są decyzją projektu, nie wartościami narzuconymi przez OWASP.
+Walidacja: fmt, Clippy i build PASS; 18 testów Rust + 6 testów izolowanego PostgreSQL PASS. Przyrost: 9290 → 10439 (+1149) linii kodu Rust w backend/crates, razem z testami inline, bez komentarzy/pustych/generowanych plików. Audit z lokalnej bazy: 0 nowych problemów w zależnościach auth; 9 istniejących wpisów w pozostałym grafie zależności pozostaje.

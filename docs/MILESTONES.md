@@ -43,4 +43,6 @@ Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check dz
 
 [Email E1–E4](email.md): PASS jako backend lokalny — SMTP, kody i sesje klienta, outbox, preferencje, trwałe zamówienia i rozmowy. Kryteria, dowody oraz granice przejścia do produkcji w podlinkowanym planie. UI pozostaje do podłączenia.
 
-Podłączenie paneli do nowych API, pełny admin auth/passkey, produkcyjne webhooki płatności, IMAP/email → chat oraz logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.
+Podłączenie paneli do nowych API, publiczne wdrożenie auth i produkcyjne webhooki płatności, IMAP/email → chat oraz logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.
+
+Auth backend PASS: klient email, admin passkey, trwałe sesje, HTTPS cookie i własność modeli/wycen/zamówień. Weryfikacja: Rust, PostgreSQL, Chromium z wirtualnym kluczem. [Kontrakt i bootstrap](auth.md).

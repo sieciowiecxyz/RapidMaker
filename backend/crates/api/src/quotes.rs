@@ -182,7 +182,7 @@ async fn estimate(
     })?;
     let id = uuid::Uuid::new_v4().to_string();
     let expires_at = model.record.expires_at.min(super::cart::now() + 600);
-    let request = json!({"owner_hash":model.record.owner_hash,"model_id":model.record.id,"expires_at":expires_at,"dimensions_mm":model.record.dimensions_mm,"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
+    let request = json!({"owner_hash":model.record.owner_hash,"user_id":model.record.user_id,"model_id":model.record.id,"expires_at":expires_at,"dimensions_mm":model.record.dimensions_mm,"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
         "slicer_profile_version":rapidmaker_slicer::PROFILE_VERSION,"options":options,"purchase_net_grosze_per_kg":cost,"rates":rates,"profiles_sha256":material.source["profiles_sha256"]});
     let result = json!({"id":id,"model_id":model.record.id,"expires_at":expires_at,"status":"estimated_poc","currency":"PLN","quantity":quantity,
         "measurement":measured,"plates":measured.plates,"batch_strategy":"arranged_plate_batches","options":options,

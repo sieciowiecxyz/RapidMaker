@@ -29,13 +29,48 @@ pub fn now() -> i64 {
         .unwrap_or_default()
         .as_secs() as i64
 }
-pub fn owner(headers: &HeaderMap) -> Result<String, Error> {
-    super::files::owner(headers).ok_or_else(|| {
-        error(
-            StatusCode::UNAUTHORIZED,
-            "Prześlij model, aby utworzyć sesję zamówienia.",
-        )
-    })
+/// A database session takes precedence; an invalid supplied session never falls back to a guest.
+pub async fn identity(
+    storage: Option<&Storage>,
+    headers: &HeaderMap,
+) -> Result<(String, Option<String>), Error> {
+    if let Some(token) = super::auth::session_cookie(headers)? {
+        let storage = storage.ok_or_else(|| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Baza sesji jest niedostępna.",
+            )
+        })?;
+        let session = storage
+            .auth_session(token, now())
+            .await
+            .map_err(|_| {
+                error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Nie można sprawdzić sesji.",
+                )
+            })?
+            .filter(|s| {
+                s.user.role == "client" || (s.user.role == "admin" && s.admin_verified_at.is_some())
+            })
+            .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się ponownie."))?;
+        return Ok((
+            rapidmaker_storage::account_owner(&session.user.id),
+            Some(session.user.id),
+        ));
+    }
+    super::files::owner(headers)
+        .map(|owner| (owner, None))
+        .ok_or_else(|| {
+            error(
+                StatusCode::UNAUTHORIZED,
+                "Prześlij model, aby utworzyć sesję zamówienia.",
+            )
+        })
+}
+
+pub async fn owner(storage: Option<&Storage>, headers: &HeaderMap) -> Result<String, Error> {
+    identity(storage, headers).await.map(|(owner, _)| owner)
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -136,7 +171,7 @@ pub async fn prepare(
             "Sprawdź części i liczbę sztuk (1–1000).",
         ));
     }
-    let owner = owner(headers)?;
+    let owner = owner(storage, headers).await?;
     let mut cart = Cart {
         owner,
         expires_at: (now() + 600) as u64,

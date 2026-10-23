@@ -2,11 +2,11 @@
 
 Mode: goal
 Status: B1–B5 zrealizowane jako lokalny POC
-Active: brak — backend email E1–E4 ukończony lokalnie
+Active: brak — backend email E1–E4 i auth ukończone
 
 ## Email i backend klienta
 
-[Email i powiadomienia](email.md): E1–E4 PASS w lokalnym backendzie. Kod logowania przez iCloud, sesje PostgreSQL, trwałe zamówienia/rozmowy, outbox i preferencje mają API. Dowody i ograniczenia w jednym dokumencie. UI nie jest jeszcze podłączone; pełne admin auth/passkey i produkcyjne webhooki pozostają planem.
+[Email i powiadomienia](email.md): E1–E4 PASS w lokalnym backendzie. Kod logowania przez iCloud, sesje PostgreSQL, trwałe zamówienia/rozmowy, outbox i preferencje mają API. Dowody i ograniczenia w jednym dokumencie. UI nie jest jeszcze podłączone; auth/passkey są zaimplementowane, produkcyjne webhooki pozostają planem.
 
 ## Cel
 
@@ -27,7 +27,7 @@ Klient dodaje STL, STEP lub 3MF, wybiera materiał, kolor, jakość i ilość. S
 
 [B1–B5 i kryteria](MILESTONES.md). Najpierw działający backend i jeden rzeczywisty przebieg PLA, potem kolejne zatwierdzone materiały, admin i checkout. Nie przepisujemy teraz frontendu.
 
-Dalszy zakres: podłączenie UI do backendu kont/zamówień/rozmów, pełny admin auth/passkey, produkcyjne webhooki Stripe, logi/metryki Grafany i publiczne wdrożenie. Istniejące sandboxy Stripe/Furgonetki zachowujemy; nie są gotową sprzedażą produkcyjną.
+Dalszy zakres: podłączenie UI do backendu kont/zamówień/rozmów, publiczne wdrożenie auth i produkcyjne webhooki Stripe, logi/metryki Grafany i publiczne wdrożenie. Istniejące sandboxy Stripe/Furgonetki zachowujemy; nie są gotową sprzedażą produkcyjną.
 
 ## Sposób pracy
 
@@ -35,4 +35,8 @@ KISS, minimum kodu i zależności. Workerzy implementują niezależne moduły; g
 
 ## Potwierdzenie POC
 
-Działają katalog/panel operatora, prywatne modele, slicer, koszt wielu części z jednym przygotowaniem oraz konfigurator → adres Stripe → podsumowanie → Stripe Checkout test. Furgonetka zwróciła trzy oferty; testowa płatność miała kwotę serwera. Build, wybrane testy i desktop/mobile PASS. Bez realnej opłaty/nadania. Nie potwierdzono kalibracji, produkcyjnych zamówień/webhooków ani publicznego bezpieczeństwa. Dowody i ograniczenia: [checkpoint](milestones/backend.md).
+W poprzednim przebiegu potwierdzono katalog/panel operatora, prywatne modele, slicer, koszt wielu części z jednym przygotowaniem oraz konfigurator → adres Stripe → podsumowanie → Stripe Checkout test. Furgonetka zwróciła trzy oferty; testowa płatność miała kwotę serwera. Build, wybrane testy i desktop/mobile PASS. Bez realnej opłaty/nadania. Po zmianie auth panel wymaga podłączenia nowego logowania. Nie potwierdzono kalibracji, produkcyjnych zamówień/webhooków ani publicznego bezpieczeństwa. Dowody i ograniczenia: [checkpoint](milestones/backend.md).
+
+## Auth — 2026-10-23
+
+Klient: email; admin: email + passkey. Sesje PostgreSQL, CSRF/Origin, cookie HTTPS, lokalny bootstrap/recovery i własność konta działają. Stary Bearer/operator-cookie usunięte. Dowody: [auth](auth.md). Frontend wymaga podłączenia; fizyczny klucz i publiczny TLS nie były testowane.

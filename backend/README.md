@@ -27,15 +27,15 @@ cargo build --locked --manifest-path backend/Cargo.toml
 python backend/run.py
 ```
 
-API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`, `MODEL_STORAGE_DIR` oraz konfigurację SMTP poniżej.
+API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `AUTH_*`, `MODEL_STORAGE_DIR` oraz konfigurację SMTP poniżej.
 
 ## Email
 
 `rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden Mailer. Kody wysyła bezpośrednio; zdarzenia zamówień/rozmów zapisuje atomowo z outboxem w PostgreSQL. Jeden worker wykonuje maks. 10 prób wysyłki/min, odzyskuje lease po restarcie, honoruje preferencje i ma stały Message-ID. Brak publicznego endpointu wysyłki. Stan kolejki: chronione `GET /api/admin/notifications`.
 
-Backend klienta: `AUTH_MODE=localhost`, `AUTH_CODE_KEY` (32 losowe bajty hex w `.env`/SOPS), opcjonalnie `AUTH_ORIGIN` (domyślnie `http://127.0.0.1:18430`). Kod email jest jednorazowy, ważny 10 min; sesja HttpOnly/SameSite=Lax trwa do 30 dni, wygasa po 7 dniach bezczynności. Brak trybu oznacza disabled; publiczny tryb auth/passkey jest jeszcze planem. UI kont nadal korzysta z mocków.
+Backend klienta: `AUTH_MODE=localhost`, `AUTH_CODE_KEY` (32 losowe bajty hex w `.env`/SOPS), opcjonalnie `AUTH_ORIGIN` (domyślnie `http://localhost:18430`). Kod email jest jednorazowy, ważny 10 min; sesja HttpOnly/SameSite=Lax trwa do 30 dni, wygasa po 7 dniach bezczynności. Brak trybu oznacza disabled; production obsługuje origin HTTPS i Secure cookie; wymaga skonfigurowanego reverse proxy TLS. Passkey chroni admina; szczegóły w docs/auth.md. UI kont nadal korzysta z mocków.
 
-Trasy klienta: `/api/auth/{start,verify,me,logout,logout-all}`, `GET/PUT /api/account/notifications`, `/api/account/orders/{id}` i `/messages`, `POST /payment-status`. Mutacje wymagają JSON, dokładnego Origin i CSRF z `/me`; start/verify używają powiązania przeglądarki. Operator obsługuje `/api/admin/orders/{id}/{status,messages}` przez obecną autoryzację panelu. Szczegóły kontraktu: [email](../docs/email.md).
+Trasy klienta: `/api/auth/{start,verify,me,logout,logout-all}`, `GET/PUT /api/account/notifications`, `/api/account/orders/{id}` i `/messages`, `POST /payment-status`. Mutacje wymagają JSON, dokładnego Origin i CSRF z `/me`; start/verify używają powiązania przeglądarki. Operator obsługuje `/api/admin/orders/{id}/{status,messages}` przez sesję konta z potwierdzonym passkey. Szczegóły kontraktu: [email](../docs/email.md).
 
 Konfiguracja w `.env`: `MAIL_MODE=disabled|test|live` (domyślnie disabled), `MAIL_SMTP_HOST=smtp.mail.me.com`, `MAIL_SMTP_PORT=587`, `MAIL_USER`, hasło aplikacji `MAIL_PASSWORD`, dopuszczony alias `MAIL_FROM`, `MAIL_REPLY_TO`, `MAIL_TEST_TO`. STARTTLS jest wymagane. `test` przyjmuje wyłącznie dokładny adres `MAIL_TEST_TO`; niczego nie przekierowuje. Na tym stanowisku używamy `void@sieciowiec.xyz` w trybie testowym. Dane IMAP nie są potrzebne serwerowi do wysyłki.
 
@@ -68,7 +68,7 @@ Pomiar slicera jest cache’owany po modelu/formacie/materiale/ustawieniach/ilo�
 
 ## API operatora
 
-Skrypty używają `Authorization: Bearer <ADMIN_API_TOKEN>`; panel korzysta z sesji cookie. Token jest losowym sekretem w lokalnym `.env`/SOPS; nie umieszczaj go w kodzie, `VITE_*`, localStorage ani repo jawnym tekstem. Brak konfiguracji wyłącza API operatora, błędny token daje 401. Panel działa na `/admin/materialy` i `/admin/ustawienia`; logowanie `/logowanie?operator=1` używa prywatnego klucza z `.env`. Po logowaniu przeglądarka dostaje losową sesję HttpOnly/SameSite=Strict na 6 godzin. Aplikacja nie zapisuje klucza w localStorage/sessionStorage ani bundle; po logowaniu używa wyłącznie cookie. Sesje są ograniczone do 64, próby logowania do 10/min; restart API unieważnia sesje. Obecne HTTP/cookie bez Secure są przeznaczone tylko dla localhosta. Publiczne wdrożenie wymaga HTTPS/Secure.
+Panel operatora wymaga teraz wspólnej sesji konta z potwierdzonym passkey. Stary ADMIN_API_TOKEN/Bearer i sesja operatora są wyłączone. Każdy zapis sprawdza rolę/MFA/Origin/CSRF. Pierwszy admin: zweryfikuj email i wykonaj lokalny bootstrap; kroki i kontrakt: [auth](../docs/auth.md). Frontend admina/logowania wymaga migracji do nowych endpointów.
 
 - `GET /api/admin/session`: stan sesji; `POST` z `{token}` tworzy sesję cookie, `DELETE` ją unieważnia. Browser mock nie nadaje uprawnień.
 - `GET /api/admin/materials`: pełny katalog z kosztami i metadanymi.

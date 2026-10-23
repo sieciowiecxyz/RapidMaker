@@ -20,5 +20,4 @@ rapidmaker-storage.workspace = true
 rapidmaker-notifications.workspace = true
 rapidmaker-auth.workspace = true
 sha2 = "0.10"
-subtle = "2.6"
 percent-encoding = "2"

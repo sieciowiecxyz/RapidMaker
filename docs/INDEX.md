@@ -26,9 +26,9 @@ W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.
   - przeczytaj gdy: rozwijasz backend Rust.
   - opis: mapa crate’ów, ich stan i uruchamianie.
 
-- [Auth — projekt](auth.md)
+- [Auth](auth.md)
   - przeczytaj gdy: implementujesz logowanie, sesje lub własność danych.
-  - opis: kod/sesja klienta oraz dalszy plan passkey i migracji admina.
+  - opis: email, passkey admina, sesje, własność i lokalny bootstrap.
 
 - [Email — plan](email.md)
   - przeczytaj gdy: implementujesz wysyłkę lub powiadomienia.

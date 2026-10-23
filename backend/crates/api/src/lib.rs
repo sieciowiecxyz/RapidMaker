@@ -7,6 +7,7 @@ mod files;
 mod models;
 mod orders;
 mod packing;
+mod passkeys;
 mod quotes;
 
 pub use models::worker;
@@ -29,9 +30,12 @@ pub async fn router()
             .merge(models::router())
             .merge(quotes::router(storage.clone())?)
             .merge(auth::router(auth.clone()))
-            .merge(orders::router(auth)),
+            .merge(passkeys::router(auth.clone()))
+            .merge(orders::router(auth.clone())),
+        auth.clone(),
     )
-    .layer(axum::Extension(mailer.clone()));
+    .layer(axum::Extension(mailer.clone()))
+    .layer(axum::Extension(auth));
     let worker = storage
         .as_ref()
         .filter(|_| mailer.enabled())
