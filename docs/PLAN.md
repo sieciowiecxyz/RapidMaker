@@ -2,7 +2,7 @@
 
 Mode: goal
 Status: B1–B5 zrealizowane jako lokalny POC
-Active: brak — backend email E1–E4 i auth ukończone
+Active: brak — backend email E1–E4, auth i kolejka slicera ukończone
 
 ## Email i backend klienta
 
@@ -15,7 +15,7 @@ Klient dodaje STL, STEP lub 3MF, wybiera materiał, kolor, jakość i ilość. S
 ## Decyzje
 
 - Rust: `app → api → moduły`. `app` uruchamia serwer; `api` zbiera trasy, walidację i uprawnienia. Obliczenia pozostają w `geometry`, `slicer`, `pricing`, `packing`; SQL w `storage`. Bez mikroserwisów, Redis i brokera.
-- PostgreSQL + SQLx: materiały, kolory, konfiguracja cen i niezmienne wyniki wycen; trwała kolejka zadań w późniejszym zakresie. Prywatne modele/presety na dysku; w bazie identyfikatory i wersje. Nie odtwarzamy stanu z przeglądarki.
+- PostgreSQL + SQLx: materiały, kolory, konfiguracja cen i niezmienne wyniki wycen; trwała kolejka slicera z lease/retry i atomowym wynikiem. Prywatne modele/presety na dysku; w bazie identyfikatory i wersje. Nie odtwarzamy stanu z przeglądarki.
 - Źródło katalogu: lokalne Bambu Studio, snapshot w `backend/data/bambu/`. 49 materiałów i 314 kolorów. Import zachowuje własne ceny, magazyn i dopuszczenia; nie uznaje kosztu slicera za cenę netto PLN.
 - Sprzęt: Bambu Lab P1P, dysza hardened steel 0,4 mm. Profile deklarujące zgodność wymagają zatwierdzenia dla faktycznego ekstrudera/obudowy. Materiały podporowe nie są osobnym produktem.
 - Slicer: kontrolowany proces Bambu Studio, nasze profile po rozwiązaniu dziedziczenia i dołączeń; bez sieci i sekretów, z limitami czasu/pamięci/plików oraz ograniczoną równoległością. Ustawienia klienta i G-code nie sterują procesem.
@@ -40,3 +40,7 @@ W poprzednim przebiegu potwierdzono katalog/panel operatora, prywatne modele, sl
 ## Auth — 2026-10-23
 
 Klient: email; admin: email + passkey. Sesje PostgreSQL, CSRF/Origin, cookie HTTPS, lokalny bootstrap/recovery i własność konta działają. Stary Bearer/operator-cookie usunięte. Dowody: [auth](auth.md). Frontend wymaga podłączenia; fizyczny klucz i publiczny TLS nie były testowane.
+
+## Kolejka slicera — 2026-10-23
+
+Lokalne pliki + trwała kolejka PostgreSQL, HTTP 202/polling, osobny worker opcjonalny, ochrona modeli przed sprzątaniem. Restart i prawdziwy slicer/checkout sprawdzone na osobnej bazie. Kontrakt, limity i pozostała retencja zamówień: [kolejka](slicer-queue.md).

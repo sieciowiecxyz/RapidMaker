@@ -159,6 +159,19 @@ impl Drop for PendingDirectory {
     }
 }
 
+pub(super) async fn cleanup_models(storage: &Storage) -> Result<(), Error> {
+    let state = FileState {
+        storage: Some(storage.clone()),
+        root: model_root().map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Magazyn modeli jest niedostępny.",
+            )
+        })?,
+    };
+    cleanup(&state, now()?).await
+}
+
 async fn cleanup(state: &FileState, timestamp: i64) -> Result<(), Error> {
     let storage = database(state)?;
     let ids = storage.expired_model_ids(timestamp).await.map_err(|_| {
@@ -380,6 +393,17 @@ pub async fn resolve(
             )
         })?
         .ok_or_else(|| error(StatusCode::NOT_FOUND, "Nie znaleziono modelu lub wygasł."))?;
+    handle(record)
+}
+
+pub(super) fn handle(record: StoredModel) -> Result<ModelHandle, Error> {
+    if !valid_id(&record.id) || !matches!(record.extension.as_str(), "stl" | "step" | "stp" | "3mf")
+    {
+        return Err(error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Błędne metadane modelu.",
+        ));
+    }
     let directory = model_root()
         .map_err(|_| {
             error(

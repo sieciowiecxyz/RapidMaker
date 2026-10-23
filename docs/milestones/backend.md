@@ -25,7 +25,7 @@ Rust LOC tego kroku: 6266 → 6707 (+441), tokei z baseline `git archive HEAD`, 
 
 Ceny zakupu i zatwierdzenie sprzętu muszą pochodzić od operatora; normalnej bazie nie wpisano fikcyjnych cen ani stanów magazynu. 41 profili P1P nie oznacza fizycznej kwalifikacji wszystkich materiałów. Kalibracja kosztów/próbne wydruki przed sprzedażą.
 
-Oferty i stan wznowienia płatności API są w RAM. Zamówienia, konta/role, rozmowy i outbox emaili mają już trwały backend (aktualizacje poniżej); produkcyjne webhooki, kolejka slicera i monitoring pozostają planem. Koszyk i panele zamówień są prototypami. Masa pakowania obejmuje odpady/podpory, więc jest ostrożnym szacunkiem, nie dokładną masą gotowej części. Nie ma optymalizacji wspólnej płyty różnych modeli. Publiczne wdrożenie wymaga HTTPS/Secure i osobnego przygotowania.
+Oferty i stan wznowienia płatności API są w RAM. Zamówienia, konta/role, rozmowy i outbox emaili mają już trwały backend (aktualizacje poniżej); produkcyjne webhooki i monitoring pozostają planem; kolejka slicera wdrożona poniżej. Koszyk i panele zamówień są prototypami. Masa pakowania obejmuje odpady/podpory, więc jest ostrożnym szacunkiem, nie dokładną masą gotowej części. Nie ma optymalizacji wspólnej płyty różnych modeli. Publiczne wdrożenie wymaga HTTPS/Secure i osobnego przygotowania.
 
 NOT RUN: realne obciążenie karty, nadanie przesyłki, pełny pentest/obciążenie/odtwarzanie po awarii. Starsze mockowe `flows.spec.ts` wymagają migracji; nie raportowano całego E2E jako PASS. Zachowano cudze dopiski `AGENTS.md` i nieśledzony `result.json`.
 
@@ -36,3 +36,7 @@ E1–E4 ukończone lokalnie; dowody i ograniczenia: [email](../email.md). Backen
 ## Auth — 2026-10-23
 
 Passkey admina, wspólne sesje/CSRF, cookie produkcyjne i własność zasobów konta wdrożone. Legacy Bearer/operator-cookie wyłączone. Rust/PG/Chromium virtual authenticator PASS; kontrakt i ograniczenia: [auth](../auth.md).
+
+## Kolejka slicera — 2026-10-23
+
+B6 PASS: zadania/snapshot w PostgreSQL, lokalne pliki, lease/retry i polling frontendu. Rzeczywisty restart/odzyskanie workera oraz cena checkoutu sprawdzone na izolowanym środowisku. [Szczegóły i ograniczenia](../slicer-queue.md).

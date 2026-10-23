@@ -23,6 +23,24 @@ pub fn account_owner(user: &str) -> String {
         .collect()
 }
 
+pub(crate) fn stored_model(row: sqlx::postgres::PgRow) -> Result<StoredModel, StorageError> {
+    Ok(StoredModel {
+        id: row.try_get("id")?,
+        owner_hash: row.try_get("owner_hash")?,
+        user_id: row.try_get("user_id")?,
+        filename: row.try_get("filename")?,
+        extension: row.try_get("extension")?,
+        source_bytes: row.try_get("source_bytes")?,
+        mesh_bytes: row.try_get("mesh_bytes")?,
+        sha256: row.try_get("sha256")?,
+        dimensions_mm: row
+            .try_get::<Vec<f64>, _>("dimensions_mm")?
+            .try_into()
+            .map_err(|_| "invalid stored dimensions")?,
+        expires_at: row.try_get("expires_at")?,
+    })
+}
+
 impl Storage {
     /// All writers take one database lock; concurrent processes cannot exceed quotas.
     /// Return false for quota refusal, while database failures remain errors.
@@ -62,49 +80,33 @@ impl Storage {
         now: i64,
     ) -> Result<Option<StoredModel>, StorageError> {
         let row = sqlx::query(
-            "SELECT * FROM private_models WHERE id=$1 AND owner_hash=$2 AND expires_at>$3",
+            "SELECT * FROM private_models WHERE id=$1 AND owner_hash=$2 AND expires_at>$3 AND NOT deletion_started",
         )
         .bind(id)
         .bind(owner)
         .bind(now)
         .fetch_optional(&self.pool)
         .await?;
-        row.map(|row| {
-            Ok(StoredModel {
-                id: row.try_get("id")?,
-                owner_hash: row.try_get("owner_hash")?,
-                user_id: row.try_get("user_id")?,
-                filename: row.try_get("filename")?,
-                extension: row.try_get("extension")?,
-                source_bytes: row.try_get("source_bytes")?,
-                mesh_bytes: row.try_get("mesh_bytes")?,
-                sha256: row.try_get("sha256")?,
-                dimensions_mm: row
-                    .try_get::<Vec<f64>, _>("dimensions_mm")?
-                    .try_into()
-                    .map_err(|_| "invalid stored dimensions")?,
-                expires_at: row.try_get("expires_at")?,
-            })
-        })
-        .transpose()
+        row.map(stored_model).transpose()
     }
 
     pub async fn expired_model_ids(&self, now: i64) -> Result<Vec<String>, StorageError> {
-        Ok(
-            sqlx::query_scalar("SELECT id FROM private_models WHERE expires_at<=$1 LIMIT 1000")
-                .bind(now)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        let mut tx = self.queue_transaction().await?;
+        let ids = sqlx::query_scalar("UPDATE private_models m SET deletion_started=true WHERE expires_at<=$1 AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.model_id=m.id AND j.status IN ('queued','running') AND (j.expires_at>$1 OR j.lease_until>$1)) RETURNING id")
+            .bind(now).fetch_all(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(ids)
     }
 
     /// Delete metadata after file deletion succeeds, so failed cleanup still counts toward quota.
     pub async fn forget_expired_model(&self, id: &str, now: i64) -> Result<(), StorageError> {
-        sqlx::query("DELETE FROM private_models WHERE id=$1 AND expires_at<=$2")
-            .bind(id)
-            .bind(now)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "DELETE FROM private_models WHERE id=$1 AND expires_at<=$2 AND deletion_started",
+        )
+        .bind(id)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
@@ -122,7 +124,7 @@ impl Storage {
             return Err("invalid guest owner hash".into());
         }
         let account = account_owner(user);
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.queue_transaction().await?;
         if sqlx::query("SELECT id FROM users WHERE id=$1 AND disabled_at IS NULL FOR SHARE")
             .bind(user)
             .fetch_optional(&mut *tx)
@@ -131,8 +133,10 @@ impl Storage {
         {
             return Err("account unavailable".into());
         }
-        let models = sqlx::query("UPDATE private_models SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND expires_at>$4")
+        let models = sqlx::query("UPDATE private_models SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND expires_at>$4 AND NOT deletion_started")
             .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();
+        sqlx::query("UPDATE slicer_jobs j SET owner_hash=$3 WHERE owner_hash=$2 AND EXISTS(SELECT 1 FROM private_models m WHERE m.id=j.model_id AND m.user_id=$1 AND m.owner_hash=$3)")
+            .bind(user).bind(guest).bind(&account).execute(&mut *tx).await?;
         let quotes = sqlx::query("UPDATE quotes q SET user_id=$1,request=jsonb_set(jsonb_set(request,'{owner_hash}',to_jsonb($3::text)),'{user_id}',to_jsonb($1::text)) WHERE user_id IS NULL AND request->>'owner_hash'=$2 AND (request->>'expires_at')::bigint>$4 AND EXISTS(SELECT 1 FROM private_models m WHERE m.id=q.request->>'model_id' AND m.user_id=$1 AND m.owner_hash=$3)")
             .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();
         let orders: Vec<String> = sqlx::query_scalar("UPDATE orders SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND created_at>$4-86400 RETURNING id")

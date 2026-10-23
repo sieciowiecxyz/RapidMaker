@@ -46,3 +46,10 @@ Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check dz
 Podłączenie paneli do nowych API, publiczne wdrożenie auth i produkcyjne webhooki płatności, IMAP/email → chat oraz logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.
 
 Auth backend PASS: klient email, admin passkey, trwałe sesje, HTTPS cookie i własność modeli/wycen/zamówień. Weryfikacja: Rust, PostgreSQL, Chromium z wirtualnym kluczem. [Kontrakt i bootstrap](auth.md).
+
+## B6 — Trwała kolejka slicera: PASS lokalnie
+
+- POST zapisuje zadanie; właściciel pobiera status/wynik, frontend odpytuje API.
+- Lease/CAS, retry do 3 prób, deduplikacja i limity PostgreSQL; wynik i snapshot atomowe.
+- Model aktywnego zadania chroniony przed sprzątaniem; claim przenosi zadanie.
+- Potwierdzone: restart API i zabicie/wznowienie workera z rzeczywistym Bambu oraz checkout z jedną wyceną. [Kontrakt i granice](slicer-queue.md).

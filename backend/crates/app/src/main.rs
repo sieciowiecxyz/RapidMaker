@@ -10,6 +10,15 @@ fn main() {
 }
 
 async fn serve() {
+    if std::env::args().nth(1).as_deref() == Some("--slicer-worker") {
+        let worker = api::slicer_worker().await.unwrap_or_else(|_| {
+            eprintln!("Cannot initialize slicer worker; check database configuration.");
+            std::process::exit(1);
+        });
+        shutdown().await;
+        worker.shutdown().await;
+        return;
+    }
     if let Some(mode) = std::env::args()
         .nth(1)
         .filter(|s| matches!(s.as_str(), "--auth-bootstrap" | "--auth-recover"))
@@ -57,9 +66,7 @@ async fn serve() {
     )
     .with_graceful_shutdown(shutdown())
     .await;
-    if let Some(worker) = worker {
-        worker.shutdown().await;
-    }
+    worker.shutdown().await;
     result.expect("serve");
 }
 

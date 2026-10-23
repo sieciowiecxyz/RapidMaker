@@ -155,6 +155,47 @@ export function needsManualReview(
   );
 }
 type EngineQuote = { id: string; expires_at: number };
+type QuoteJob = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  result?: EngineQuote;
+  message?: string;
+};
+
+function waitForQuotePoll(signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, 1000);
+    function abort() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
+async function estimateModel(body: unknown, signal?: AbortSignal): Promise<EngineQuote> {
+  const timeout = AbortSignal.timeout(10 * 60 * 1000);
+  const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  let job = await request<QuoteJob>('/api/quotes/estimate', body, bounded);
+  const path = `/api/quotes/jobs/${encodeURIComponent(job.id)}`;
+  for (;;) {
+    if (job.status === 'succeeded') {
+      if (!job.result) throw new Error('Brakuje wyniku wyceny. Spróbuj ponownie.');
+      return job.result;
+    }
+    if (job.status === 'failed')
+      throw new Error(job.message || 'Nie udało się przygotować wyceny. Spróbuj ponownie.');
+    if (job.status !== 'queued' && job.status !== 'running')
+      throw new Error('Nieprawidłowy stan wyceny. Spróbuj ponownie.');
+    await waitForQuotePoll(bounded);
+    job = await request<QuoteJob>(path, undefined, bounded);
+  }
+}
+
 const engineQuotes = new Map<string, EngineQuote>();
 export async function quoteModels(
   models: PrintModel[],
@@ -219,7 +260,7 @@ export async function quoteModels(
       const key = JSON.stringify(body);
       let estimate = engineQuotes.get(key);
       if (!estimate || estimate.expires_at <= Date.now() / 1000 + 30) {
-        estimate = await request<EngineQuote>('/api/quotes/estimate', body, signal);
+        estimate = await estimateModel(body, signal);
         if (engineQuotes.size >= 64) engineQuotes.delete(engineQuotes.keys().next().value!);
         engineQuotes.set(key, estimate);
       }

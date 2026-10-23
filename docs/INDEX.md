@@ -33,3 +33,7 @@ W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.
 - [Email — plan](email.md)
   - przeczytaj gdy: implementujesz wysyłkę lub powiadomienia.
   - opis: iCloud, logowanie, kolejka, zamówienia i preferencje; stan E1–E4.
+
+- [Kolejka slicera i pliki](slicer-queue.md)
+  - przeczytaj gdy: rozwijasz upload, zadania lub uruchamiasz osobnego workera.
+  - opis: API, lease/retry, limity, retencja i lokalne uruchomienie.

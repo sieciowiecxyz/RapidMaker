@@ -1,29 +1,22 @@
-//! First measured quote flow. Existing checkout is deliberately a separate legacy adapter.
+//! Durable measured quotes; only the worker invokes the isolated slicer.
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
-use rapidmaker_pricing::{Rates, calculate};
-use rapidmaker_slicer::{BatchEstimate, Options};
-use rapidmaker_storage::Storage;
-use serde::Deserialize;
+use rapidmaker_pricing::Rates;
+use rapidmaker_slicer::Options;
+use rapidmaker_storage::{SlicerJob, Storage};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tokio::sync::{Mutex, Semaphore};
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
-static UPLOAD: Semaphore = Semaphore::const_new(1);
 type Error = (StatusCode, Json<Value>);
-type Cache = HashMap<String, (Instant, BatchEstimate)>;
 struct App {
     storage: Option<Storage>,
     rates: Option<Rates>,
-    cache: Mutex<Cache>,
 }
 fn error(status: StatusCode, message: &str) -> Error {
     (status, Json(json!({"message": message})))
@@ -31,7 +24,7 @@ fn error(status: StatusCode, message: &str) -> Error {
 fn unavailable() -> Error {
     error(
         StatusCode::SERVICE_UNAVAILABLE,
-        "Automatyczna wycena nie jest skonfigurowana. Poproś o wycenę indywidualną.",
+        "Automatyczna wycena jest niedostępna. Spróbuj później lub poproś o wycenę indywidualną.",
     )
 }
 
@@ -53,19 +46,19 @@ pub fn router(
             "/api/quotes/estimate",
             post(estimate).layer(DefaultBodyLimit::max(8192)),
         )
-        .with_state(Arc::new(App {
-            storage,
-            rates,
-            cache: Mutex::new(HashMap::new()),
-        }))
+        .route("/api/quotes/jobs/{id}", get(status))
+        .with_state(Arc::new(App { storage, rates }))
         .merge(admin)
         .merge(files))
 }
-
 async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
-    let storage = app.storage.as_ref().ok_or_else(unavailable)?;
-    let catalog = storage.materials().await.map_err(|_| unavailable())?;
-    // Purchase costs and raw production presets are operator data, not the public catalog.
+    let catalog = app
+        .storage
+        .as_ref()
+        .ok_or_else(unavailable)?
+        .materials()
+        .await
+        .map_err(|_| unavailable())?;
     Ok(Json(
         json!({"materials": catalog.into_iter().map(|m| json!({
         "id":m.id,"name":m.name,"density_g_cm3":m.density_g_cm3,"colors":m.colors,
@@ -75,7 +68,6 @@ async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     })).collect::<Vec<_>>()}),
     ))
 }
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EstimateRequest {
@@ -84,43 +76,57 @@ struct EstimateRequest {
     color_code: String,
     options: Options,
 }
-
+/// Server-generated snapshot. Never contains a browser-provided path or price.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SliceInput {
+    pub model_sha256: String,
+    pub material_id: String,
+    pub color_code: String,
+    pub options: Options,
+    pub purchase_net_grosze_per_kg: u32,
+    pub rates: Rates,
+    pub profiles_sha256: Value,
+    pub slicer_profile_version: String,
+}
 async fn estimate(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
     Json(input): Json<EstimateRequest>,
-) -> Result<Json<Value>, Error> {
+) -> Result<(StatusCode, Json<Value>), Error> {
     let storage = app.storage.as_ref().ok_or_else(unavailable)?;
-    let configured = storage.pricing_config().await.map_err(|_| unavailable())?;
-    let rates = configured
+    let rates = storage
+        .pricing_config()
+        .await
+        .map_err(|_| unavailable())?
         .map(serde_json::from_value::<Rates>)
         .transpose()
         .map_err(|_| unavailable())?
         .or_else(|| app.rates.clone())
         .ok_or_else(unavailable)?;
     rates.validate().map_err(|_| unavailable())?;
-    let model = super::files::resolve(storage, &headers, &input.model_id).await?;
-    let material_id = input.material_id.as_str();
-    let color = input.color_code.as_str();
-    let options = input.options;
-    let quantity = options.quantity;
-    options.validate().map_err(|_| {
+    input.options.validate().map_err(|_| {
         error(
             StatusCode::BAD_REQUEST,
-            "Wybierz jakość draft/standard/fine, 2–8 ścian i wypełnienie 5–100%.",
+            "Wybierz ilość 1–1000, jakość draft/standard/fine, 2–8 ścian i wypełnienie 5–100%.",
         )
     })?;
+    let model = super::files::resolve(storage, &headers, &input.model_id).await?;
     let material = storage
         .materials()
         .await
         .map_err(|_| unavailable())?
         .into_iter()
-        .find(|m| m.id == material_id)
+        .find(|m| m.id == input.material_id)
         .ok_or_else(|| error(StatusCode::BAD_REQUEST, "Nieznany materiał."))?;
     let cost = material
         .cost_net_grosze_per_kg
         .and_then(|v| u32::try_from(v).ok())
-        .filter(|_| material.production_enabled)
+        .filter(|v| {
+            *v > 0
+                && material.production_enabled
+                && rapidmaker_slicer::material_supported(&material.id)
+        })
         .ok_or_else(|| {
             error(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -130,68 +136,77 @@ async fn estimate(
     if !material
         .colors
         .iter()
-        .any(|c| c.code == color && c.in_stock)
+        .any(|c| c.code == input.color_code && c.in_stock)
     {
         return Err(error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "Wybrany kolor jest niedostępny.",
         ));
     }
-    let _permit = UPLOAD.try_acquire().map_err(|_| {
-        error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Trwa wycena innego modelu. Spróbuj za chwilę.",
+    let payload = serde_json::to_value(SliceInput {
+        model_sha256: model.record.sha256,
+        material_id: input.material_id,
+        color_code: input.color_code,
+        options: input.options,
+        purchase_net_grosze_per_kg: cost,
+        rates,
+        profiles_sha256: material.source["profiles_sha256"].clone(),
+        slicer_profile_version: rapidmaker_slicer::PROFILE_VERSION.into(),
+    })
+    .map_err(|_| unavailable())?;
+    let fingerprint = format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&json!([input.model_id, payload])).map_err(|_| unavailable())?
         )
-    })?;
-    let model_hash = &model.record.sha256;
-    let extension = &model.record.extension;
-    let cache_key = format!(
-        "{model_hash}:{extension}:{material_id}:{}:{}:{}",
-        rapidmaker_slicer::PROFILE_VERSION,
-        material.source["profiles_sha256"],
-        serde_json::to_string(&options).map_err(|_| unavailable())?
     );
-    let mut cache = app.cache.lock().await;
-    cache.retain(|_, (created, _)| created.elapsed() < Duration::from_secs(600));
-    if !cache.contains_key(&cache_key) {
-        drop(cache);
-        let measured = rapidmaker_slicer::slice_job(&model.mesh, material_id, &options).await.map_err(|e| match e {
-            rapidmaker_slicer::Error::Busy => error(StatusCode::TOO_MANY_REQUESTS, "Slicer jest zajęty. Spróbuj za chwilę."),
-            rapidmaker_slicer::Error::UnsupportedMaterial => error(StatusCode::UNPROCESSABLE_ENTITY, "Ten materiał wymaga ręcznej wyceny; brak zatwierdzonego profilu slicera."),
-            _ => error(StatusCode::UNPROCESSABLE_ENTITY, "Nie udało się przygotować wyceny slicerem. Sprawdź model lub poproś o ocenę indywidualną."),
-        })?;
-        cache = app.cache.lock().await;
-        if cache.len() >= 64 {
-            cache.clear();
-        }
-        cache.insert(cache_key.clone(), (Instant::now(), measured));
-    }
-    let measured = &cache[&cache_key].1;
-    let price = calculate(
-        measured.time_seconds,
-        (measured.filament_grams * 1000.0).ceil() as u64,
-        measured.plates,
-        cost,
-        &rates,
-    )
-    .map_err(|_| {
-        error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Ta konfiguracja wymaga indywidualnej wyceny.",
+    let job = storage
+        .enqueue_slice(
+            &model.record.owner_hash,
+            &model.record.id,
+            &fingerprint,
+            &payload,
+            super::cart::now(),
         )
-    })?;
-    let id = uuid::Uuid::new_v4().to_string();
-    let expires_at = model.record.expires_at.min(super::cart::now() + 600);
-    let request = json!({"owner_hash":model.record.owner_hash,"user_id":model.record.user_id,"model_id":model.record.id,"expires_at":expires_at,"dimensions_mm":model.record.dimensions_mm,"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
-        "slicer_profile_version":rapidmaker_slicer::PROFILE_VERSION,"options":options,"purchase_net_grosze_per_kg":cost,"rates":rates,"profiles_sha256":material.source["profiles_sha256"]});
-    let result = json!({"id":id,"model_id":model.record.id,"expires_at":expires_at,"status":"estimated_poc","currency":"PLN","quantity":quantity,
-        "measurement":measured,"plates":measured.plates,"batch_strategy":"arranged_plate_batches","options":options,
-        "price":price,"pricing_version":rates.version,"payable":false,
-        "notice":"Wycena testowa z ułożenia modeli na płytach. Powtarzalne pełne płyty liczone z jednego pomiaru, ostatnia osobno. Dostawa i opakowanie osobno; kalibracja i checkout pozostają do podłączenia."});
-    drop(cache);
-    storage
-        .save_quote(&id, &request, &result)
         .await
-        .map_err(|_| unavailable())?;
-    Ok(Json(result))
+        .map_err(|_| unavailable())?
+        .ok_or_else(|| {
+            error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Kolejka wycen jest pełna lub model wygasł. Spróbuj później.",
+            )
+        })?;
+    Ok((StatusCode::ACCEPTED, Json(public_job(job))))
+}
+async fn status(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, Error> {
+    let storage = app.storage.as_ref().ok_or_else(unavailable)?;
+    let owner = super::cart::owner(Some(storage), &headers).await?;
+    if uuid::Uuid::parse_str(&id).is_err() {
+        return Err(error(StatusCode::NOT_FOUND, "Nie znaleziono zadania."));
+    }
+    let job = storage
+        .slice_job(&id, &owner, super::cart::now())
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(|| error(StatusCode::NOT_FOUND, "Nie znaleziono zadania lub wygasło."))?;
+    Ok(Json(public_job(job)))
+}
+fn public_job(job: SlicerJob) -> Value {
+    let message = if job.status == "failed" {
+        job.error.as_deref().map(|message| match message {
+            "worker_interrupted" => {
+                "Nie udało się wznowić wyceny po przerwaniu pracy. Zleć ją ponownie."
+            }
+            "job_expired" => "Upłynął czas oczekiwania na wycenę. Zleć ją ponownie.",
+            other => other,
+        })
+    } else {
+        None
+    };
+    json!({"id":job.id,"status":job.status,"poll_url":format!("/api/quotes/jobs/{}",job.id),
+        "result":job.result,"message":message,"expires_at":job.expires_at})
 }
