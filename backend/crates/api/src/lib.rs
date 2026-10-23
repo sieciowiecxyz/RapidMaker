@@ -1,5 +1,6 @@
 mod admin;
 mod checkout;
+mod files;
 mod models;
 mod packing;
 mod quotes;

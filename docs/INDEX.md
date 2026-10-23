@@ -1,6 +1,6 @@
 # Dokumentacja Rapidmaker
 
-W tym katalogu: [PLAN.md — Wizja produktu](PLAN.md#wizja-produktu), zakres i stan; MILESTONES.md — kryteria etapów; ARCHITECTURE.md — stack i granice. Czytaj tylko potrzebne pliki. Dawne briefy, w tym GOALS.md, są w historii Git; ich skrót jest w PLAN.md. Stare statusy nie są dowodami działania.
+W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.md — kryteria etapów; ARCHITECTURE.md — stack i granice. Czytaj tylko potrzebne pliki. Dawne briefy, w tym GOALS.md, są w historii Git; ich skrót jest w PLAN.md. Stare statusy nie są dowodami działania.
 
 - [Kontekst](context.md)
   - przeczytaj gdy: zapisujesz decyzję lub wznawiasz pracę.

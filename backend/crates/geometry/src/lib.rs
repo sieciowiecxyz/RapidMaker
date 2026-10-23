@@ -170,6 +170,21 @@ pub fn source_to_stl(
     limits: &ConversionLimits,
     three_mf_limits: &ThreeMfLimits,
 ) -> Result<Vec<u8>, PreviewError> {
+    source_to_production(filename, input, limits, three_mf_limits).map(|output| output.stl)
+}
+
+pub struct ProductionOutput {
+    pub stl: Vec<u8>,
+    pub dimensions_mm: [f64; 3],
+}
+
+/// Return metadata from this same parse, so callers never reparse untrusted geometry.
+pub fn source_to_production(
+    filename: &str,
+    input: &[u8],
+    limits: &ConversionLimits,
+    three_mf_limits: &ThreeMfLimits,
+) -> Result<ProductionOutput, PreviewError> {
     let started = Instant::now();
     if input.len() > limits.max_input_bytes {
         return Err(PreviewError::InputTooLarge);
@@ -219,7 +234,10 @@ pub fn source_to_stl(
         }
         output.extend_from_slice(&[0; 2]);
     }
-    Ok(output)
+    Ok(ProductionOutput {
+        stl: output,
+        dimensions_mm: analysis.dimensions_mm.map(f64::from),
+    })
 }
 
 pub fn stl_to_preview_glb(
@@ -1529,9 +1547,16 @@ mod tests {
                 .source_format;
             let (original, format) =
                 scene_from_source(format, input, &limits, Instant::now()).unwrap();
-            let stl = source_to_stl(filename, input, &limits, &ThreeMfLimits::default()).unwrap();
+            let production =
+                source_to_production(filename, input, &limits, &ThreeMfLimits::default()).unwrap();
+            let stl = production.stl;
             let (canonical, _) = parse_stl(&stl, &limits, Instant::now()).unwrap();
             let before = analyze_scene(&original, format, &limits).unwrap();
+            assert_eq!(
+                production.dimensions_mm,
+                before.dimensions_mm.map(f64::from),
+                "{filename}"
+            );
             let after = analyze_scene(&canonical, SourceFormat::StlBinary, &limits).unwrap();
             assert_eq!(before.bounds_min_mm, after.bounds_min_mm, "{filename}");
             assert_eq!(before.bounds_max_mm, after.bounds_max_mm, "{filename}");

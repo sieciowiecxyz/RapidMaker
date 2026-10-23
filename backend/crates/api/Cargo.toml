@@ -19,3 +19,4 @@ rapidmaker-slicer.workspace = true
 rapidmaker-storage.workspace = true
 sha2 = "0.10"
 subtle = "2.6"
+percent-encoding = "2"

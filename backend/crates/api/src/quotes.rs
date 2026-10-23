@@ -1,7 +1,6 @@
 //! First measured quote flow. Existing checkout is deliberately a separate legacy adapter.
 use axum::{
     Json, Router,
-    body::Bytes,
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
@@ -9,13 +8,10 @@ use axum::{
 use rapidmaker_pricing::{Rates, calculate};
 use rapidmaker_slicer::{BatchEstimate, Options};
 use rapidmaker_storage::Storage;
+use serde::Deserialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -55,18 +51,20 @@ pub async fn router() -> Result<Router, Box<dyn std::error::Error + Send + Sync>
         rates.validate()?;
     }
     let admin = super::admin::router(storage.clone(), rates.clone())?;
+    let files = super::files::router(storage.clone())?;
     Ok(Router::new()
         .route("/api/catalog/materials", get(materials))
         .route(
             "/api/quotes/estimate",
-            post(estimate).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+            post(estimate).layer(DefaultBodyLimit::max(8192)),
         )
         .with_state(Arc::new(App {
             storage,
             rates,
             cache: Mutex::new(HashMap::new()),
         }))
-        .merge(admin))
+        .merge(admin)
+        .merge(files))
 }
 
 async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
@@ -83,29 +81,19 @@ async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
     ))
 }
 
-struct Workspace(PathBuf);
-impl Drop for Workspace {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, Error> {
-    headers
-        .get(name)
-        .and_then(|v| v.to_str().ok())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| {
-            error(
-                StatusCode::BAD_REQUEST,
-                "Podaj plik modelu, materiał, kolor i liczbę sztuk.",
-            )
-        })
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EstimateRequest {
+    model_id: String,
+    material_id: String,
+    color_code: String,
+    options: Options,
 }
 
 async fn estimate(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
-    input: Bytes,
+    Json(input): Json<EstimateRequest>,
 ) -> Result<Json<Value>, Error> {
     let storage = app.storage.as_ref().ok_or_else(unavailable)?;
     let configured = storage.pricing_config().await.map_err(|_| unavailable())?;
@@ -116,54 +104,11 @@ async fn estimate(
         .or_else(|| app.rates.clone())
         .ok_or_else(unavailable)?;
     rates.validate().map_err(|_| unavailable())?;
-    let filename = header(&headers, "x-model-filename")?;
-    let material_id = header(&headers, "x-material-id")?;
-    let color = header(&headers, "x-color-code")?;
-    let quantity = header(&headers, "x-quantity")?
-        .parse::<u32>()
-        .ok()
-        .filter(|n| (1..=1000).contains(n))
-        .ok_or_else(|| {
-            error(
-                StatusCode::BAD_REQUEST,
-                "Liczba sztuk musi wynosić od 1 do 1000.",
-            )
-        })?;
-    let extension = filename
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    if input.is_empty()
-        || filename.len() > 1024
-        || !matches!(extension.as_str(), "stl" | "step" | "stp" | "3mf")
-    {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Wybierz niepusty model STL, STEP albo 3MF do 32 MiB.",
-        ));
-    }
-    let optional = |name: &str, fallback: &str| -> Result<String, Error> {
-        match headers.get(name) {
-            Some(value) => value
-                .to_str()
-                .map(str::to_owned)
-                .map_err(|_| error(StatusCode::BAD_REQUEST, "Nieprawidłowe ustawienia druku.")),
-            None => Ok(fallback.to_owned()),
-        }
-    };
-    let options: Options = serde_json::from_value(json!({
-        "quantity":quantity,
-        "quality":optional("x-print-quality", "standard")?,
-        "wall_loops":optional("x-wall-loops", "2")?.parse::<u8>().ok(),
-        "infill_percent":optional("x-infill-percent", "15")?.parse::<u8>().ok(),
-    }))
-    .map_err(|_| {
-        error(
-            StatusCode::BAD_REQUEST,
-            "Wybierz jakość draft/standard/fine, 2–8 ścian i wypełnienie 5–100%.",
-        )
-    })?;
+    let model = super::files::resolve(storage, &headers, &input.model_id).await?;
+    let material_id = input.material_id.as_str();
+    let color = input.color_code.as_str();
+    let options = input.options;
+    let quantity = options.quantity;
     options.validate().map_err(|_| {
         error(
             StatusCode::BAD_REQUEST,
@@ -203,7 +148,8 @@ async fn estimate(
             "Trwa wycena innego modelu. Spróbuj za chwilę.",
         )
     })?;
-    let model_hash = format!("{:x}", Sha256::digest(&input));
+    let model_hash = &model.record.sha256;
+    let extension = &model.record.extension;
     let cache_key = format!(
         "{model_hash}:{extension}:{material_id}:{}:{}:{}",
         rapidmaker_slicer::PROFILE_VERSION,
@@ -214,17 +160,7 @@ async fn estimate(
     cache.retain(|_, (created, _)| created.elapsed() < Duration::from_secs(600));
     if !cache.contains_key(&cache_key) {
         drop(cache);
-        let workspace = Workspace(
-            std::env::temp_dir().join(format!("rapidmaker-quote-{}", uuid::Uuid::new_v4())),
-        );
-        fs::create_dir(&workspace.0).map_err(|_| unavailable())?;
-        fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))
-            .map_err(|_| unavailable())?;
-        let source = workspace.0.join(format!("source.{extension}"));
-        let canonical = workspace.0.join("model.stl");
-        fs::write(&source, input).map_err(|_| unavailable())?;
-        super::models::prepare_for_slicing(&source, &canonical).await.map_err(|_| error(StatusCode::UNPROCESSABLE_ENTITY, "Nie udało się przygotować bezpiecznej siatki. STEP wymaga pojedynczej części w mm; uszkodzone lub nieobsługiwane modele wymagają ręcznej oceny."))?;
-        let measured = rapidmaker_slicer::slice_job(&canonical, material_id, &options).await.map_err(|e| match e {
+        let measured = rapidmaker_slicer::slice_job(&model.mesh, material_id, &options).await.map_err(|e| match e {
             rapidmaker_slicer::Error::Busy => error(StatusCode::TOO_MANY_REQUESTS, "Slicer jest zajęty. Spróbuj za chwilę."),
             rapidmaker_slicer::Error::UnsupportedMaterial => error(StatusCode::UNPROCESSABLE_ENTITY, "Ten materiał wymaga ręcznej wyceny; brak zatwierdzonego profilu slicera."),
             _ => error(StatusCode::UNPROCESSABLE_ENTITY, "Nie udało się przygotować wyceny slicerem. Sprawdź model lub poproś o ocenę indywidualną."),
@@ -250,9 +186,9 @@ async fn estimate(
         )
     })?;
     let id = uuid::Uuid::new_v4().to_string();
-    let request = json!({"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
+    let request = json!({"owner_hash":model.record.owner_hash,"model_id":model.record.id,"expires_at":model.record.expires_at,"dimensions_mm":model.record.dimensions_mm,"model_sha256":model_hash,"material_id":material_id,"color_code":color,"quantity":quantity,
         "options":options,"purchase_net_grosze_per_kg":cost,"rates":rates,"profiles_sha256":material.source["profiles_sha256"]});
-    let result = json!({"id":id,"status":"estimated_poc","currency":"PLN","quantity":quantity,
+    let result = json!({"id":id,"model_id":model.record.id,"expires_at":model.record.expires_at,"status":"estimated_poc","currency":"PLN","quantity":quantity,
         "measurement":measured,"plates":measured.plates,"batch_strategy":"arranged_plate_batches","options":options,
         "price":price,"pricing_version":rates.version,"payable":false,
         "notice":"Wycena testowa z ułożenia modeli na płytach. Powtarzalne pełne płyty liczone z jednego pomiaru, ostatnia osobno. Dostawa i opakowanie osobno; kalibracja i checkout pozostają do podłączenia."});

@@ -2077,6 +2077,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "gltf",
+ "percent-encoding",
  "rapidmaker-geometry",
  "rapidmaker-packing",
  "rapidmaker-pricing",

@@ -6,7 +6,9 @@ use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 use std::{collections::HashSet, error::Error, time::Duration};
 
 mod admin;
+mod models;
 pub use admin::{MaterialInput, validate_color};
+pub use models::StoredModel;
 
 pub type StorageError = Box<dyn Error + Send + Sync>;
 

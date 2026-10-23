@@ -40,3 +40,13 @@ Niezależne dopiski użytkownika w `AGENTS.md` i nieśledzony `result.json` zach
 - Nadal otwarte: konfigurator/koszyk/checkout nowej wyceny, prywatne modele, masa z slicera do dostawy, powiązanie kwoty Stripe i migracja starych mockowych E2E. Pozostałe konta/panele zamówień/chat są prototypami, nie danymi PostgreSQL.
 
 Rust LOC bieżącego kroku: 5555 → 5671 (+116), razem z testami inline, bez komentarzy i pustych linii. Nowe pliki frontendowe: adapter sesji, adapter operatora i regresja formularza; brak nowych zależności.
+
+## B5 — prywatne modele, 2026-10-23
+
+- PASS: `POST /api/models` zapisuje oryginał i kanoniczną siatkę na prywatnym dysku, metadane i hash sesji w PostgreSQL. Cookie właściciela HttpOnly/SameSite; brak sesji → 401, obcy/wygasły model → 404. Limity uploadu, miejsca i liczby modeli obejmują siatki; brak DB nie daje pozornego zapisu.
+- Nowa wycena przyjmuje JSON z ID modelu i ustawieniami zamiast ponownego przesyłania pliku. Pracuje na zachowanej siatce; snapshot wiąże właściciela, model, ilość, opcje i wersje danych. Nadal `payable:false` do podłączenia checkoutu.
+- PASS: krótki HTTP na osobnej tymczasowej bazie: upload STL → rzeczywisty slicer dwóch kopii → zapis ceny; odczyt/pobranie tylko przez właściciela; restart zachowuje model i wycenę; wygasły model jest niedostępny i sprzątany przy kolejnym uploadzie. Nieudany upload nie zostawia plików; katalogi/pliki mają 0700/0600. Baza testowa usunięta, normalny API przywrócony bez fikcyjnych cen.
+- PASS: build, Clippy zmienionego API, dwie regresje sesji/nazw plików oraz dwa testy konwersji geometrii. NOT RUN: pełny frontend/checkout, test obciążeniowy limitów dysku, odzyskiwanie osieroconych plików po awarii procesu. UI nie zmieniano.
+- Dalej: rzeczywisty katalog i snapshoty w konfiguratorze; poprawna suma wielu modeli z jedną opłatą przygotowania; własność/ważność wyceny przy pakowaniu i płatności. B5 pozostaje otwarte.
+
+Rust LOC: 5671 → 6266 (+595), pomiar tokei z baseline `git archive HEAD`, razem z testami inline, bez pustych linii/komentarzy. Nowe moduły: prywatny upload/odczyt i SQL modeli, migracja 0003. Zależność `percent-encoding` (już w lockfile) bezpiecznie koduje nazwy pobieranych plików i odczytuje nagłówek uploadu.

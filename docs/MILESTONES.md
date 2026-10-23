@@ -33,7 +33,7 @@ Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check dz
 ## B5 — Admin, frontend i checkout
 
 - Admin dodaje/edytuje materiały, kolory, koszty i dopuszczenia przez autoryzowane API. Import nie niszczy zmian operatora.
-- Konfigurator pobiera rzeczywisty katalog i wynik wyceny; pokazuje loading, błąd i ręczną ocenę. Zachowaj minimalistyczny wygląd.
+- Prywatne oryginały/siatki i własność są zapisane; nowa wycena używa ID modelu. Konfigurator pobiera rzeczywisty katalog i wynik wyceny; pokazuje loading, błąd i ręczną ocenę. Zachowaj minimalistyczny wygląd.
 - Pakowanie/Furgonetka korzystają z właściwej masy/wymiarów; Stripe otrzymuje wyłącznie ważną kwotę serwerową. Zmiana koszyka unieważnia ofertę.
 - Gotowe gdy: jeden przebieg konfiguracja → wycena → sandbox checkout działa, a obcy zapis admina jest odrzucony. Krótki przegląd zmienionych ekranów na desktop/mobile.
 

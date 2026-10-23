@@ -7,14 +7,16 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use rapidmaker_geometry::{ConversionLimits, ThreeMfLimits, source_to_preview_glb, source_to_stl};
+use rapidmaker_geometry::{
+    ConversionLimits, ThreeMfLimits, source_to_preview_glb, source_to_production,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     fs,
-    io::Write,
-    os::unix::fs::PermissionsExt,
+    io::{Read, Write},
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
@@ -114,8 +116,14 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
             "Nie można przygotować analizy.",
         )
     })?;
-    let mut command = isolated_worker(&source, output, "--analyze-model-worker", 80 * 1024 * 1024)
-        .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak procesu analizy."))?;
+    let mut command = isolated_worker(
+        &source,
+        output,
+        "--analyze-model-worker",
+        80 * 1024 * 1024,
+        None,
+    )
+    .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak procesu analizy."))?;
     let status = tokio::time::timeout(Duration::from_secs(30), command.status())
         .await
         .map_err(|_| {
@@ -174,6 +182,7 @@ fn isolated_worker(
     output: fs::File,
     flag: &str,
     output_limit: u64,
+    metadata: Option<&Path>,
 ) -> Result<tokio::process::Command, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     // Fail closed if bubblewrap/namespaces are unavailable: the parser cannot
@@ -216,7 +225,11 @@ fn isolated_worker(
         .arg("/worker")
         .arg("--ro-bind")
         .arg(source)
-        .arg(&isolated_source)
+        .arg(&isolated_source);
+    if let Some(metadata) = metadata {
+        command.arg("--bind").arg(metadata).arg("/metadata.json");
+    }
+    command
         .args(["--remount-ro", "/", "/worker", flag])
         .arg(&isolated_source)
         .env_clear()
@@ -231,7 +244,12 @@ fn isolated_worker(
 
 /// Convert only geometry in the same restricted parser sandbox as analysis.
 /// The caller owns both paths; output must be a fresh file in its private workspace.
-pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<(), String> {
+#[derive(Serialize, Deserialize)]
+pub struct PreparedModel {
+    pub dimensions_mm: [f64; 3],
+}
+
+pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<PreparedModel, String> {
     let extension = source.extension().and_then(|v| v.to_str()).unwrap_or("");
     if !matches!(extension, "stl" | "step" | "stp" | "3mf") {
         return Err("Unsupported source format".into());
@@ -244,25 +262,61 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<(), Str
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
+        .mode(0o600)
         .open(output)
         .map_err(|e| e.to_string())?;
     let result = async {
-        let mut command =
-            isolated_worker(source, file, "--prepare-slicing-worker", 50 * 1024 * 1024)?;
+        let metadata = output.with_extension("metadata.json");
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&metadata)
+            .map_err(|e| e.to_string())?;
+        let mut command = isolated_worker(
+            source,
+            file,
+            "--prepare-slicing-worker",
+            50 * 1024 * 1024,
+            Some(&metadata),
+        )?;
         let status = tokio::time::timeout(Duration::from_secs(30), command.status())
             .await
             .map_err(|_| "Model conversion timed out")?
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| "Model conversion unavailable")?;
         if !status.success() {
-            return Err("Unsupported or invalid model geometry".into());
+            return Err(if status.code() == Some(65) {
+                "Unsupported or invalid model geometry"
+            } else {
+                "Model conversion unavailable"
+            }
+            .into());
         }
         let length = fs::metadata(output).map_err(|e| e.to_string())?.len();
         if !(84..=50 * 1024 * 1024).contains(&length) {
             return Err("Invalid canonical mesh size".into());
         }
-        Ok(())
+        let mut bytes = Vec::new();
+        fs::File::open(&metadata)
+            .map_err(|e| e.to_string())?
+            .take(8193)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() > 8192 {
+            return Err("Invalid canonical mesh metadata size".into());
+        }
+        let prepared: PreparedModel = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if prepared
+            .dimensions_mm
+            .iter()
+            .any(|v| !v.is_finite() || *v <= 0.0)
+        {
+            return Err("Invalid canonical mesh dimensions".into());
+        }
+        Ok(prepared)
     }
     .await;
+    let _ = fs::remove_file(output.with_extension("metadata.json"));
     if result.is_err() {
         let _ = fs::remove_file(output);
     }
@@ -289,7 +343,7 @@ pub fn worker() -> bool {
                     return Err("Input too large".into());
                 }
                 let input = fs::read(&filename).map_err(|e| e.to_string())?;
-                source_to_stl(
+                let output = source_to_production(
                     &filename,
                     &input,
                     &ConversionLimits {
@@ -300,7 +354,13 @@ pub fn worker() -> bool {
                     },
                     &ThreeMfLimits::default(),
                 )
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+                let metadata = serde_json::to_vec(&PreparedModel {
+                    dimensions_mm: output.dimensions_mm,
+                })
+                .map_err(|e| e.to_string())?;
+                fs::write("/metadata.json", metadata).map_err(|e| e.to_string())?;
+                Ok(output.stl)
             } else {
                 serde_json::to_vec(&analyze_file(&filename)?).map_err(|e| e.to_string())
             }
@@ -313,7 +373,7 @@ pub fn worker() -> bool {
         })
         .is_err()
     {
-        std::process::exit(1);
+        std::process::exit(65);
     }
     true
 }

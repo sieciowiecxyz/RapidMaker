@@ -25,7 +25,7 @@ cargo build --locked --manifest-path backend/Cargo.toml
 python backend/run.py
 ```
 
-API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`.
+API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`, `MODEL_STORAGE_DIR`.
 
 `DATABASE_URL` uruchamia migracje i idempotentny import katalogu. Bez tej zmiennej stary sandbox działa, nowe endpointy zwracają 503. Nieprawidłowa konfiguracja DB/cennika zatrzymuje start, bez ujawniania poświadczeń.
 
@@ -36,13 +36,15 @@ Linux + bubblewrap + prlimit są wymagane dla parsera i slicera. Slicer korzysta
 ## Nowe API
 
 - `GET /api/catalog/materials`: katalog PostgreSQL, kolory i dostępność. Bez kosztów zakupu i surowych presetów.
-- `POST /api/quotes/estimate`: body = surowy STL, STEP/STP lub 3MF do 32 MiB. Nagłówki: `X-Model-Filename`, `X-Material-Id`, `X-Color-Code`, `X-Quantity` (1–1000). Opcjonalnie `X-Print-Quality` = draft/standard/fine, `X-Wall-Loops` = 2–8, `X-Infill-Percent` = 5–100. Wynik: pomiar całego zamówienia (`measurement`) i pełnych/resztkowych płyt, koszt netto/VAT/brutto, ustawienia, wersje i ID zapisanego wyniku. Nie uruchamia płatności.
+- `POST /api/models`: surowy STL, STEP/STP lub 3MF do 32 MiB; `X-Model-Filename` = nazwa zakodowana przez `encodeURIComponent`. Zwraca 201, ID, wymiary i termin wygaśnięcia; ustawia prywatną sesję cookie.
+- `GET /api/models/{id}` i `/api/models/{id}/source`: metadane i pobranie oryginału, tylko z cookie właściciela. Brak sesji → 401, obcy/wygasły model → 404.
+- `POST /api/quotes/estimate`: JSON `{"model_id":"ID z uploadu","material_id":"GFA00","color_code":"10300","options":{"quantity":1,"quality":"standard","wall_loops":2,"infill_percent":15}}`. Wymaga cookie właściciela. Ilość 1–1000, jakość draft/standard/fine, 2–8 ścian, 5–100% wypełnienia. Wynik: pomiar partii, koszt netto/VAT/brutto i ID niezmiennego snapshotu. Nie uruchamia płatności.
 
 Automatyczna cena wymaga zatwierdzonego materiału, dodatniej ceny zakupu netto/kg i dostępnego koloru w DB oraz `PRICING_RATES_JSON`. Import nigdy ich nie wymyśla ani nie nadpisuje. Zapisy operatora korzystają z chronionego API poniżej. Rola z browser mocka nie daje uprawnień. Cennik w PostgreSQL ma pierwszeństwo przed konfiguracją startową `.env`; zmiana działa dla nowych wycen bez restartu.
 
 `PRICING_RATES_JSON` zawiera: `version`, `setup_grosze`, `handling_per_plate_grosze`, `machine_per_hour_grosze`, `energy_per_kwh_grosze`, `printer_watts`, `loss_bps`, `margin_bps`, `vat_bps`, `minimum_net_grosze`. Stawki pieniężne są netto w groszach; 100 bps = 1%. Marża jest udziałem w cenie netto, a nie narzutem na koszt. Dane muszą zostać zatwierdzone przez operatora; brak konfiguracji oznacza ocenę indywidualną.
 
-Pomiar slicera jest cache’owany po modelu/formacie/materiale/ustawieniach/ilości/profilach: maks. 64 wpisy, 10 minut. Oryginał jest tymczasowy i usuwany. Wycena oraz snapshot stawek/ceny zakupu zostają w PostgreSQL. Każdy format przechodzi przez izolowaną konwersję do samej siatki STL; ustawienia/G-code klienta nie docierają do slicera. STEP wymaga pojedynczej części z jawnymi jednostkami mm; 3MF zachowuje jednostki i transformacje. Slicer rzeczywiście układa kopie: mierzy pełną płytę, powtarza jej wynik i osobno mierzy resztę. Przygotowanie jest raz na zamówienie, obsługa na faktyczną liczbę płyt. Maks. 512 kopii w pojedynczym układaniu i dwa uruchomienia slicera na zamówienie; daje to wykonalny plan, nie gwarancję optymalnego nesting’u. Opcje jakości/ścian/wypełnienia stosowane są do profili, 100% używa wzoru rectilinear. Kierunek ułożenia oryginału jest zachowany; automatyczne obracanie pod kątem jakości wydruku pozostaje oceną operatora.
+Pomiar slicera jest cache’owany po modelu/formacie/materiale/ustawieniach/ilości/profilach: maks. 64 wpisy, 10 minut. Oryginał i kanoniczna siatka są prywatne przez 24 h i przetrwają restart. `MODEL_STORAGE_DIR` (domyślnie `~/.local/state/rapidmaker/models`) wymaga 0700, pliki mają 0600. Limity łącznie z siatkami: 20 modeli/256 MiB na właściciela, 1000/8 GiB globalnie; wygasłe pliki sprzątane przy uploadzie. Wycena oraz snapshot stawek/ceny zakupu zostają w PostgreSQL. Każdy format przechodzi przez izolowaną konwersję do samej siatki STL; ustawienia/G-code klienta nie docierają do slicera. STEP wymaga pojedynczej części z jawnymi jednostkami mm; 3MF zachowuje jednostki i transformacje. Slicer rzeczywiście układa kopie: mierzy pełną płytę, powtarza jej wynik i osobno mierzy resztę. Przygotowanie jest raz na zamówienie, obsługa na faktyczną liczbę płyt. Maks. 512 kopii w pojedynczym układaniu i dwa uruchomienia slicera na zamówienie; daje to wykonalny plan, nie gwarancję optymalnego nesting’u. Opcje jakości/ścian/wypełnienia stosowane są do profili, 100% używa wzoru rectilinear. Kierunek ułożenia oryginału jest zachowany; automatyczne obracanie pod kątem jakości wydruku pozostaje oceną operatora.
 
 ## API operatora
 
