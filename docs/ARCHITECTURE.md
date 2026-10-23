@@ -36,3 +36,7 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 ## Uruchomienie i granice
 
 [Backend: konfiguracja i kontrakt API](../backend/README.md). Lokalny PostgreSQL 16 na localhost:18434; API:18432, Vite:18430. Jedna `.env`, SOPS i hook przed commitem. Brak Dockerfile/Taskfile/Kubernetes i publicznego wdrożenia. iCloud SMTP/IMAP, trwałe zamówienia, role, logi/metryki Grafany są planem. Kolejność i dowody w [PLAN.md](PLAN.md) oraz [MILESTONES.md](MILESTONES.md).
+
+## Następny projekt: auth
+
+[Auth](auth.md): jednorazowy kod email klienta, passkey admina, sesje PostgreSQL/cookie i własność danych. To projekt, nie aktualna implementacja; obecna sesja operatora i mock klienta nadal działają bez zmian.

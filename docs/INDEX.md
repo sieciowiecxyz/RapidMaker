@@ -25,3 +25,7 @@ W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.
 - [Backend](../backend/README.md)
   - przeczytaj gdy: rozwijasz backend Rust.
   - opis: mapa crate’ów, ich stan i uruchamianie.
+
+- [Auth — projekt](auth.md)
+  - przeczytaj gdy: implementujesz logowanie, sesje lub własność danych.
+  - opis: kod email, passkey admina, PostgreSQL i migracja obecnego auth.
