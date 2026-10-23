@@ -1,10 +1,12 @@
 # Email i powiadomienia — plan implementacji
 
-Status: projekt, implementacja nierozpoczęta. Zakres E1–E4; E3–E4 wymagają trwałych kont, zamówień lub rozmów. B1–B5 pozostają zakończone.
+Status 2026-10-23: E1 PASS. Obecny zakres: mały moduł backendowy i gotowe typy wiadomości, bez zmian frontendu. E2–E4 pozostają integracjami zależnymi od auth, trwałych zamówień lub rozmów. B1–B5 pozostają zakończone.
+
+Dowód E1: lokalna komenda Rust wysłała jedną wiadomość do `void@sieciowiec.xyz`; SMTP zaakceptowało ją, IMAP potwierdził odbiorcę/nadawcę, temat i tekst wiadomości. Build, fmt, Clippy oraz 4 testy notifications i 11 API PASS. Rust produkcyjny +249 LoC, testy +101 (tokei, nowe pliki oraz zmienione lib.rs API/main.rs app, bez pustych linii i komentarzy). Jedna nowa bezpośrednia zależność `lettre`; aktualizacja istniejących rustls-webpki/webpki-roots usuwa 2 zgłoszenia TLS. Audyt całego lockfile nadal zgłasza 9 wcześniejszych podatności w lz4_flex, quick-xml, rsa i zip — nie jest czysty.
 
 ## Cel i stan
 
-Jeden moduł Rust wysyła wiadomości przez iCloud SMTP. `notifications` jest dziś pustym szkieletem, a `backend/run.py` nie przekazuje konfiguracji maila. Ostatni check potwierdził IMAP w osobnym CLI `apple-mail` i uwierzytelnienie SMTP; nie potwierdził doręczenia ani integracji z tym backendem.
+Jeden moduł Rust wysyła wiadomości przez iCloud SMTP. `notifications` zawiera klienta i tekstowe szablony; `backend/run.py` przekazuje konfigurację SMTP. API ma współdzielony Mailer, lokalna komenda `--mail-test` nie wymaga DB ani uruchamiania HTTP. Nie ma jeszcze wywołań z auth/zamówień ani trwałej kolejki.
 
 Na start wysyłka tekstowa: kod logowania, potwierdzenie zamówienia/płatności, zmiana statusu i informacja o nowej wiadomości. Bez marketingu, załączników i silnika szablonów. Odpowiadanie na chat przez email to późniejszy, osobny zakres.
 

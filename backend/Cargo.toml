@@ -22,3 +22,4 @@ rapidmaker-pricing = { path = "crates/pricing" }
 rapidmaker-api = { path = "crates/api" }
 rapidmaker-storage = { path = "crates/storage" }
 rapidmaker-slicer = { path = "crates/slicer" }
+rapidmaker-notifications = { path = "crates/notifications" }

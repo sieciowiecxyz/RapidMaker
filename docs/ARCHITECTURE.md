@@ -13,7 +13,8 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 - `pricing`: całkowitoliczbowe koszty netto w groszach, energia, maszyna, obsługa płyt, przygotowanie raz, rezerwa strat, marża, minimum i VAT. Stawki wymagają jawnej konfiguracji. Wejście to zmierzone sumy partii i liczba płyt, bez ponownego mnożenia przez ilość. Plan układania jest wykonalny, bez gwarancji globalnego optimum.
 - `geometry`: analiza STL/STEP/3MF i GLB. Worker bez sieci/sekretów, 30 s/2 GiB. STEP ograniczony do pojedynczej części w mm. Masa z analizy jest oszacowaniem pełnej bryły, nie wynikiem slicera.
 - `packing`: algorytm układania obwiedni z zapasem, 6 obrotów, katalog kartonów; do 2000 sztuk/30 paczek. Nie obiecuje minimum paczek. Furgonetka sandbox waliduje/wycenia usługi i punkty; aplikacja nie nadaje przesyłek.
-- `orders`, `auth`, `payments`, `shipping`, `notifications`, `observability`: nadal szkielety bez własnej implementacji. Nie oznaczają gotowych kont, maila, webhooków ani monitoringu.
+- `notifications`: klient iCloud SMTP (`lettre`/Tokio/rustls), tekstowe wiadomości, tryby disabled/test/live i ograniczona wysyłka. API udostępnia współdzielony Mailer modułom przez Extension; lokalne `--mail-test` wysyła wyłącznie do skonfigurowanej skrzynki testowej. Bez publicznej trasy wysyłki, IMAP i trwałej kolejki. Plan podłączenia zdarzeń: [email](email.md).
+- `orders`, `auth`, `payments`, `shipping`, `observability`: nadal szkielety bez własnej implementacji. Nie oznaczają gotowych kont, webhooków ani monitoringu.
 
 ## Nowa wycena a istniejący checkout
 

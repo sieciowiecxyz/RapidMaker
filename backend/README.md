@@ -15,7 +15,8 @@ backend/
     ├── pricing/         # czysta kalkulacja kosztów
     ├── geometry/        # analiza STL/STEP/3MF, fixtures
     ├── packing/         # rozmieszczenie w paczkach
-    └── ...              # przyszłe orders/auth/payments/shipping/notifications/observability
+    ├── notifications/   # iCloud SMTP i tekstowe wiadomości
+    └── ...              # przyszłe orders/auth/payments/shipping/observability
 ```
 
 ## Start
@@ -25,7 +26,21 @@ cargo build --locked --manifest-path backend/Cargo.toml
 python backend/run.py
 ```
 
-API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`, `MODEL_STORAGE_DIR`.
+API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`, `MODEL_STORAGE_DIR` oraz konfigurację SMTP poniżej.
+
+## Email
+
+`rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden `Arc<Mailer>` przez Axum Extension. Typy wiadomości: kod logowania, zamówienie, płatność, status, nowa wiadomość. Odbiorca i zdarzenie muszą pochodzić z uprawnionej logiki backendu; nie ma publicznego endpointu wysyłki. Szablony nie oznaczają gotowego auth, zamówień ani chatu.
+
+Konfiguracja w `.env`: `MAIL_MODE=disabled|test|live` (domyślnie disabled), `MAIL_SMTP_HOST=smtp.mail.me.com`, `MAIL_SMTP_PORT=587`, `MAIL_USER`, hasło aplikacji `MAIL_PASSWORD`, dopuszczony alias `MAIL_FROM`, `MAIL_REPLY_TO`, `MAIL_TEST_TO`. STARTTLS jest wymagane. `test` przyjmuje wyłącznie dokładny adres `MAIL_TEST_TO`; niczego nie przekierowuje. Na tym stanowisku używamy `void@sieciowiec.xyz` w trybie testowym. Dane IMAP nie są potrzebne serwerowi do wysyłki.
+
+Po buildzie jedną wiadomość testową wysyła lokalna komenda:
+
+```sh
+MAIL_MODE=test python backend/run.py --mail-test
+```
+
+Komenda nie uruchamia HTTP ani nie wymaga DB. Wynik potwierdza przyjęcie przez SMTP, odbiór sprawdź w skrzynce. Błędy zwracają bezpieczną kategorię, bez adresów/treści/sekretów. Limit 20 s obejmuje kolejkę i SMTP; maks. 2 równoległe wysyłki na instancję. Nie ma automatycznego retry. Szczegóły i dalsze integracje: [plan email](../docs/email.md).
 
 `DATABASE_URL` uruchamia migracje i idempotentny import katalogu. Bez tej zmiennej katalog, zapis modeli i automatyczna wycena nie działają (503); nie ma zastępczej taryfy. Nieprawidłowa konfiguracja DB/cennika zatrzymuje start, bez ujawniania poświadczeń.
 

@@ -2,10 +2,12 @@
 """Run the local sandbox. Read only provider variables; never evaluate shell text."""
 import os
 import shlex
+import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 allowed = {"STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "FURGONETKA_SANDBOX_TOKEN", "FURGONETKA_SENDER_JSON", "DATABASE_URL", "PRICING_RATES_JSON", "ADMIN_API_TOKEN", "MODEL_STORAGE_DIR"}
+allowed.update({"MAIL_MODE", "MAIL_SMTP_HOST", "MAIL_SMTP_PORT", "MAIL_USER", "MAIL_PASSWORD", "MAIL_FROM", "MAIL_REPLY_TO", "MAIL_TEST_TO"})
 for name in (".env",):
     path = root / name
     if not path.exists():
@@ -22,4 +24,4 @@ for name in (".env",):
 
 os.chdir(root)
 binary = root / "backend/target/debug/rapidmaker-api"
-os.execv(binary, [str(binary)])
+os.execv(binary, [str(binary), *sys.argv[1:]])
