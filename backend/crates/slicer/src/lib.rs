@@ -13,7 +13,7 @@ use tokio::sync::Semaphore;
 
 static BUSY: Semaphore = Semaphore::const_new(1);
 const PROFILES: &str = include_str!("../../../data/bambu/profiles.json");
-pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei";
+pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1";
 
 // Profile availability is separate from the operator's hardware/inventory approval.
 static MATERIAL_PROFILES: LazyLock<Result<BTreeMap<String, String>, String>> =
@@ -217,6 +217,8 @@ fn write_profiles(directory: &Path, filament: &str, options: &Options) -> Result
             profile.insert("nozzle_type".into(), serde_json::json!(["hardened_steel"]));
         }
         if file == "process" {
+            // The UI promises automatic supports; include their real time and material.
+            profile.insert("enable_support".into(), Value::String("1".into()));
             // Bambu rejects the standard grid pattern at 100% density.
             if options.infill_percent == 100 {
                 profile.insert(
@@ -502,6 +504,21 @@ mod tests {
             assert!(!material_supported(id));
         }
     }
+    #[test]
+    fn quoted_profiles_include_automatic_supports() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-profile-test-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        let filament = MATERIAL_PROFILES.as_ref().unwrap().get("GFA00").unwrap();
+        write_profiles(&workspace.0, filament, &Options::default()).unwrap();
+        let profile: Value =
+            serde_json::from_slice(&fs::read(workspace.0.join("process.json")).unwrap()).unwrap();
+        assert_eq!(profile["enable_support"], "1");
+        assert_eq!(profile["support_type"], "tree(auto)");
+        assert_eq!(profile["sparse_infill_pattern"], "grid");
+    }
+
     #[test]
     fn rejects_failed_and_empty_results() {
         for json in [

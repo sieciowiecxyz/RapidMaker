@@ -131,6 +131,19 @@ impl Storage {
     }
 
     /// Duplicate IDs fail instead of replacing a previously issued quote.
+    /// Ownership and expiry are part of the immutable server snapshot.
+    pub async fn quote(
+        &self,
+        id: &str,
+        owner: &str,
+        now: i64,
+    ) -> Result<Option<(Value, Value)>, StorageError> {
+        let row = sqlx::query("SELECT request,result FROM quotes WHERE id=$1 AND request->>'owner_hash'=$2 AND (request->>'expires_at')::bigint>$3")
+            .bind(id).bind(owner).bind(now).fetch_optional(&self.pool).await?;
+        row.map(|row| Ok((row.try_get("request")?, row.try_get("result")?)))
+            .transpose()
+    }
+
     pub async fn save_quote(
         &self,
         id: &str,

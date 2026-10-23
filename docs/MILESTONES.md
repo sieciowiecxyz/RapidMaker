@@ -1,5 +1,7 @@
 # Milestones — backend Rapidmaker
 
+Stan 2026-10-23: B1–B5 PASS jako lokalny POC; dowody i ograniczenia w [checkpoincie](milestones/backend.md). Kalibracja przed sprzedażą pozostaje wymagana.
+
 Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check działania, bez dodatkowego review/testujących agentów. Niepotwierdzone kryterium pozostaje otwarte.
 
 ## B1 — Osobny crate API

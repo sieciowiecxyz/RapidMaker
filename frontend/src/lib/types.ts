@@ -1,7 +1,7 @@
 export type Role = 'client' | 'admin';
 export type Session = { id: string; email: string; name: string; role: Role };
 export type DemoScenario = 'normal' | 'empty' | 'error';
-export type MaterialColor = { name: string; hex: string; inStock: boolean };
+export type MaterialColor = { code?: string; name: string; hex: string; inStock: boolean };
 export type Material = {
   id: string;
   name: string;
@@ -85,6 +85,7 @@ export type Quote = {
   deliveryPending?: boolean;
 };
 export type CheckoutQuote = {
+  manual?: boolean;
   field_errors?: Partial<Record<keyof Contact, string>>;
   id: string;
   expires_at: number;

@@ -1,13 +1,14 @@
 use axum::{
     Json, Router,
     extract::{Path, Request, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use rapidmaker_packing::{Delivery, Estimate, EstimateRequest, Part, estimate};
-use rapidmaker_pricing::{PrintLine, SETUP_GROSZE, price_line};
+use rapidmaker_packing::{Delivery, Estimate, EstimateRequest, estimate};
+use rapidmaker_pricing::PrintLine;
+use rapidmaker_storage::Storage;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -171,7 +172,7 @@ async fn points(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct QuoteRequest {
-    parts: Vec<Part>,
+    parts: Vec<super::cart::CartPart>,
     delivery: Delivery,
     contact: Option<Contact>,
     #[serde(default)]
@@ -194,6 +195,7 @@ struct QuoteResponse {
     setup_grosze: u32,
     packaging_grosze: u32,
     production_demo: bool,
+    manual: bool,
     stripe_configured: bool,
     furgonetka_configured: bool,
     reason: Option<String>,
@@ -214,6 +216,8 @@ struct Intent {
     total: u32,
 }
 struct StoredQuote {
+    owner: String,
+    quote_ids: Vec<String>,
     expires_at: u64,
     subtotal: u32,
     offers: Vec<Offer>,
@@ -223,6 +227,7 @@ struct StoredQuote {
     attempted_intent: bool,
 }
 struct App {
+    storage: Option<Storage>,
     client: reqwest::Client,
     stripe_key: Option<String>,
     publishable_key: Option<String>,
@@ -231,7 +236,7 @@ struct App {
     quotes: Mutex<HashMap<String, StoredQuote>>,
 }
 impl App {
-    fn from_env() -> Self {
+    fn from_env(storage: Option<Storage>) -> Self {
         let stripe_key = std::env::var("STRIPE_SECRET_KEY")
             .or_else(|_| std::env::var("STRIPE_TEST_SECRET_KEY"))
             .ok()
@@ -244,6 +249,7 @@ impl App {
             .and_then(|v| serde_json::from_str::<Value>(&v).ok())
             .filter(Value::is_object);
         Self {
+            storage,
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(20))
                 .redirect(reqwest::redirect::Policy::none())
@@ -506,39 +512,33 @@ async fn carrier_offers(
 }
 async fn quote(
     State(app): State<Arc<App>>,
-    Json(mut request): Json<QuoteRequest>,
+    headers: HeaderMap,
+    Json(request): Json<QuoteRequest>,
 ) -> Result<Json<QuoteResponse>, Error> {
-    let has_analysis = request.parts.iter().any(|part| part.analysis_id.is_some());
-    for part in &mut request.parts {
-        if let Some(id) = &part.analysis_id {
-            let model = super::models::resolve(id);
-            part.dimensions_mm = model
-                .as_ref()
-                .map(|m| m.dimensions_mm.map(|v| v.ceil() as u32));
-            part.weight_g = model.and_then(|m| m.weight_g).map(|v| v.ceil() as u32);
-        }
-    }
-    let print_lines: Vec<_> = request
-        .parts
-        .iter()
-        .map(|part| price_line(part.id.clone(), part.quantity))
-        .collect();
+    let cart = super::cart::prepare(
+        app.storage.as_ref(),
+        &headers,
+        request.parts,
+        request.manual,
+    )
+    .await?;
     let delivery = request.delivery;
     let mut packing = estimate(EstimateRequest {
-        parts: request.parts,
+        parts: cart.parts,
         delivery: match delivery {
             Delivery::Courier => Delivery::Courier,
             Delivery::Locker => Delivery::Locker,
             Delivery::Pickup => Delivery::Pickup,
         },
     });
-    if has_analysis {
-        packing.geometry_source = "parsed_model_solid_mass_estimate";
-    }
+    packing.geometry_source = "parsed_model_slicer_mass_upper_bound";
+    let print_lines = cart.lines;
+    let setup_grosze = cart.setup;
+    let print_grosze = cart.total;
     let mut reason = packing.reason.map(str::to_owned);
     let mut field_errors = HashMap::new();
     let mut offers = vec![];
-    if request.manual {
+    if cart.manual {
         reason = Some("Wymagania projektu wymagają ręcznej wyceny przed płatnością.".into());
     } else if packing.status == "estimated" {
         match delivery {
@@ -577,13 +577,8 @@ async fn quote(
             }
         }
     }
-    let expires_at = now() + TTL;
+    let expires_at = cart.expires_at.min(now() + TTL);
     let id = uuid::Uuid::new_v4().to_string();
-    let setup_grosze = SETUP_GROSZE;
-    let print_grosze = print_lines
-        .iter()
-        .map(|line| line.total_grosze)
-        .fold(setup_grosze, u32::saturating_add);
     let packaging_grosze = packing.packaging_grosze;
     let mut quotes = app.quotes.lock().await;
     quotes.retain(|_, v| v.expires_at > now());
@@ -596,6 +591,8 @@ async fn quote(
     quotes.insert(
         id.clone(),
         StoredQuote {
+            owner: cart.owner,
+            quote_ids: cart.quote_ids,
             expires_at,
             subtotal: print_grosze.saturating_add(packaging_grosze),
             offers: offers.clone(),
@@ -615,6 +612,7 @@ async fn quote(
         setup_grosze,
         packaging_grosze,
         production_demo: true,
+        manual: cart.manual,
         stripe_configured: app.stripe_key.is_some(),
         furgonetka_configured: app.carrier_configured(),
         reason,
@@ -687,8 +685,10 @@ fn stripe_form(quote_id: &str, total: u32) -> Vec<(String, String)> {
 }
 async fn session(
     State(app): State<Arc<App>>,
+    headers: HeaderMap,
     Json(request): Json<SessionRequest>,
 ) -> Result<Json<Value>, Error> {
+    let owner = super::cart::owner(&headers)?;
     let key = app.stripe_key.as_ref().ok_or_else(|| {
         error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -703,6 +703,7 @@ async fn session(
             "Nie znaleziono wyceny. Przelicz zamówienie.",
         )
     })?;
+    authorize(quote, &owner)?;
     let total = selected_total(quote, &request.offer_id, now())?;
     if quote.attempted_intent {
         return Err(error(
@@ -732,6 +733,7 @@ async fn session(
         }
         return Ok(Json(json!({"url":existing.url,"session_id":existing.id})));
     }
+    validate_payment(&app, quote).await?;
     let result = bounded_json(
         app.client
             .post(STRIPE)
@@ -786,8 +788,10 @@ fn intent_matches(result: &Value, quote_id: &str, total: u32) -> bool {
 }
 async fn intent(
     State(app): State<Arc<App>>,
+    headers: HeaderMap,
     Json(request): Json<SessionRequest>,
 ) -> Result<Json<Value>, Error> {
+    let owner = super::cart::owner(&headers)?;
     let key = app
         .stripe_key
         .as_ref()
@@ -806,6 +810,7 @@ async fn intent(
             "Nie znaleziono wyceny. Przelicz zamówienie.",
         )
     })?;
+    authorize(quote, &owner)?;
     let total = selected_total(quote, &request.offer_id, now())?;
     if quote
         .attempted_offer
@@ -824,6 +829,7 @@ async fn intent(
         return Ok(Json(json!({"client_secret":existing.client_secret,
             "payment_intent_id":existing.id,"total_grosze":existing.total})));
     }
+    validate_payment(&app, quote).await?;
     let form = [
         ("amount", total.to_string()),
         ("currency", "pln".into()),
@@ -870,12 +876,15 @@ async fn intent(
 }
 async fn intent_status(
     State(app): State<Arc<App>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
+    let owner = super::cart::owner(&headers)?;
     let key = app.stripe_key.as_ref().ok_or_else(unavailable)?;
     let quotes = app.quotes.lock().await;
     let (quote_id, intent) = quotes
         .iter()
+        .filter(|(_, quote)| quote.owner == owner)
         .find_map(|(quote_id, quote)| {
             quote
                 .intent
@@ -909,13 +918,16 @@ async fn intent_status(
         "checkout_status":if paid {"complete"} else if result["status"] == "canceled" {"expired"} else if result["status"] == "processing" {"processing"} else {"open"},"url":""}),
     ))
 }
-// The local intent id is a sandbox capability, like the existing status endpoint.
-// Only return the already-created secret after checking Stripe's current state.
+// Resume requires the model owner cookie and the provider's current payment state.
 async fn resume_intent(
     State(app): State<Arc<App>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
-    let status = intent_status(State(app.clone()), Path(id.clone())).await?.0;
+    let owner = super::cart::owner(&headers)?;
+    let status = intent_status(State(app.clone()), headers, Path(id.clone()))
+        .await?
+        .0;
     if status["status"] == "paid" || status["checkout_status"] != "open" {
         return Err(error(
             StatusCode::CONFLICT,
@@ -925,6 +937,7 @@ async fn resume_intent(
     let quotes = app.quotes.lock().await;
     let existing = quotes
         .values()
+        .filter(|quote| quote.owner == owner)
         .find_map(|quote| quote.intent.as_ref().filter(|intent| intent.id == id))
         .ok_or_else(|| {
             error(
@@ -944,8 +957,10 @@ fn session_matches(result: &Value, quote_id: &str, total: u32) -> bool {
 }
 async fn session_status(
     State(app): State<Arc<App>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Error> {
+    let owner = super::cart::owner(&headers)?;
     let key = app.stripe_key.as_ref().ok_or_else(|| {
         error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -955,6 +970,7 @@ async fn session_status(
     let quotes = app.quotes.lock().await;
     let (quote_id, session) = quotes
         .iter()
+        .filter(|(_, quote)| quote.owner == owner)
         .find_map(|(quote_id, quote)| {
             quote
                 .session
@@ -1037,7 +1053,19 @@ async fn local_only(request: Request, next: Next) -> Response {
     }
     response
 }
-pub fn router() -> Router {
+fn authorize(quote: &StoredQuote, owner: &str) -> Result<(), Error> {
+    if quote.owner != owner {
+        return Err(error(StatusCode::NOT_FOUND, "Nie znaleziono wyceny."));
+    }
+    Ok(())
+}
+async fn validate_payment(app: &App, quote: &StoredQuote) -> Result<(), Error> {
+    let storage = app.storage.as_ref().ok_or_else(unavailable)?;
+    super::cart::validate(storage, &quote.owner, &quote.quote_ids).await?;
+    Ok(())
+}
+
+pub fn router(storage: Option<Storage>) -> Router {
     Router::new()
         .route("/api/shipping/points", post(points))
         .route("/api/checkout/status", get(|State(app): State<Arc<App>>| async move {
@@ -1050,7 +1078,7 @@ pub fn router() -> Router {
         .route("/api/checkout/quote", post(quote))
         .route("/api/checkout/session", post(session))
         .route("/api/checkout/session/{id}", get(session_status))
-        .with_state(Arc::new(App::from_env()))
+        .with_state(Arc::new(App::from_env(storage)))
 }
 pub fn protect(router: Router) -> Router {
     router
@@ -1096,6 +1124,8 @@ mod tests {
     #[test]
     fn server_total_expires_and_rejects_tampering() {
         let quote = StoredQuote {
+            owner: super::super::files::owner(&test_headers()).unwrap(),
+            quote_ids: Vec::new(),
             expires_at: 100,
             subtotal: 4500,
             offers: vec![Offer {
@@ -1108,6 +1138,11 @@ mod tests {
             intent: None,
             attempted_intent: false,
         };
+        assert_eq!(
+            authorize(&quote, "other").unwrap_err().0,
+            StatusCode::NOT_FOUND
+        );
+        assert!(authorize(&quote, &quote.owner).is_ok());
         assert_eq!(selected_total(&quote, "pickup", 99).unwrap(), 4500);
         assert!(selected_total(&quote, "pickup", 100).is_err());
         assert!(selected_total(&quote, "invented", 99).is_err());
@@ -1149,8 +1184,19 @@ mod tests {
         }
         assert!(!Contact::default().valid());
     }
+    fn test_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            format!("rapidmaker_guest={}", "a".repeat(64))
+                .parse()
+                .unwrap(),
+        );
+        headers
+    }
     fn test_app() -> Arc<App> {
         Arc::new(App {
+            storage: None,
             client: reqwest::Client::new(),
             stripe_key: Some("sk_test_local_test".into()),
             publishable_key: Some("pk_test_local_test".into()),
@@ -1165,6 +1211,8 @@ mod tests {
         app.quotes.lock().await.insert(
             "q".into(),
             StoredQuote {
+                owner: super::super::files::owner(&test_headers()).unwrap(),
+                quote_ids: Vec::new(),
                 expires_at: now() + TTL,
                 subtotal: 3900,
                 offers: vec![
@@ -1193,6 +1241,7 @@ mod tests {
         for _ in 0..2 {
             let result = session(
                 State(app.clone()),
+                test_headers(),
                 Json(SessionRequest {
                     quote_id: "q".into(),
                     offer_id: "pickup".into(),
@@ -1205,6 +1254,7 @@ mod tests {
         assert_eq!(
             session(
                 State(app.clone()),
+                test_headers(),
                 Json(SessionRequest {
                     quote_id: "q".into(),
                     offer_id: "other".into()
@@ -1221,6 +1271,7 @@ mod tests {
         assert_eq!(
             session(
                 State(app.clone()),
+                test_headers(),
                 Json(SessionRequest {
                     quote_id: "q".into(),
                     offer_id: "other".into()
@@ -1235,6 +1286,7 @@ mod tests {
         assert_eq!(
             session(
                 State(app),
+                test_headers(),
                 Json(SessionRequest {
                     quote_id: "q".into(),
                     offer_id: "pickup".into()
@@ -1252,6 +1304,8 @@ mod tests {
         app.quotes.lock().await.insert(
             "q".into(),
             StoredQuote {
+                owner: super::super::files::owner(&test_headers()).unwrap(),
+                quote_ids: Vec::new(),
                 expires_at: now() + TTL,
                 subtotal: 3900,
                 offers: vec![
@@ -1283,17 +1337,24 @@ mod tests {
             })
         };
         for _ in 0..2 {
-            let result = intent(State(app.clone()), request()).await.unwrap().0;
+            let result = intent(State(app.clone()), test_headers(), request())
+                .await
+                .unwrap()
+                .0;
             assert_eq!(result["payment_intent_id"], "pi_existing");
             assert_eq!(result["total_grosze"], 3900);
         }
         assert_eq!(
-            session(State(app.clone()), request()).await.unwrap_err().0,
+            session(State(app.clone()), test_headers(), request())
+                .await
+                .unwrap_err()
+                .0,
             StatusCode::CONFLICT
         );
         assert_eq!(
             intent(
                 State(app.clone()),
+                test_headers(),
                 Json(SessionRequest {
                     quote_id: "q".into(),
                     offer_id: "other".into()
@@ -1306,7 +1367,10 @@ mod tests {
         );
         app.quotes.lock().await.get_mut("q").unwrap().expires_at = now() - 1;
         assert_eq!(
-            intent(State(app), request()).await.unwrap_err().0,
+            intent(State(app), test_headers(), request())
+                .await
+                .unwrap_err()
+                .0,
             StatusCode::CONFLICT
         );
     }
@@ -1328,11 +1392,14 @@ mod tests {
             json!({"parts":[{"id":"part","quantity":3}],"delivery":"pickup","manual":true}),
         )
         .unwrap();
-        let result = quote(State(app.clone()), Json(request)).await.unwrap().0;
+        let result = quote(State(app.clone()), test_headers(), Json(request))
+            .await
+            .unwrap()
+            .0;
         assert!(result.offers.is_empty());
         assert!(result.reason.is_some());
-        assert_eq!(result.print_grosze, 8700);
-        assert_eq!(result.setup_grosze, 1500);
+        assert_eq!(result.print_grosze, 0);
+        assert_eq!(result.setup_grosze, 0);
         assert_eq!(
             result.print_grosze + result.packaging_grosze,
             app.quotes.lock().await.get(&result.id).unwrap().subtotal
@@ -1341,9 +1408,12 @@ mod tests {
             json!({"parts":[{"id":"part","quantity":1000}],"delivery":"pickup"}),
         )
         .unwrap();
-        let result = quote(State(app), Json(request)).await.unwrap().0;
-        assert_eq!(result.offers.len(), 1);
-        assert_eq!(result.offers[0].price_grosze, 0);
-        assert_eq!(result.print_grosze, 2_401_500);
+        let result = quote(State(app), test_headers(), Json(request))
+            .await
+            .unwrap()
+            .0;
+        assert!(result.offers.is_empty());
+        assert!(result.manual);
+        assert_eq!(result.print_grosze, 0);
     }
 }

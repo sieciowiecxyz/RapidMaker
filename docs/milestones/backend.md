@@ -1,52 +1,30 @@
 # Checkpoint backendu
 
-2026-10-23. Aktywny B5. Baza bieżącego kroku panelu: `9f7101d`; stary plan M0–M6 pozostaje w historii Git.
+2026-10-23. B1–B5 ukończone jako lokalny POC. Dawny plan M0–M6 i szczegóły kolejnych kroków są w historii Git.
 
 ## Stan
 
-- B1/B2 PASS: osobny crate API; PostgreSQL/SQLx, katalog 49 materiałów i 314 kolorów, trwałe snapshoty wycen.
-- B3 PASS POC: STL/STEP/STP/3MF → kanoniczny STL w izolowanym workerze → izolowany Bambu Studio. STEP wymaga pojedynczej części w mm; 3MF zachowuje jednostki/transformacje i pomija ustawienia/G-code klienta.
-- B4 PASS POC: rzeczywiste układanie kopii, pomiar pełnej płyty, powtarzanie identycznych płyt i osobny pomiar reszty. Ilość 1–1000, draft/standard/fine, 2–8 ścian, wypełnienie 5–100%. Koszt opiera się na zmierzonych sumach i liczbie płyt, przygotowanie raz.
-- Profile materiałów wybierane z zaufanego snapshotu: 41 ma profil P1P 0,4 mm po wykluczeniu podpór. Nie oznacza to fizycznej kwalifikacji wszystkich materiałów; cena, magazyn i zatwierdzenie sprzętu są obowiązkiem operatora. Faktycznie uruchomiono PLA Basic/PETG HF/ABS.
-- B5 częściowo: chronione Bearer API operatora tworzy/edytuje materiały, kolory i wersjonowane stawki. Porównanie sekretu w stałym czasie. Import zachowuje zmiany operatora; cennik PostgreSQL ma pierwszeństwo przed `.env` bez restartu.
+- B1: `app → api → moduły`; jeden router, logika obliczeń poza HTTP.
+- B2: PostgreSQL/SQLx, 49 materiałów/314 kolorów Bambu, wersjonowany cennik i niezmienne snapshoty. Import zachowuje ceny, magazyn i dopuszczenia operatora.
+- B3: STL/STEP/3MF → prywatny oryginał/kanoniczny STL → izolowany Bambu Studio. STEP: pojedyncza część w mm; 3MF: jednostki/transformacje, bez ustawień/G-code klienta. Podpory automatyczne z zaufanego presetu są wliczone. Prywatne pliki 24 h; cookie właściciela, limity liczby/miejsca.
+- B4: rzeczywiste partie 1–1000 kopii, pełne płyty + osobno reszta, maks. dwa przebiegi CLI. Jakość/ściany/wypełnienie wpływają na slicer. Wiele różnych modeli ma osobne partie. Koszty części sumowane przed jednym przygotowaniem, stratami, marżą, minimum i VAT. Cena w groszach, bez stałej taryfy/sztukę.
+- B5: panel operatora zapisuje DB przez sesję serwerową. Konfigurator/koszyk używają rzeczywistego katalogu i snapshotów. Checkout sprawdza właściciela, ilość/model, ważność 10 min, wersje i dostępność; pakowanie używa wymiarów serwera i ostrożnej masy slicera. Stripe dostaje kwotę serwera. Brak danych/nieobsługiwane wymagania → ręczna ocena bez płatnej oferty.
 
 ## Dowody
 
-- PASS build, Clippy zmienionych crate’ów i fmt. Testy API/pricing/storage przechodzą; geometria 14 testów; rzeczywisty slicer potwierdził ustawienia i partie, w tym 1000 kopii na 9 płytach (8 × 120 + 40), dwa uruchomienia CLI.
-- PASS HTTP na osobnej tymczasowej bazie: STL, dwa STEP, 3MF oraz transformowany model w cm. Dodane ustawienia i G-code w 3MF nie zmieniły pomiaru. Uszkodzony STL, ZIP traversal, niedozwolone jednostki STEP i infill101% są odrzucane.
-- PASS API operatora: brak/błędny token → 401; dodawanie materiału/koloru, edycja kosztu i magazynu; błędny kolor → 400; zmiana ceny bez nowej wersji → 409. Nowy cennik zmienia nowe wyceny, nie poprzednie snapshoty.
-- PASS restart/import: 12 wycen, własny materiał i zmiany operatora przetrwały restart; ceny zakupu są ukryte w publicznym katalogu.
-- Przykład WYŁĄCZNIE na stawkach testowych, koszt zakupu 80 zł netto/kg: cube20mm 1/2/10/100 sztuk około 19,53/20,10/25,98/96 zł brutto; wszystkie te partie mieszczą się na jednej płycie. Układanie slicera może dać nieco inny czas przy nowym przebiegu; wydana wycena pozostaje snapshotem. To nie zatwierdzony cennik ani dowód rentowności. Tymczasowa baza została usunięta.
-- Normalny API restartowany z `.env` i PostgreSQL. Losowy sekret operatora jest lokalnie w `.env`/SOPS, bez ujawniania wartości. Nie zapisano fikcyjnych cen, magazynu ani cennika produkcyjnego.
-- NOT RUN: kalibracja rzeczywistych wydruków, całościowy pentest, frontend nowej wyceny i checkout; UI nie zmieniano.
+- W poprzednich krokach: formaty STL, dwa STEP, 3MF i transformowany model w cm; uszkodzenia/ZIP traversal/obce jednostki odrzucone. Slicer 1/2/10/100/1000 kopii, 1000 na 9 płytach; PLA Basic/PETG HF/ABS. Import/restart zachowały konfigurację operatora i snapshoty. Brak/błędny token i obcy Origin odrzucone; browser mock nie nadaje admina.
+- Bieżący przebieg HTTP na usuniętej potem bazie testowej: upload → slicer → koszt → koszyk. Dwie kopie 20,12 zł; dwie takie pozycje razem 24,08 zł zamiast 40,24 zł (WYŁĄCZNIE stawki testowe). Pozycje + przygotowanie sumują się dokładnie. Zmieniona ilość, obca sesja, podana masa klienta i zmieniona dostępność odrzucone. Modele przetrwały restart, wygasłe pliki sprzątane; 0700/0600.
+- Chromium bez stubów HTTP: upload STL → materiał/kolor/jakość/wytrzymałość → cena slicera → koszyk → prawdziwy Address Element Stripe → podsumowanie → utworzenie Stripe Checkout test. Sesję zamknięto bez płatności. Obejrzano desktop/mobile; bez poziomego overflow. Ładowanie iframe Stripe wymaga widoczności pola.
+- Furgonetka sandbox: trzy oferty kuriera dla paczki wyliczonej z wyników slicera. Bez nadania przesyłki.
+- PaymentIntent Stripe test: kwota dokładnie równa cenie serwera + opakowanie/dostawa; retry zwraca tę samą płatność. Obcy właściciel nie może tworzyć/czytać/wznawiać; intent anulowano bez obciążenia.
+- PASS: Rust build, fmt, Clippy zmienionych crate’ów; 11 testów API, 4 pricing i 4 slicer. Ciężki test slicera pozostawiono ignored; rzeczywisty przebieg sprawdzono przez HTTP. Frontend build/svelte-check: 0 błędów/ostrzeżeń. Test adaptera ze stubami osobno potwierdził 1000 sztuk i cache; nie zastępuje powyższego przebiegu rzeczywistego.
 
-Rust LOC: 4749 → 5555 (+806), łącznie z testami inline, bez komentarzy i pustych linii. Baseline zmierzony z `git archive HEAD`. Jedyna nowa bezpośrednia zależność: `subtle` do porównania sekretu w stałym czasie (już obecna w lockfile).
+Rust LOC tego kroku: 6266 → 6707 (+441), tokei z baseline `git archive HEAD`, razem z testami inline, bez pustych linii/komentarzy. Nowy `api/cart.rs` odpowiada za własność i składanie wycen; brak nowych zależności.
 
-## Dalej — B5
+## Ograniczenia i następny zakres
 
-1. PASS: sesja operatora i formularze materiałów/kolorów/cennika korzystają z API. Klucz wymieniany jest na cookie HttpOnly; nie trafia do bundle/localStorage. Browser mock nie autoryzuje zapisu DB.
-2. Konfigurator korzysta z katalogu i nowego silnika zamiast starych mocków/taryfy; przechowuje pliki prywatnie z jasną własnością i limitami.
-3. Wynik wyceny wiąże ilość/ustawienia/model z właściwą masą/wymiarami do pakowania, ofertą Furgonetki i kwotą Stripe. Zmiana koszyka unieważnia ofertę.
-4. Potrzebne rzeczywiste ceny zakupu i zatwierdzenie kosztów/sprzętu przed sprzedażą; nie zastępować ich domyślnym kosztem slicera.
+Ceny zakupu i zatwierdzenie sprzętu muszą pochodzić od operatora; normalnej bazie nie wpisano fikcyjnych cen ani stanów magazynu. 41 profili P1P nie oznacza fizycznej kwalifikacji wszystkich materiałów. Kalibracja kosztów/próbne wydruki przed sprzedażą.
 
-Niezależne dopiski użytkownika w `AGENTS.md` i nieśledzony `result.json` zachować.
+Oferty i płatniczy stan API są w RAM; trwałe zamówienia/webhooki, kolejka zadań, konta/role, chat/email i monitoring pozostają kolejnym zakresem. Koszyk i panele zamówień są prototypami. Masa pakowania obejmuje odpady/podpory, więc jest ostrożnym szacunkiem, nie dokładną masą gotowej części. Nie ma optymalizacji wspólnej płyty różnych modeli. Publiczne wdrożenie wymaga HTTPS/Secure i osobnego przygotowania.
 
-## B5 — panel operatora, 2026-10-23
-
-- PASS: rzeczywiste logowanie przez HttpOnly/SameSite cookie, sprawdzanie przy zapisie, wylogowanie unieważnia dostęp. Logowanie klienta w prototypie nadal działa; sfałszowana rola admina w localStorage nie daje panelu ani API. Brak/błędny klucz, fałszywe cookie, obcy Origin i logowanie zwykłym formularzem HTML są odrzucane; limit prób logowania działa.
-- PASS: UI dodaje materiał i własny kolor RGBA; zapisuje cenę zakupu 80,00 zł jako 8000 gr, dopuszczenie materiału, dostępność koloru i wersjonowany cennik; ponowne wczytanie odczytuje PostgreSQL. Cały zapis odbył się na usuniętej potem bazie testowej. Normalny katalog/cennik nie dostały fikcyjnych wartości.
-- PASS: TypeScript/Svelte + Vite build, Rust build/Clippy. Krótki przebieg Chromium i screenshoty desktop/mobile; bez poziomego overflow. Poprawiono za duży tekst cen i podwójne separatory wynikające z kolizji CSS.
-- Znaleziono i naprawiono rzeczywisty błąd: Svelte interpolował `{8}` w atrybucie pattern koloru, blokując zapis poprawnego RGBA. Regresja `operator.spec.ts` przechodzi; testuje formularz z HTTP stubem, nie backendowe uprawnienia.
-- Nadal otwarte: konfigurator/koszyk/checkout nowej wyceny, prywatne modele, masa z slicera do dostawy, powiązanie kwoty Stripe i migracja starych mockowych E2E. Pozostałe konta/panele zamówień/chat są prototypami, nie danymi PostgreSQL.
-
-Rust LOC bieżącego kroku: 5555 → 5671 (+116), razem z testami inline, bez komentarzy i pustych linii. Nowe pliki frontendowe: adapter sesji, adapter operatora i regresja formularza; brak nowych zależności.
-
-## B5 — prywatne modele, 2026-10-23
-
-- PASS: `POST /api/models` zapisuje oryginał i kanoniczną siatkę na prywatnym dysku, metadane i hash sesji w PostgreSQL. Cookie właściciela HttpOnly/SameSite; brak sesji → 401, obcy/wygasły model → 404. Limity uploadu, miejsca i liczby modeli obejmują siatki; brak DB nie daje pozornego zapisu.
-- Nowa wycena przyjmuje JSON z ID modelu i ustawieniami zamiast ponownego przesyłania pliku. Pracuje na zachowanej siatce; snapshot wiąże właściciela, model, ilość, opcje i wersje danych. Nadal `payable:false` do podłączenia checkoutu.
-- PASS: krótki HTTP na osobnej tymczasowej bazie: upload STL → rzeczywisty slicer dwóch kopii → zapis ceny; odczyt/pobranie tylko przez właściciela; restart zachowuje model i wycenę; wygasły model jest niedostępny i sprzątany przy kolejnym uploadzie. Nieudany upload nie zostawia plików; katalogi/pliki mają 0700/0600. Baza testowa usunięta, normalny API przywrócony bez fikcyjnych cen.
-- PASS: build, Clippy zmienionego API, dwie regresje sesji/nazw plików oraz dwa testy konwersji geometrii. NOT RUN: pełny frontend/checkout, test obciążeniowy limitów dysku, odzyskiwanie osieroconych plików po awarii procesu. UI nie zmieniano.
-- Dalej: rzeczywisty katalog i snapshoty w konfiguratorze; poprawna suma wielu modeli z jedną opłatą przygotowania; własność/ważność wyceny przy pakowaniu i płatności. B5 pozostaje otwarte.
-
-Rust LOC: 5671 → 6266 (+595), pomiar tokei z baseline `git archive HEAD`, razem z testami inline, bez pustych linii/komentarzy. Nowe moduły: prywatny upload/odczyt i SQL modeli, migracja 0003. Zależność `percent-encoding` (już w lockfile) bezpiecznie koduje nazwy pobieranych plików i odczytuje nagłówek uploadu.
+NOT RUN: realne obciążenie karty, nadanie przesyłki, pełny pentest/obciążenie/odtwarzanie po awarii. Starsze mockowe `flows.spec.ts` wymagają migracji; nie raportowano całego E2E jako PASS. Zachowano cudze dopiski `AGENTS.md` i nieśledzony `result.json`.

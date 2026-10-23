@@ -193,7 +193,7 @@ const defaults = (strength: PrintModel['strength'] = 'standard'): PrintSettings 
   return {
     wallCount: preset.wallCount,
     infill: preset.infill,
-    pattern: 'gyroid',
+    pattern: 'grid',
     orientation: 'auto',
     supports: 'auto',
     finish: 'standard',
@@ -697,6 +697,17 @@ export async function getDeliveryOptions(): Promise<DeliveryOption[]> {
         },
       ];
 }
+// Drafts stay local; the server supplies every payable amount.
+export function saveQuote(quote: Quote, cart: Cart): Quote {
+  if (
+    JSON.stringify([cart.models, cart.delivery, cart.postalCode]) !==
+    JSON.stringify([state.cart.models, state.cart.delivery, state.cart.postalCode])
+  )
+    throw new Error('Koszyk zmienił się podczas wyceny. Przelicz go ponownie.');
+  state.cart.quote = { ...quote, fingerprint: fingerprint(), version: state.revision };
+  save();
+  return clone(state.cart.quote);
+}
 export async function quoteCart(): Promise<Quote> {
   await wait();
   if (!state.cart.models.length) throw new Error('Dodaj co najmniej jeden model.');
@@ -855,7 +866,11 @@ export async function reorder(orderId: string): Promise<Cart> {
     quote: null,
   };
   save();
-  try { localStorage.setItem('rapidmaker.storefront.checkout-ready', '1'); } catch { /* Optional draft restore. */ }
+  try {
+    localStorage.setItem('rapidmaker.storefront.checkout-ready', '1');
+  } catch {
+    /* Optional draft restore. */
+  }
   return clone(state.cart);
 }
 export async function sendMessage(orderId: string, text: string): Promise<Order> {

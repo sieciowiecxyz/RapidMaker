@@ -27,7 +27,7 @@ python backend/run.py
 
 API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `ADMIN_API_TOKEN`, `MODEL_STORAGE_DIR`.
 
-`DATABASE_URL` uruchamia migracje i idempotentny import katalogu. Bez tej zmiennej stary sandbox działa, nowe endpointy zwracają 503. Nieprawidłowa konfiguracja DB/cennika zatrzymuje start, bez ujawniania poświadczeń.
+`DATABASE_URL` uruchamia migracje i idempotentny import katalogu. Bez tej zmiennej katalog, zapis modeli i automatyczna wycena nie działają (503); nie ma zastępczej taryfy. Nieprawidłowa konfiguracja DB/cennika zatrzymuje start, bez ujawniania poświadczeń.
 
 Lokalny PostgreSQL 16: rootless Podman, kontener i wolumen `rapidmaker-catalog-postgres`, port `127.0.0.1:18434`. Start istniejącego kontenera: `podman start rapidmaker-catalog-postgres`. Dane dostępu są prywatne, nie w README. Po sklonowaniu potrzebujesz własnego PostgreSQL i odpowiedniego `DATABASE_URL`.
 
@@ -40,7 +40,7 @@ Linux + bubblewrap + prlimit są wymagane dla parsera i slicera. Slicer korzysta
 - `GET /api/models/{id}` i `/api/models/{id}/source`: metadane i pobranie oryginału, tylko z cookie właściciela. Brak sesji → 401, obcy/wygasły model → 404.
 - `POST /api/quotes/estimate`: JSON `{"model_id":"ID z uploadu","material_id":"GFA00","color_code":"10300","options":{"quantity":1,"quality":"standard","wall_loops":2,"infill_percent":15}}`. Wymaga cookie właściciela. Ilość 1–1000, jakość draft/standard/fine, 2–8 ścian, 5–100% wypełnienia. Wynik: pomiar partii, koszt netto/VAT/brutto i ID niezmiennego snapshotu. Nie uruchamia płatności.
 
-Automatyczna cena wymaga zatwierdzonego materiału, dodatniej ceny zakupu netto/kg i dostępnego koloru w DB oraz `PRICING_RATES_JSON`. Import nigdy ich nie wymyśla ani nie nadpisuje. Zapisy operatora korzystają z chronionego API poniżej. Rola z browser mocka nie daje uprawnień. Cennik w PostgreSQL ma pierwszeństwo przed konfiguracją startową `.env`; zmiana działa dla nowych wycen bez restartu.
+Automatyczna cena wymaga zatwierdzonego materiału, dodatniej ceny zakupu netto/kg i dostępnego koloru w DB oraz skonfigurowanych stawek (panel operatora lub `PRICING_RATES_JSON`). Import nigdy ich nie wymyśla ani nie nadpisuje. Zapisy operatora korzystają z chronionego API poniżej. Rola z browser mocka nie daje uprawnień. Cennik w PostgreSQL ma pierwszeństwo przed konfiguracją startową `.env`; zmiana działa dla nowych wycen bez restartu.
 
 `PRICING_RATES_JSON` zawiera: `version`, `setup_grosze`, `handling_per_plate_grosze`, `machine_per_hour_grosze`, `energy_per_kwh_grosze`, `printer_watts`, `loss_bps`, `margin_bps`, `vat_bps`, `minimum_net_grosze`. Stawki pieniężne są netto w groszach; 100 bps = 1%. Marża jest udziałem w cenie netto, a nie narzutem na koszt. Dane muszą zostać zatwierdzone przez operatora; brak konfiguracji oznacza ocenę indywidualną.
 
@@ -59,9 +59,13 @@ Skrypty używają `Authorization: Bearer <ADMIN_API_TOKEN>`; panel korzysta z se
 
 Import aktualizuje źródłowe metadane materiału, zachowując konfigurację operatora i dodane kolory. Snapshoty wcześniejszych wycen nie są przeliczane ani nadpisywane.
 
-## Istniejący checkout
+## Checkout
 
-`api/checkout.rs` nadal obsługuje Stripe/Furgonetkę i starą taryfę demonstracyjną 24 zł/szt. + 15 zł przygotowania. Nie korzysta jeszcze z nowych wyników slicera. Jego analizy/oferty/sesje pozostają w RAM; restart je usuwa. Panel materiałów/cennika i logowanie operatora korzystają z backendu. Konta klientów, zamówienia, produkcja i chat nadal mają mocki; ich stare widoki admina nie są częścią działającego panelu konfiguracji. Nie traktuj nowego endpointu jako gotowej sprzedaży.
+`POST /api/checkout/quote`: JSON `{parts:[{id,quantity,analysis_id,quote_id}],delivery,contact,manual}`. `analysis_id` to ID prywatnego modelu, `quote_id` to snapshot slicera; `id` identyfikuje pozycję koszyka. Cookie właściciela jest wymagane. Wymiary i masa klienta nie są akceptowane. Cena zakupu, dostępność, wersja stawek/profilu, model i ilość muszą nadal odpowiadać snapshotowi, ważnemu 10 min; inaczej 409 i ponowna wycena. Zmienione ustawienia wymagają nowego ID wyceny.
+
+Koszty części sumowane przed naliczeniem jednej opłaty przygotowania, marży, minimum i VAT. Podział brutto między pozycje zachowuje dokładną sumę groszy. Pakowanie bierze wymiary modelu i masę slicera na sztukę, łącznie z odpadami/podporami (konserwatywny szacunek). Różne modele mają oddzielne partie; brak optymalizacji wspólnej płyty. Nieobsługiwane wymagania/brak snapshotu → ręczna ocena bez płatnej oferty.
+
+Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utworzenie, status i wznowienie płatności sprawdzają właściciela; przed utworzeniem sprawdzamy też ważność wyceny i dostępność. Oferty i płatniczy stan API nadal są w ograniczonym RAM; restart wymaga nowej oferty (nie ponownego uploadu ważnego modelu). Trwałe zamówienia, webhooki i konta klientów pozostają poza tym POC.
 
 ## Krótkie sprawdzenie
 

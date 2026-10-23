@@ -18,16 +18,12 @@ use std::{
     io::{Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tokio::sync::Semaphore;
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
-const MAX_MODELS: usize = 128;
-const MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 static BUSY: Semaphore = Semaphore::const_new(1);
-static MODELS: OnceLock<Mutex<HashMap<String, (Instant, ModelAnalysis)>>> = OnceLock::new();
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelAnalysis {
@@ -37,13 +33,6 @@ pub struct ModelAnalysis {
     pub geometry_source: String,
     pub weight_source: String,
     pub reason: Option<String>,
-}
-
-/// Only this server's geometry can authorize shipping for an uploaded model.
-pub fn resolve(id: &str) -> Option<ModelAnalysis> {
-    let mut models = MODELS.get_or_init(Default::default).lock().ok()?;
-    models.retain(|_, (created, _)| created.elapsed() < MAX_AGE);
-    models.get(id).map(|(_, analysis)| analysis.clone())
 }
 
 pub fn router() -> Router {
@@ -157,23 +146,6 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak wyniku analizy."))?;
     let mut result: ModelAnalysis = serde_json::from_slice(&bytes).map_err(|_| error(StatusCode::UNPROCESSABLE_ENTITY, "Nieobsługiwana geometria lub uszkodzony model. Wyeksportuj poprawny STL, STEP albo 3MF."))?;
     result.id = format!("analyzed_{}", uuid::Uuid::new_v4());
-    let mut models = MODELS.get_or_init(Default::default).lock().map_err(|_| {
-        error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Nie można zachować analizy.",
-        )
-    })?;
-    models.retain(|_, (created, _)| created.elapsed() < MAX_AGE);
-    if models.len() >= MAX_MODELS {
-        let oldest = models
-            .iter()
-            .min_by_key(|(_, (created, _))| *created)
-            .map(|(id, _)| id.clone());
-        if let Some(id) = oldest {
-            models.remove(&id);
-        }
-    }
-    models.insert(result.id.clone(), (Instant::now(), result.clone()));
     Ok(Json(result))
 }
 

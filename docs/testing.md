@@ -22,7 +22,7 @@ Nie kasuj działających testów bez powodu. Zmieniony kontrakt wymaga dopasowan
 
 Frontend: `frontend/`, port 18430; preview E2E: 18431. Vite przekazuje `/api` do `backend/` na localhost:18432. API uruchom przed testami integracji. Szczegóły konfiguracji: [README frontendu](../frontend/README.md).
 
-Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Stary checkout ma taryfę testową i masę szacowaną. Nowy endpoint wyceny używa rzeczywistego slicera oraz PostgreSQL; jego test wymaga osobnych, jawnych stawek testowych i nie potwierdza rentowności. Panele, login i prośby o wycenę pozostają mockami. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
+Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Konfigurator/checkout używają slicera i PostgreSQL; integracja wymaga osobnej bazy i jawnych stawek testowych, nie potwierdza rentowności. Materiały/cennik i sesja operatora są rzeczywiste; konta klientów, zamówienia/chat i prośby o ręczną wycenę pozostają prototypami. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
 
 W `PLAN.md` zapisz krótko, co sprawdzono i czego nie. Nie wklejaj sekretów, modeli klientów ani dużych logów. Testy bezpieczeństwa kieruj tylko do własnego localhosta; dostawców sprawdzaj zwykłymi wywołaniami sandbox API. Publiczny deployment pozostaje poza zakresem.
 

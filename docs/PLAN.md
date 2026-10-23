@@ -1,7 +1,8 @@
 # Rapidmaker — backend i automatyczna wycena
 
 Mode: goal
-Active: B5
+Status: B1–B5 zrealizowane jako lokalny POC
+Active: brak — następny zakres wymaga osobnego planu
 
 ## Cel
 
@@ -10,7 +11,7 @@ Klient dodaje STL, STEP lub 3MF, wybiera materiał, kolor, jakość i ilość. S
 ## Decyzje
 
 - Rust: `app → api → moduły`. `app` uruchamia serwer; `api` zbiera trasy, walidację i uprawnienia. Obliczenia pozostają w `geometry`, `slicer`, `pricing`, `packing`; SQL w `storage`. Bez mikroserwisów, Redis i brokera.
-- PostgreSQL + SQLx: materiały, kolory, konfiguracja cen, zadania i niezmienne wyniki wycen. Prywatne modele/presety na dysku; w bazie identyfikatory i wersje. Nie odtwarzamy stanu z przeglądarki.
+- PostgreSQL + SQLx: materiały, kolory, konfiguracja cen i niezmienne wyniki wycen; trwała kolejka zadań w późniejszym zakresie. Prywatne modele/presety na dysku; w bazie identyfikatory i wersje. Nie odtwarzamy stanu z przeglądarki.
 - Źródło katalogu: lokalne Bambu Studio, snapshot w `backend/data/bambu/`. 49 materiałów i 314 kolorów. Import zachowuje własne ceny, magazyn i dopuszczenia; nie uznaje kosztu slicera za cenę netto PLN.
 - Sprzęt: Bambu Lab P1P, dysza hardened steel 0,4 mm. Profile deklarujące zgodność wymagają zatwierdzenia dla faktycznego ekstrudera/obudowy. Materiały podporowe nie są osobnym produktem.
 - Slicer: kontrolowany proces Bambu Studio, nasze profile po rozwiązaniu dziedziczenia i dołączeń; bez sieci i sekretów, z limitami czasu/pamięci/plików oraz ograniczoną równoległością. Ustawienia klienta i G-code nie sterują procesem.
@@ -27,3 +28,7 @@ Po tym zakresie pozostają: trwałe zamówienia i webhooki Stripe, konta/role, c
 ## Sposób pracy
 
 KISS, minimum kodu i zależności. Workerzy implementują niezależne moduły; główny agent integruje. Krótki build i sprawdzenie zmienionej funkcji, bez Astry i szerokich testów przy każdej zmianie. Nie omijamy izolacji, autoryzacji ani kontroli kwot. Stan i dowody: [checkpoint](milestones/backend.md).
+
+## Potwierdzenie POC
+
+Działają katalog/panel operatora, prywatne modele, slicer, koszt wielu części z jednym przygotowaniem oraz konfigurator → adres Stripe → podsumowanie → Stripe Checkout test. Furgonetka zwróciła trzy oferty; testowa płatność miała kwotę serwera. Build, wybrane testy i desktop/mobile PASS. Bez realnej opłaty/nadania. Nie potwierdzono kalibracji, produkcyjnych zamówień/webhooków ani publicznego bezpieczeństwa. Dowody i ograniczenia: [checkpoint](milestones/backend.md).

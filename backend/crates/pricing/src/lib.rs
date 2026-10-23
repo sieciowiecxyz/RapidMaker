@@ -1,8 +1,5 @@
-//! Integer cost calculation; the old checkout tariff remains until its adapter is replaced.
+//! Integer costs and aggregate order pricing from measured slicer results.
 use serde::{Deserialize, Serialize};
-
-pub const SETUP_GROSZE: u32 = 1500;
-const UNIT_GROSZE: u32 = 2400;
 
 #[derive(Serialize)]
 pub struct PrintLine {
@@ -10,15 +7,6 @@ pub struct PrintLine {
     pub quantity: u32,
     pub unit_grosze: u32,
     pub total_grosze: u32,
-}
-
-pub fn price_line(model_id: String, quantity: u32) -> PrintLine {
-    PrintLine {
-        model_id,
-        quantity,
-        unit_grosze: UNIT_GROSZE,
-        total_grosze: quantity.saturating_mul(UNIT_GROSZE),
-    }
 }
 
 /// All rates are net PLN grosze. No guessed purchase prices or implicit defaults.
@@ -37,7 +25,7 @@ pub struct Rates {
     pub minimum_net_grosze: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Price {
     pub filament_grosze: u32,
     pub machine_grosze: u32,
@@ -49,6 +37,19 @@ pub struct Price {
     pub net_grosze: u32,
     pub vat_grosze: u32,
     pub gross_grosze: u32,
+}
+
+pub struct OrderPart<'a> {
+    pub model_id: &'a str,
+    pub quantity: u32,
+    pub price: &'a Price,
+}
+
+pub struct OrderPrice {
+    pub price: Price,
+    pub lines: Vec<PrintLine>,
+    /// Customer-facing gross allocation, not the configured net setup cost.
+    pub setup_grosze: u32,
 }
 
 impl Rates {
@@ -98,12 +99,83 @@ pub fn calculate(
         3_600_000,
     );
     let handling = u128::from(plates) * u128::from(rates.handling_per_plate_grosze);
+    finish(filament, machine, energy, handling, rates)
+}
+
+/// Combine measured costs; per-model setup, minimum and markup are discarded.
+/// The gross total is apportioned by cumulative cost weights so rounding cannot
+/// create or lose money. A minimum with no cost base goes to the first line.
+pub fn combine(parts: &[OrderPart<'_>], rates: &Rates) -> Result<OrderPrice, &'static str> {
+    rates.validate()?;
+    if parts.is_empty()
+        || parts.len() > 1000
+        || parts
+            .iter()
+            .any(|part| part.model_id.is_empty() || !(1..=1000).contains(&part.quantity))
+    {
+        return Err("Invalid order parts");
+    }
+    let sum =
+        |field: fn(&Price) -> u32| parts.iter().map(|part| u128::from(field(part.price))).sum();
+    let price = finish(
+        sum(|p| p.filament_grosze),
+        sum(|p| p.machine_grosze),
+        sum(|p| p.energy_grosze),
+        sum(|p| p.handling_grosze),
+        rates,
+    )?;
+    let weights: Vec<u128> = parts
+        .iter()
+        .map(|part| {
+            let p = part.price;
+            u128::from(p.filament_grosze)
+                + u128::from(p.machine_grosze)
+                + u128::from(p.energy_grosze)
+                + u128::from(p.handling_grosze)
+        })
+        .collect();
+    let base = weights.iter().sum::<u128>() + u128::from(rates.setup_grosze);
+    let gross = u128::from(price.gross_grosze);
+    let mut cumulative = u128::from(rates.setup_grosze);
+    let setup_grosze = (gross * cumulative).checked_div(base).unwrap_or(0) as u32;
+    let mut allocated = setup_grosze;
+    let lines = parts
+        .iter()
+        .zip(weights)
+        .map(|(part, weight)| {
+            cumulative += weight;
+            let through_line = (gross * cumulative).checked_div(base).unwrap_or(gross) as u32;
+            let total_grosze = through_line - allocated;
+            allocated = through_line;
+            PrintLine {
+                model_id: part.model_id.to_owned(),
+                quantity: part.quantity,
+                unit_grosze: total_grosze.div_ceil(part.quantity),
+                total_grosze,
+            }
+        })
+        .collect();
+    Ok(OrderPrice {
+        price,
+        lines,
+        setup_grosze,
+    })
+}
+
+fn finish(
+    filament: u128,
+    machine: u128,
+    energy: u128,
+    handling: u128,
+    rates: &Rates,
+) -> Result<Price, &'static str> {
     let base = filament + machine + energy + handling + u128::from(rates.setup_grosze);
-    let loss = ceil(base * u128::from(rates.loss_bps), 10_000);
+    let loss = (base * u128::from(rates.loss_bps)).div_ceil(10_000);
     let cost = base + loss;
-    let net = ceil(cost * 10_000, u128::from(10_000 - rates.margin_bps))
+    let net = (cost * 10_000)
+        .div_ceil(u128::from(10_000 - rates.margin_bps))
         .max(u128::from(rates.minimum_net_grosze));
-    let vat = ceil(net * u128::from(rates.vat_bps), 10_000);
+    let vat = (net * u128::from(rates.vat_bps)).div_ceil(10_000);
     let amount = |v| u32::try_from(v).map_err(|_| "Price exceeds supported range");
     Ok(Price {
         filament_grosze: amount(filament)?,
@@ -182,5 +254,103 @@ mod tests {
         rates.margin_bps = 9999;
         rates.machine_per_hour_grosze = u32::MAX;
         assert!(calculate(604_800, 10_000_000, 1000, u32::MAX, &rates).is_err());
+    }
+
+    #[test]
+    fn order_combines_costs_before_setup_minimum_margin_and_vat() {
+        let mut rates = rates();
+        rates.minimum_net_grosze = 10_000;
+        let first = calculate(3600, 100_000, 1, 8000, &rates).unwrap();
+        let second = calculate(7200, 200_000, 2, 8000, &rates).unwrap();
+        let parts = [
+            OrderPart {
+                model_id: "first",
+                quantity: 1,
+                price: &first,
+            },
+            OrderPart {
+                model_id: "second",
+                quantity: 2,
+                price: &second,
+            },
+        ];
+        let order = combine(&parts, &rates).unwrap();
+        let measured_together = calculate(10800, 300_000, 3, 8000, &rates).unwrap();
+        assert_eq!(order.price.gross_grosze, measured_together.gross_grosze);
+        assert_eq!(order.price.setup_grosze, rates.setup_grosze);
+        assert_eq!(order.price.loss_grosze, measured_together.loss_grosze);
+        assert!(order.price.gross_grosze < first.gross_grosze + second.gross_grosze);
+        assert!(
+            order.lines[1]
+                .total_grosze
+                .abs_diff(2 * order.lines[0].total_grosze)
+                <= 1
+        );
+        assert_eq!(
+            order.setup_grosze + order.lines.iter().map(|p| p.total_grosze).sum::<u32>(),
+            order.price.gross_grosze
+        );
+    }
+
+    #[test]
+    fn allocations_preserve_cents_and_zero_cost_minimum_without_overflow() {
+        let mut rates = rates();
+        let mut price = calculate(1, 1, 1, 1, &rates).unwrap();
+        for setup in [0, 1, 10] {
+            rates.setup_grosze = setup;
+            for filament in [0, 1, 7] {
+                price.filament_grosze = filament;
+                price.machine_grosze = 0;
+                price.energy_grosze = 0;
+                price.handling_grosze = 0;
+                rates.minimum_net_grosze = 101;
+                let parts = [
+                    OrderPart {
+                        model_id: "first",
+                        quantity: 3,
+                        price: &price,
+                    },
+                    OrderPart {
+                        model_id: "second",
+                        quantity: 2,
+                        price: &price,
+                    },
+                ];
+                let order = combine(&parts, &rates).unwrap();
+                assert_eq!(
+                    order.setup_grosze + order.lines.iter().map(|p| p.total_grosze).sum::<u32>(),
+                    order.price.gross_grosze
+                );
+                if setup == 0 && filament == 0 {
+                    assert_eq!(order.lines[0].total_grosze, order.price.gross_grosze);
+                    assert_eq!(order.lines[1].total_grosze, 0);
+                }
+            }
+        }
+        price.filament_grosze = u32::MAX;
+        assert!(
+            combine(
+                &[OrderPart {
+                    model_id: "overflow",
+                    quantity: 1,
+                    price: &price
+                }],
+                &rates
+            )
+            .is_err()
+        );
+        assert!(combine(&[], &rates).is_err());
+        price.filament_grosze = 1;
+        assert!(
+            combine(
+                &[OrderPart {
+                    model_id: "invalid",
+                    quantity: 0,
+                    price: &price
+                }],
+                &rates
+            )
+            .is_err()
+        );
     }
 }

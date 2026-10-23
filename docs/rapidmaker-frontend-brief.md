@@ -1,5 +1,8 @@
 # Rapidmaker.pl — brief frontendu
 
+Aktualizacja B1–B5: katalog, panel materiałów/cennika, upload, wycena i checkout korzystają już z Rust/PostgreSQL/slicera. Konta klientów, zamówienia i chat nadal są prototypami. Poniższy brief opisuje pierwotny zakres wizualny; bieżący kontrakt i granice mają pierwszeństwo: [architektura](ARCHITECTURE.md), [backend](../backend/README.md). Nie odtwarzaj stałej taryfy ani autoryzacji admina z mocków.
+
+
 ## Cel i zakres
 
 Zaprojektuj frontend z lokalnymi mockami dla konta, paneli, katalogu i zamówień. Do wyceny dostawy i płatności użyj oddzielnego, lokalnego Rust API, które łączy się wyłącznie z sandboxami Furgonetki i Stripe. To ograniczone demo checkoutu, nie gotowy backend sklepu.
@@ -122,7 +125,7 @@ Zakres lokalnego demo:
 - **Furgonetka API:** testowe pobranie usług, wycena i walidacja ofert kurierskich. Nie zamawiamy ani nie drukujemy etykiet. Paczkomaty czekają na walidację konkretnego punktu; odbiór osobisty nie odpytuje przewoźnika.
 - **Pakowanie:** szacowanie z wymiarów i masy wpisanych przez użytkownika, nie z geometrii pliku. To plan testowy; fizyczne kartony, masa i zabezpieczenia wymagają kalibracji.
 
-Taryfa Rust demo jest stała: 24 zł za sztukę i 15 zł przygotowania; pakowanie dolicza koszt kartonów raz. Nie uwzględnia materiału, slicera, energii, czasu drukarki, operatora, opłat ani marży i nie jest ceną sprzedażową. Brak danych dostawy nie może oznaczać darmowej wysyłki.
+Cena pochodzi ze slicera i konfiguracji operatora: koszty części, jedno przygotowanie, straty, marża i VAT. Opakowania i dostawa oddzielnie; brak konfiguracji nie może oznaczać wymyślonej ceny ani darmowej dostawy.
 
 Symulacje pozwalają przygotować frontend. Integracje uznajemy za gotowe dopiero po testach z dostawcami.
 
