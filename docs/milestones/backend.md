@@ -40,3 +40,7 @@ Passkey admina, wspólne sesje/CSRF, cookie produkcyjne i własność zasobów k
 ## Kolejka slicera — 2026-10-23
 
 B6 PASS: zadania/snapshot w PostgreSQL, lokalne pliki, lease/retry i polling frontendu. Rzeczywisty restart/odzyskanie workera oraz cena checkoutu sprawdzone na izolowanym środowisku. [Szczegóły i ograniczenia](../slicer-queue.md).
+
+## Podglądy GLB — 2026-10-23
+
+B7 PASS: backend GLB dla STL/STEP/3MF, metry/Y-up, chroniony endpoint i quota z preview_bytes. Rzeczywisty upload/pobranie trzech formatów, restart i odmowy dostępu/uszkodzeń PASS. Rust: 30 testów (geometria/API/storage), izolowana regresja PostgreSQL limitów, fmt/Clippy/build PASS. Pozostałych 7 ignorowanych testów PG nie powtarzano. Frontend GLB do podłączenia; starsze uploady wymagają ponownego przesłania. Rust backend/crates: 11156 → 11391 (+235), razem z testami inline, bez komentarzy/pustych/generowanych plików. Nowa migracja 0010; bez nowych zależności. [Kontrakt](../../backend/README.md#podgląd-glb).

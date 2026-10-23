@@ -4,7 +4,7 @@ Modele zostają w prywatnych plikach lokalnych; PostgreSQL przechowuje metadane,
 
 ## Przepływ
 
-1. `POST /api/models` zapisuje oryginał i kanoniczną siatkę po izolowanej analizie.
+1. `POST /api/models` zapisuje oryginał, kanoniczną siatkę i podgląd GLB po izolowanej analizie.
 2. `POST /api/quotes/estimate` sprawdza właściciela, opcje, dopuszczenie materiału, kolor i cennik. Zapisuje snapshot wejścia i zwraca **202**: `{id,status,poll_url,result,message,expires_at}`.
 3. `GET /api/quotes/jobs/{id}` zwraca ten sam kształt tylko właścicielowi; obcy dostaje 404. Status: `queued`, `running`, `succeeded`, `failed`. Wynik jest dostępny przy `succeeded`; komunikat błędu przy `failed`. Ścieżki, dane właściciela i token lease nie trafiają do odpowiedzi.
 4. Worker przejmuje zadanie, uruchamia izolowany Bambu Studio i oblicza cenę. Snapshot wyceny i sukces zadania zapisuje w jednej transakcji. ID zadania jest też ID wyceny dla checkoutu.
@@ -21,7 +21,7 @@ Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie o
 
 ## Pliki
 
-`MODEL_STORAGE_DIR`, domyślnie `~/.local/state/rapidmaker/models`: katalog 0700, pliki 0600, nazwy katalogów to serwerowe UUID. HTTP zawsze sprawdza własność. Limit uploadu: 32 MiB. Limity oryginału i siatki łącznie: 20 modeli/256 MiB na właściciela; 1000 modeli/8 GiB globalnie.
+`MODEL_STORAGE_DIR`, domyślnie `~/.local/state/rapidmaker/models`: katalog 0700, pliki 0600, nazwy katalogów to serwerowe UUID. HTTP zawsze sprawdza własność. Limit uploadu: 32 MiB. Limity oryginału, siatki i podglądu łącznie: 20 modeli/256 MiB na właściciela; 1000 modeli/8 GiB globalnie.
 
 Model roboczy żyje 24 h. Przyjęcie zadania zapewnia co najmniej 30 min dostępności modelu; sukces co najmniej ważność wyceny. Aktywne zadanie chroni pliki przed sprzątaniem. Worker sprząta co minutę, upload również uruchamia sprzątanie. DB oznacza wygasły model jako usuwany przed usunięciem plików: nowe zadanie nie może go przejąć. Nieudane usunięcie jest ponawiane, plik nadal liczy się do limitu. Claim gościa przenosi także zadania; działający worker korzysta z aktualnej własności.
 

@@ -10,6 +10,7 @@ pub struct StoredModel {
     pub extension: String,
     pub source_bytes: i64,
     pub mesh_bytes: i64,
+    pub preview_bytes: i64,
     pub sha256: String,
     pub dimensions_mm: [f64; 3],
     pub expires_at: i64,
@@ -32,6 +33,7 @@ pub(crate) fn stored_model(row: sqlx::postgres::PgRow) -> Result<StoredModel, St
         extension: row.try_get("extension")?,
         source_bytes: row.try_get("source_bytes")?,
         mesh_bytes: row.try_get("mesh_bytes")?,
+        preview_bytes: row.try_get("preview_bytes")?,
         sha256: row.try_get("sha256")?,
         dimensions_mm: row
             .try_get::<Vec<f64>, _>("dimensions_mm")?
@@ -45,30 +47,45 @@ impl Storage {
     /// All writers take one database lock; concurrent processes cannot exceed quotas.
     /// Return false for quota refusal, while database failures remain errors.
     pub async fn insert_model(&self, model: &StoredModel) -> Result<bool, StorageError> {
+        if !(1..=32 * 1024 * 1024).contains(&model.source_bytes)
+            || !(84..=50 * 1024 * 1024).contains(&model.mesh_bytes)
+            || !(0..=25 * 1024 * 1024).contains(&model.preview_bytes)
+        {
+            return Err("invalid model byte lengths".into());
+        }
+        let bytes = model
+            .source_bytes
+            .checked_add(model.mesh_bytes)
+            .and_then(|bytes| bytes.checked_add(model.preview_bytes))
+            .ok_or("model size overflow")?;
         let mut tx = self.pool.begin().await?;
         sqlx::query("SELECT pg_advisory_xact_lock(72617069646)")
             .execute(&mut *tx)
             .await?;
-        let row = sqlx::query("SELECT COUNT(*) AS total_count, COALESCE(SUM(source_bytes+mesh_bytes),0)::bigint AS total_bytes,
+        let row = sqlx::query("SELECT COUNT(*) AS total_count, COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes),0)::bigint AS total_bytes,
             COUNT(*) FILTER (WHERE owner_hash=$1) AS owner_count,
-            COALESCE(SUM(source_bytes+mesh_bytes) FILTER (WHERE owner_hash=$1),0)::bigint AS owner_bytes FROM private_models")
+            COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes) FILTER (WHERE owner_hash=$1),0)::bigint AS owner_bytes FROM private_models")
             .bind(&model.owner_hash).fetch_one(&mut *tx).await?;
-        let bytes = model
-            .source_bytes
-            .checked_add(model.mesh_bytes)
-            .ok_or("model size overflow")?;
         if row.try_get::<i64, _>("total_count")? >= 1000
             || row.try_get::<i64, _>("owner_count")? >= 20
-            || row.try_get::<i64, _>("total_bytes")? + bytes > 8 * 1024 * 1024 * 1024
-            || row.try_get::<i64, _>("owner_bytes")? + bytes > 256 * 1024 * 1024
+            || row
+                .try_get::<i64, _>("total_bytes")?
+                .checked_add(bytes)
+                .ok_or("quota size overflow")?
+                > 8 * 1024 * 1024 * 1024
+            || row
+                .try_get::<i64, _>("owner_bytes")?
+                .checked_add(bytes)
+                .ok_or("quota size overflow")?
+                > 256 * 1024 * 1024
         {
             return Ok(false);
         }
-        sqlx::query("INSERT INTO private_models (id,owner_hash,filename,extension,source_bytes,mesh_bytes,sha256,dimensions_mm,expires_at,user_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+        sqlx::query("INSERT INTO private_models (id,owner_hash,filename,extension,source_bytes,mesh_bytes,sha256,dimensions_mm,expires_at,user_id,preview_bytes)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
             .bind(&model.id).bind(&model.owner_hash).bind(&model.filename).bind(&model.extension)
             .bind(model.source_bytes).bind(model.mesh_bytes).bind(&model.sha256)
-            .bind(model.dimensions_mm.as_slice()).bind(model.expires_at).bind(&model.user_id).execute(&mut *tx).await?;
+            .bind(model.dimensions_mm.as_slice()).bind(model.expires_at).bind(&model.user_id).bind(model.preview_bytes).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(true)
     }
@@ -170,6 +187,69 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires isolated TEST_DATABASE_URL"]
+    async fn preview_bytes_count_toward_quota_and_validate_boundaries() {
+        let db = Storage::connect(&std::env::var("TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        assert!(
+            sqlx::query_scalar::<_, bool>("SELECT current_database() LIKE 'rapidmaker_test%'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap()
+        );
+        let owner = account_owner(&uuid::Uuid::new_v4().to_string());
+        let mut model = StoredModel {
+            id: uuid::Uuid::new_v4().to_string(),
+            owner_hash: owner.clone(),
+            user_id: None,
+            filename: "quota.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 1024 * 1024,
+            mesh_bytes: 38 * 1024 * 1024,
+            preview_bytes: 25 * 1024 * 1024,
+            sha256: "a".repeat(64),
+            dimensions_mm: [20.0; 3],
+            expires_at: 2_000_000_000,
+        };
+        for invalid in [-1, 25 * 1024 * 1024 + 1] {
+            model.preview_bytes = invalid;
+            assert!(db.insert_model(&model).await.is_err());
+        }
+        model.preview_bytes = 25 * 1024 * 1024;
+        for _ in 0..4 {
+            model.id = uuid::Uuid::new_v4().to_string();
+            assert!(db.insert_model(&model).await.unwrap());
+        }
+        assert_eq!(
+            db.model(&model.id, &owner, 1000)
+                .await
+                .unwrap()
+                .unwrap()
+                .preview_bytes,
+            25 * 1024 * 1024
+        );
+        // Four 64 MiB records reach exactly 256 MiB; previews are 100 MiB of it.
+        model.id = uuid::Uuid::new_v4().to_string();
+        model.source_bytes = 1;
+        model.mesh_bytes = 84;
+        model.preview_bytes = 0;
+        assert!(!db.insert_model(&model).await.unwrap());
+        sqlx::query("DELETE FROM private_models WHERE owner_hash=$1")
+            .bind(&owner)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        // The same small record fits once the quota is released; legacy zero is valid.
+        assert!(db.insert_model(&model).await.unwrap());
+        sqlx::query("DELETE FROM private_models WHERE owner_hash=$1")
+            .bind(&owner)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated TEST_DATABASE_URL"]
     async fn claim_moves_only_owned_live_resources_and_cannot_override_an_account() {
         let url = std::env::var("TEST_DATABASE_URL").unwrap();
         let db = Storage::connect(&url).await.unwrap();
@@ -208,6 +288,7 @@ mod tests {
                     extension: "stl".into(),
                     source_bytes: 100,
                     mesh_bytes: 100,
+                    preview_bytes: 0,
                     sha256: "a".repeat(64),
                     dimensions_mm: [20.0; 3],
                     expires_at: expiry

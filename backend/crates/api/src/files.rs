@@ -16,13 +16,14 @@ use std::{
     fs::{self, DirBuilder, OpenOptions},
     io::{Read, Write},
     os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
+const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 const COOKIE: &str = "rapidmaker_guest";
 static UPLOAD_BUSY: Semaphore = Semaphore::const_new(1);
 type Error = (StatusCode, Json<Value>);
@@ -60,6 +61,7 @@ pub fn router(storage: Option<Storage>) -> Result<Router, String> {
         )
         .route("/api/models/{id}", get(metadata))
         .route("/api/models/{id}/source", get(source))
+        .route("/api/models/{id}/preview.glb", get(preview))
         .layer(DefaultBodyLimit::max(MAX_BYTES))
         .with_state(state))
 }
@@ -317,6 +319,19 @@ async fn upload(
     let mesh_bytes = fs::metadata(&mesh)
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak siatki modelu."))?
         .len();
+    let preview_bytes = fs::metadata(directory.join("preview.glb"))
+        .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak podglądu modelu."))?
+        .len();
+    for path in [&mesh, &directory.join("preview.glb"), &directory] {
+        fs::File::open(path)
+            .and_then(|file| file.sync_all())
+            .map_err(|_| {
+                error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Nie można utrwalić modelu.",
+                )
+            })?;
+    }
     let record = StoredModel {
         id,
         owner_hash,
@@ -325,6 +340,7 @@ async fn upload(
         extension,
         source_bytes: input.len() as i64,
         mesh_bytes: mesh_bytes as i64,
+        preview_bytes: preview_bytes as i64,
         sha256: format!("{:x}", Sha256::digest(&input)),
         dimensions_mm: prepared.dimensions_mm,
         expires_at: timestamp + 86400,
@@ -422,7 +438,9 @@ pub(super) fn handle(record: StoredModel) -> Result<ModelHandle, Error> {
 fn public_metadata(record: &StoredModel) -> Value {
     json!({"id":record.id,"filename":record.filename,"dimensions_mm":record.dimensions_mm,
         "weight_g":null,"geometry_source":"parsed_model","weight_source":"slicer_pending",
-        "reason":"Masa będzie wyznaczona przez slicer.","expires_at":record.expires_at})
+        "reason":"Masa będzie wyznaczona przez slicer.","expires_at":record.expires_at,
+        "preview_bytes":record.preview_bytes,
+        "preview_url":(record.preview_bytes > 0).then(|| format!("/api/models/{}/preview.glb",record.id))})
 }
 
 async fn metadata(
@@ -444,44 +462,7 @@ async fn source(
     RoutePath(id): RoutePath<String>,
 ) -> Result<Response, Error> {
     let handle = resolve(database(&state)?, &headers, &id).await?;
-    let file = fs::File::open(&handle.source).map_err(|_| {
-        error(
-            StatusCode::GONE,
-            "Plik modelu jest niedostępny. Prześlij go ponownie.",
-        )
-    })?;
-    if file
-        .metadata()
-        .map_err(|_| {
-            error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Nie można odczytać modelu.",
-            )
-        })?
-        .len()
-        != handle.record.source_bytes as u64
-    {
-        return Err(error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Nieprawidłowy zapis modelu.",
-        ));
-    }
-    // One bounded source read; never serve an HTML/SVG document inline.
-    let mut bytes = Vec::new();
-    file.take(MAX_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| {
-            error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Nie można odczytać modelu.",
-            )
-        })?;
-    if bytes.len() as i64 != handle.record.source_bytes {
-        return Err(error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Nieprawidłowy zapis modelu.",
-        ));
-    }
+    let bytes = private_bytes(&handle.source, handle.record.source_bytes, MAX_BYTES)?;
     let disposition = HeaderValue::from_str(&format!(
         "attachment; filename=\"model.{}\"; filename*=UTF-8''{}",
         handle.record.extension,
@@ -512,6 +493,72 @@ async fn source(
         bytes,
     )
         .into_response())
+}
+
+async fn preview(
+    State(state): State<FileState>,
+    headers: HeaderMap,
+    RoutePath(id): RoutePath<String>,
+) -> Result<Response, Error> {
+    let handle = resolve(database(&state)?, &headers, &id).await?;
+    if handle.record.preview_bytes == 0 {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Ten model nie ma jeszcze podglądu. Prześlij plik ponownie.",
+        ));
+    }
+    let bytes = private_bytes(
+        &handle.mesh.with_file_name("preview.glb"),
+        handle.record.preview_bytes,
+        MAX_PREVIEW_BYTES,
+    )?;
+    if gltf::binary::Glb::from_slice(&bytes).is_err() {
+        return Err(error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Nieprawidłowy zapis podglądu.",
+        ));
+    }
+    Ok((
+        [
+            (header::CONTENT_TYPE, "model/gltf-binary"),
+            (header::CONTENT_DISPOSITION, "inline; filename=preview.glb"),
+            (header::CACHE_CONTROL, "private, no-store"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+fn private_bytes(path: &Path, expected: i64, limit: usize) -> Result<Vec<u8>, Error> {
+    let invalid = || {
+        error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Nieprawidłowy zapis modelu.",
+        )
+    };
+    let metadata = fs::symlink_metadata(path).map_err(|_| {
+        error(
+            StatusCode::GONE,
+            "Plik modelu jest niedostępny. Prześlij go ponownie.",
+        )
+    })?;
+    if expected <= 0
+        || expected as u64 > limit as u64
+        || !metadata.is_file()
+        || metadata.len() != expected as u64
+    {
+        return Err(invalid());
+    }
+    let file = fs::File::open(path).map_err(|_| invalid())?;
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| invalid())?;
+    if bytes.len() as i64 != expected {
+        return Err(invalid());
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]

@@ -23,6 +23,7 @@ use std::{
 use tokio::sync::Semaphore;
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
+const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 static BUSY: Semaphore = Semaphore::const_new(1);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -111,6 +112,7 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
         "--analyze-model-worker",
         80 * 1024 * 1024,
         None,
+        None,
     )
     .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak procesu analizy."))?;
     let status = tokio::time::timeout(Duration::from_secs(30), command.status())
@@ -155,6 +157,7 @@ fn isolated_worker(
     flag: &str,
     output_limit: u64,
     metadata: Option<&Path>,
+    preview: Option<&Path>,
 ) -> Result<tokio::process::Command, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     // Fail closed if bubblewrap/namespaces are unavailable: the parser cannot
@@ -201,6 +204,9 @@ fn isolated_worker(
     if let Some(metadata) = metadata {
         command.arg("--bind").arg(metadata).arg("/metadata.json");
     }
+    if let Some(preview) = preview {
+        command.arg("--bind").arg(preview).arg("/preview.glb");
+    }
     command
         .args(["--remount-ro", "/", "/worker", flag])
         .arg(&isolated_source)
@@ -237,7 +243,16 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
         .mode(0o600)
         .open(output)
         .map_err(|e| e.to_string())?;
+    let preview = output.with_file_name("preview.glb");
+    let mut preview_created = false;
     let result = async {
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&preview)
+            .map_err(|e| e.to_string())?;
+        preview_created = true;
         let metadata = output.with_extension("metadata.json");
         fs::OpenOptions::new()
             .write(true)
@@ -251,6 +266,7 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
             "--prepare-slicing-worker",
             50 * 1024 * 1024,
             Some(&metadata),
+            Some(&preview),
         )?;
         let status = tokio::time::timeout(Duration::from_secs(30), command.status())
             .await
@@ -267,6 +283,30 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
         let length = fs::metadata(output).map_err(|e| e.to_string())?.len();
         if !(84..=50 * 1024 * 1024).contains(&length) {
             return Err("Invalid canonical mesh size".into());
+        }
+        let preview_length = fs::metadata(&preview).map_err(|e| e.to_string())?.len();
+        if !(28..=MAX_PREVIEW_BYTES as u64).contains(&preview_length) {
+            return Err("Invalid preview size".into());
+        }
+        let preview_bytes = fs::read(&preview).map_err(|e| e.to_string())?;
+        let document = gltf::Gltf::from_slice(&preview_bytes).map_err(|_| "Invalid GLB preview")?;
+        if preview_bytes.get(..4) != Some(b"glTF")
+            || u32::from_le_bytes(
+                preview_bytes[8..12]
+                    .try_into()
+                    .map_err(|_| "Invalid GLB header")?,
+            ) as usize
+                != preview_bytes.len()
+            || document.blob.as_ref().is_none_or(Vec::is_empty)
+            || document.document.buffers().count() != 1
+            || document
+                .document
+                .buffers()
+                .any(|buffer| !matches!(buffer.source(), gltf::buffer::Source::Bin))
+            || document.document.images().next().is_some()
+            || document.document.materials().next().is_some()
+        {
+            return Err("Preview must contain self-contained geometry".into());
         }
         let mut bytes = Vec::new();
         fs::File::open(&metadata)
@@ -290,6 +330,9 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
     .await;
     let _ = fs::remove_file(output.with_extension("metadata.json"));
     if result.is_err() {
+        if preview_created {
+            let _ = fs::remove_file(&preview);
+        }
         let _ = fs::remove_file(output);
     }
     result
@@ -320,7 +363,7 @@ pub fn worker() -> bool {
                     &input,
                     &ConversionLimits {
                         max_input_bytes: MAX_BYTES,
-                        max_output_glb_bytes: 50 * 1024 * 1024,
+                        max_output_glb_bytes: MAX_PREVIEW_BYTES,
                         max_parse_seconds: 25,
                         ..Default::default()
                     },
@@ -332,6 +375,7 @@ pub fn worker() -> bool {
                 })
                 .map_err(|e| e.to_string())?;
                 fs::write("/metadata.json", metadata).map_err(|e| e.to_string())?;
+                fs::write("/preview.glb", output.glb).map_err(|e| e.to_string())?;
                 Ok(output.stl)
             } else {
                 serde_json::to_vec(&analyze_file(&filename)?).map_err(|e| e.to_string())

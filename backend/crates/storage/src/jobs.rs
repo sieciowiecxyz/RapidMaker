@@ -236,6 +236,7 @@ mod tests {
                 extension: "stl".into(),
                 source_bytes: 100,
                 mesh_bytes: 100,
+                preview_bytes: 0,
                 sha256: "f".repeat(64),
                 dimensions_mm: [10.; 3],
                 expires_at: now + 1,

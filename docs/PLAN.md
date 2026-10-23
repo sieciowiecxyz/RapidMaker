@@ -2,7 +2,7 @@
 
 Mode: goal
 Status: B1–B5 zrealizowane jako lokalny POC
-Active: brak — backend email E1–E4, auth i kolejka slicera ukończone
+Active: brak — backend email E1–E4, auth, kolejka slicera i backend podglądów GLB ukończone
 
 ## Email i backend klienta
 
@@ -44,3 +44,7 @@ Klient: email; admin: email + passkey. Sesje PostgreSQL, CSRF/Origin, cookie HTT
 ## Kolejka slicera — 2026-10-23
 
 Lokalne pliki + trwała kolejka PostgreSQL, HTTP 202/polling, osobny worker opcjonalny, ochrona modeli przed sprzątaniem. Restart i prawdziwy slicer/checkout sprawdzone na osobnej bazie. Kontrakt, limity i pozostała retencja zamówień: [kolejka](slicer-queue.md).
+
+## Podglądy modeli — 2026-10-23
+
+Backend generuje i prywatnie udostępnia GLB dla STL/STEP/3MF, uwzględnia rozmiar w limitach. Upload/odczyt/restart oraz kontrola błędów sprawdzone w izolowanym środowisku. Viewer na froncie do podłączenia; kontrakt w [README backendu](../backend/README.md#podgląd-glb).

@@ -163,7 +163,7 @@ pub fn source_to_preview_glb(
 }
 
 /// Canonical millimetre geometry only: no project settings, G-code or attachments.
-/// The output bound reuses the conversion byte budget for this STL representation.
+/// STL is limited to 50 MiB; its accompanying preview uses the GLB byte budget.
 pub fn source_to_stl(
     filename: &str,
     input: &[u8],
@@ -175,6 +175,7 @@ pub fn source_to_stl(
 
 pub struct ProductionOutput {
     pub stl: Vec<u8>,
+    pub glb: Vec<u8>,
     pub dimensions_mm: [f64; 3],
 }
 
@@ -212,7 +213,7 @@ pub fn source_to_production(
         .triangle_count
         .checked_mul(50)
         .and_then(|n| n.checked_add(84))
-        .filter(|n| *n <= limits.max_output_glb_bytes)
+        .filter(|n| *n <= 50 * 1024 * 1024)
         .ok_or(PreviewError::OutputTooLarge)?;
     let count =
         u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
@@ -234,8 +235,18 @@ pub fn source_to_production(
         }
         output.extend_from_slice(&[0; 2]);
     }
+    // Convert CAD millimetres/Z-up into glTF metres/Y-up at the node, without
+    // changing the canonical millimetre mesh used by the slicer.
+    let glb = write_glb_bounded(
+        &scene,
+        &analysis,
+        limits.max_output_glb_bytes.min(25 * 1024 * 1024),
+        r#","scale":[0.001,0.001,0.001],"rotation":[-0.70710678,0,0,0.70710678]"#,
+    )?;
+    check_timeout(started, limits)?;
     Ok(ProductionOutput {
         stl: output,
+        glb,
         dimensions_mm: analysis.dimensions_mm.map(f64::from),
     })
 }
@@ -258,7 +269,7 @@ fn build_preview_output(
     limits: &ConversionLimits,
 ) -> Result<PreviewOutput, PreviewError> {
     let mut analysis = analyze_scene(&scene, source_format, limits)?;
-    let glb = write_glb(&scene, &analysis)?;
+    let glb = write_glb_bounded(&scene, &analysis, limits.max_output_glb_bytes, "")?;
     if glb.len() > limits.max_output_glb_bytes {
         return Err(PreviewError::OutputTooLarge);
     }
@@ -1386,22 +1397,33 @@ fn analyze_scene(
 }
 
 pub fn write_glb(scene: &MeshScene, analysis: &PreviewAnalysis) -> Result<Vec<u8>, PreviewError> {
-    let mut bin = Vec::with_capacity(scene.positions_mm.len() * 12 + scene.indices.len() * 4);
-    for vertex in &scene.positions_mm {
-        for value in vertex {
-            bin.extend_from_slice(&value.to_le_bytes());
-        }
-    }
-    let index_offset = bin.len();
-    for index in &scene.indices {
-        bin.extend_from_slice(&index.to_le_bytes());
-    }
-    pad_to_4(&mut bin, 0);
+    write_glb_bounded(scene, analysis, u32::MAX as usize, "")
+}
 
+fn write_glb_bounded(
+    scene: &MeshScene,
+    analysis: &PreviewAnalysis,
+    max_bytes: usize,
+    node_transform: &str,
+) -> Result<Vec<u8>, PreviewError> {
+    let positions_len = scene
+        .positions_mm
+        .len()
+        .checked_mul(12)
+        .ok_or(PreviewError::OutputTooLarge)?;
+    let indices_len = scene
+        .indices
+        .len()
+        .checked_mul(4)
+        .ok_or(PreviewError::OutputTooLarge)?;
+    let buffer_len = positions_len
+        .checked_add(indices_len)
+        .filter(|length| *length <= max_bytes)
+        .ok_or(PreviewError::OutputTooLarge)?;
     let json = format!(
         concat!(
-            "{{\"asset\":{{\"version\":\"2.0\",\"generator\":\"rapidfab-3d-web-preview-generator\"}},",
-            "\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0}}],",
+            "{{\"asset\":{{\"version\":\"2.0\",\"generator\":\"rapidmaker-geometry\"}},",
+            "\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0{node_transform}}}],",
             "\"meshes\":[{{\"primitives\":[{{\"attributes\":{{\"POSITION\":0}},\"indices\":1}}]}}],",
             "\"buffers\":[{{\"byteLength\":{buffer_len}}}],",
             "\"bufferViews\":[",
@@ -1414,10 +1436,11 @@ pub fn write_glb(scene: &MeshScene, analysis: &PreviewAnalysis) -> Result<Vec<u8
             "{{\"bufferView\":1,\"componentType\":5125,\"count\":{index_count},\"type\":\"SCALAR\"}}",
             "]}}"
         ),
-        buffer_len = bin.len(),
-        positions_len = scene.positions_mm.len() * 12,
-        index_offset = index_offset,
-        indices_len = scene.indices.len() * 4,
+        node_transform = node_transform,
+        buffer_len = buffer_len,
+        positions_len = positions_len,
+        index_offset = positions_len,
+        indices_len = indices_len,
         vertex_count = scene.positions_mm.len(),
         index_count = scene.indices.len(),
         min_x = gltf_number(analysis.bounds_min_mm[0]),
@@ -1430,7 +1453,12 @@ pub fn write_glb(scene: &MeshScene, analysis: &PreviewAnalysis) -> Result<Vec<u8
     let mut json_bytes = json.into_bytes();
     pad_to_4(&mut json_bytes, b' ');
 
-    let total_len = 12 + 8 + json_bytes.len() + 8 + bin.len();
+    let total_len = json_bytes
+        .len()
+        .checked_add(28)
+        .and_then(|length| length.checked_add(buffer_len))
+        .filter(|length| *length <= max_bytes && *length <= u32::MAX as usize)
+        .ok_or(PreviewError::OutputTooLarge)?;
     let mut glb = Vec::with_capacity(total_len);
     glb.extend_from_slice(b"glTF");
     glb.extend_from_slice(&2_u32.to_le_bytes());
@@ -1438,9 +1466,16 @@ pub fn write_glb(scene: &MeshScene, analysis: &PreviewAnalysis) -> Result<Vec<u8
     glb.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
     glb.extend_from_slice(b"JSON");
     glb.extend_from_slice(&json_bytes);
-    glb.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+    glb.extend_from_slice(&(buffer_len as u32).to_le_bytes());
     glb.extend_from_slice(b"BIN\0");
-    glb.extend_from_slice(&bin);
+    for vertex in &scene.positions_mm {
+        for value in vertex {
+            glb.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    for index in &scene.indices {
+        glb.extend_from_slice(&index.to_le_bytes());
+    }
     Ok(glb)
 }
 
@@ -1549,6 +1584,39 @@ mod tests {
                 scene_from_source(format, input, &limits, Instant::now()).unwrap();
             let production =
                 source_to_production(filename, input, &limits, &ThreeMfLimits::default()).unwrap();
+            let preview = gltf::Gltf::from_slice(&production.glb).unwrap();
+            assert!(preview.blob.is_some());
+            assert_eq!(preview.buffers().count(), 1);
+            assert!(
+                preview
+                    .buffers()
+                    .all(|buffer| matches!(buffer.source(), gltf::buffer::Source::Bin))
+            );
+            assert!(preview.images().next().is_none());
+            assert!(preview.materials().next().is_none());
+            let (_, rotation, scale) = preview.nodes().next().unwrap().transform().decomposed();
+            assert_eq!(scale, [0.001; 3]);
+            assert!((rotation[0] + std::f32::consts::FRAC_1_SQRT_2).abs() < 0.00001);
+            let primitive = preview
+                .meshes()
+                .next()
+                .unwrap()
+                .primitives()
+                .next()
+                .unwrap();
+            let reader = primitive.reader(|_| preview.blob.as_deref());
+            assert_eq!(
+                reader.read_positions().unwrap().count(),
+                original.positions_mm.len()
+            );
+            assert_eq!(
+                reader
+                    .read_indices()
+                    .unwrap()
+                    .into_u32()
+                    .collect::<Vec<_>>(),
+                original.indices
+            );
             let stl = production.stl;
             let (canonical, _) = parse_stl(&stl, &limits, Instant::now()).unwrap();
             let before = analyze_scene(&original, format, &limits).unwrap();

@@ -53,3 +53,9 @@ Auth backend PASS: klient email, admin passkey, trwałe sesje, HTTPS cookie i w�
 - Lease/CAS, retry do 3 prób, deduplikacja i limity PostgreSQL; wynik i snapshot atomowe.
 - Model aktywnego zadania chroniony przed sprzątaniem; claim przenosi zadanie.
 - Potwierdzone: restart API i zabicie/wznowienie workera z rzeczywistym Bambu oraz checkout z jedną wyceną. [Kontrakt i granice](slicer-queue.md).
+
+## B7 — Backend podglądów GLB: PASS lokalnie
+
+- Jeden odczyt STL/STEP/3MF w sandboxie daje siatkę produkcyjną i samodzielny GLB w metrach/Y-up.
+- Chroniony endpoint, preview_url w metadanych, limit 25 MiB i rozliczanie miejsca.
+- Sprawdzone: trzy formaty, restart, obca własność/wygaśnięcie, uszkodzenie/symlink i błędny upload. Frontend GLB do podłączenia.
