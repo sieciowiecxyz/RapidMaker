@@ -29,3 +29,7 @@ W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.
 - [Auth — projekt](auth.md)
   - przeczytaj gdy: implementujesz logowanie, sesje lub własność danych.
   - opis: kod email, passkey admina, PostgreSQL i migracja obecnego auth.
+
+- [Email — plan](email.md)
+  - przeczytaj gdy: implementujesz wysyłkę lub powiadomienia.
+  - opis: iCloud SMTP, adresy, kolejka i preferencje; etapy E1–E4.

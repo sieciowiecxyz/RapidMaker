@@ -41,4 +41,6 @@ Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check dz
 
 ## Później
 
+Następny zaplanowany zakres: [email E1–E4](email.md), wszystkie etapy TODO. E1 można wykonać teraz; E2 zależy od auth, E3 od trwałych zdarzeń, E4 od kont/rozmów. Kryteria utrzymujemy w podlinkowanym planie.
+
 Trwałe zamówienia i webhooki płatności, logowanie i role, panel klienta/admina z rozmową/statusami, iCloud SMTP/IMAP i preferencje powiadomień, logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.

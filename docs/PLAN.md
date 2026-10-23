@@ -2,7 +2,11 @@
 
 Mode: goal
 Status: B1–B5 zrealizowane jako lokalny POC
-Active: brak — następny zakres wymaga osobnego planu
+Active: brak — kolejny zakres zaplanowany, bez rozpoczętej implementacji
+
+## Następny plan: email
+
+[Email i powiadomienia](email.md): E1 klient SMTP i adresy → E2 kody logowania → E3 trwała kolejka PostgreSQL → E4 preferencje i powiadomienia. Szczegóły, zależności i kryteria w tym jednym dokumencie. Plan nie oznacza uruchomienia wysyłki; auth i trwałe zamówienia pozostają zależnościami.
 
 ## Cel
 
