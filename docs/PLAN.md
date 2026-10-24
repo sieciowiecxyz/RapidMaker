@@ -2,7 +2,7 @@
 
 Status: P1 (warianty pakowania i ceny dostawy) oraz C1–C6 wdrożone i sprawdzone lokalnie w sandboxach; bez Stripe live/publicznego wdrożenia. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
 
-Aktywny następny zakres: [rozmowy przez stronę i email](chat-email.md), CH0–CH4 TODO. Poniższy checkout oraz P1/P2 są wdrożone.
+Rozmowy przez stronę i email: [CH0–CH4 PASS lokalnie](chat-email.md). Poniższy checkout oraz P1/P2 są wdrożone.
 
 ## Cel i punkt wyjścia
 
@@ -78,8 +78,8 @@ Sprawdzone: regresje pakowania/rankingu, rzeczywiste ceny i walidacja kilku plan
 
 Usługi Furgonetki w cache procesu 6 h; identyczne wyceny 120 s i jeden aktywny lider na klucz. Ważna oferta szkicu używana z PostgreSQL po lokalnej walidacji, bez nowego HTTP i zwiększenia wersji. Ważność nie odnawia się przy odczycie; zmiana danych unieważnia ofertę. Limit 64 wpisów/4 liderów, błędy 2 s; bez schedulera, nowych zależności, SQL i frontendu. Kontrakt: [checkout.md](checkout.md#cache-i-identyczne-żądania).
 
-## CH0–CH4 — Jedna rozmowa przez API i email — plan
+## CH0–CH4 — Jedna rozmowa przez API i email — wdrożone lokalnie
 
 Rozwijamy istniejące rozmowy PostgreSQL i outbox SMTP: treść w kopii email, bezpieczne referencje odpowiedzi, jeden worker IMAP i wspólny zapis wiadomości. Najpierw test prawdziwego iCloud i nagłówków, potem historia/uprawnienia, wysyłka, odbiór i jeden przebieg końcowy. Osobny kursor przeczytania, paginacja i grupowanie alertów. Bez frontendu, załączników, brokera i nowego serwisu.
 
-Projekt, granice zaufania i blokery: [chat-email.md](chat-email.md). To plan; odbiór IMAP nie jest jeszcze zaimplementowany.
+Projekt, granice zaufania i blokery: [chat-email.md](chat-email.md). SMTP/IMAP i wspólna historia sprawdzone rzeczywistymi mailami testowymi, bez frontendu.

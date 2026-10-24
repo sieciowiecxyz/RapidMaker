@@ -10,6 +10,44 @@ fn main() {
 }
 
 async fn serve() {
+    if std::env::args().nth(1).as_deref() == Some("--mail-receive") {
+        match api::mail_receive_once().await {
+            Ok(value) => println!("{value}"),
+            Err(_) => {
+                eprintln!("Mail receive failed; check IMAP, reply key and database configuration.");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    if std::env::args().nth(1).as_deref() == Some("--mail-operator") {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        let result = async {
+            if args.len() != 2 || !matches!(args[1].as_str(), "on" | "off") {
+                return Err("Provide admin email and on/off".into());
+            }
+            let db = rapidmaker_storage::Storage::connect(&std::env::var("DATABASE_URL")?).await?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs() as i64;
+            if !db
+                .chat_operator_email(&args[0], args[1] == "on", now)
+                .await?
+            {
+                return Err("No eligible verified administrator".into());
+            }
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        }
+        .await;
+        match result {
+            Ok(()) => println!("Operator email reply permission updated."),
+            Err(_) => {
+                eprintln!("Operator permission refused; provide existing admin email and on/off.");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if let Some(mode) = std::env::args()
         .nth(1)
         .filter(|m| matches!(m.as_str(), "--checkout-status" | "--checkout-close"))

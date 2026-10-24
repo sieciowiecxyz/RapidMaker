@@ -6,7 +6,7 @@ Dowód E2–E4: rzeczywisty kod z iCloud odczytany przez IMAP został zużyty pr
 
 Dowód E1: lokalna komenda Rust wysłała jedną wiadomość do `void@sieciowiec.xyz`; SMTP zaakceptowało ją, IMAP potwierdził odbiorcę/nadawcę, temat i tekst wiadomości. Build, fmt, Clippy oraz 4 testy notifications i 11 API PASS. Rust produkcyjny +249 LoC, testy +101 (tokei, nowe pliki oraz zmienione lib.rs API/main.rs app, bez pustych linii i komentarzy). Jedna nowa bezpośrednia zależność `lettre`; aktualizacja istniejących rustls-webpki/webpki-roots usuwa 2 zgłoszenia TLS. Audyt całego lockfile nadal zgłasza 9 wcześniejszych podatności w lz4_flex, quick-xml, rsa i zip — nie jest czysty.
 
-Dalszy rozwój: [jedna rozmowa przez stronę i email](chat-email.md), CH0–CH4 TODO. Poniższy stan E1–E4 dotyczy istniejącej wysyłki/powiadomień; nie oznacza odbioru odpowiedzi.
+Rozmowy i odpowiedzi email: [CH0–CH4 wdrożone lokalnie](chat-email.md). Poniższe dowody E1–E4 opisują wcześniejszy etap; aktualny kontrakt odbioru i kopii rozmów jest w chat-email.md.
 
 ## Cel i stan
 
@@ -20,7 +20,7 @@ Operator: `/api/admin/orders`, `POST /{id}/status`, `GET/POST /{id}/messages`, `
 
 Zamówienie powstaje z serwerowej wyceny po utworzeniu Stripe intent/session. Potwierdzenie płatności zapisuje się z mailem atomowo dopiero po weryfikacji odpowiedzi Stripe (ID, metadata, kwota, waluta i test mode). Obecne endpointy statusu oraz własny `/payment-status` wykonują tę weryfikację; drugi działa po restarcie (limit raz/15 s na zamówienie). Nie jest to webhook ani automatyczne monitorowanie płatności bez odpytywania. Zmiany realizacji i chat mają własne trwałe zdarzenia i limity.
 
-Na start wysyłka tekstowa: kod logowania, potwierdzenie zamówienia/płatności, zmiana statusu i informacja o nowej wiadomości. Bez marketingu, załączników i silnika szablonów. Odpowiadanie na chat przez email to późniejszy, osobny zakres.
+Na start wysyłka tekstowa: kod logowania, potwierdzenie zamówienia/płatności, zmiana statusu i informacja o nowej wiadomości. Bez marketingu, załączników i silnika szablonów. Odpowiadanie przez email działa jako CH0–CH4; patrz chat-email.md.
 
 ## Granice kodu
 

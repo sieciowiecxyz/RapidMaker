@@ -122,3 +122,7 @@ cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-slicer -- -
 ```
 
 Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie na bazie testowej przez `TEST_DATABASE_URL`, z `--include-ignored`. Test zmienia i przywraca wskazane fixture’y katalogu; nie jest przeznaczony dla bazy produkcyjnej.
+
+## Rozmowy i email
+
+[Kontrakt i diagnostyka](../docs/chat-email.md): wspólna historia przez API/SMTP/IMAP, kopie treści, grupowanie 60 s, paginacja i read cursor. `MAIL_INBOUND_MODE=test`, `MAIL_IMAP_MAILBOX=void@sieciowiec.xyz`, osobny `MAIL_REPLY_KEY` w SOPS. Domyślnie odbiór disabled; worker startuje razem z API, odczytuje folder bez zmiany flag/usuwania. CLI `--mail-receive` odbiera jedną partię, `--mail-operator EMAIL on|off` nadaje/cofa wąską zgodę istniejącemu operatorowi. Frontend rozmów nadal wymaga podłączenia.

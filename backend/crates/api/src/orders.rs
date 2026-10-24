@@ -1,7 +1,7 @@
 use super::auth::{Auth, Error, error, now, unavailable};
 use axum::{
-    Json,
-    extract::{Path, State},
+    Extension, Json,
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::Response,
 };
@@ -18,6 +18,7 @@ pub fn router(auth: Arc<Auth>) -> Router {
         .routes(utoipa_axum::routes!(files))
         .routes(utoipa_axum::routes!(file))
         .routes(utoipa_axum::routes!(messages, message))
+        .routes(utoipa_axum::routes!(read))
         .routes(utoipa_axum::routes!(payment_status))
         .routes(utoipa_axum::routes!(claim))
         .with_state(auth)
@@ -29,6 +30,7 @@ pub fn admin_router<S: Clone + Send + Sync + 'static>(db: Option<Storage>) -> Ro
         .routes(utoipa_axum::routes!(admin_file))
         .routes(utoipa_axum::routes!(status))
         .routes(utoipa_axum::routes!(admin_messages, admin_message))
+        .routes(utoipa_axum::routes!(admin_read))
         .routes(utoipa_axum::routes!(stats))
         .with_state(db)
 }
@@ -113,24 +115,124 @@ fn not_found() -> Error {
     tag = "Zamówienia",
     summary = "Rozmowa własnego zamówienia.",
     description = "Własność konta lub cookie gościa jest sprawdzana po stronie serwera. Mutacje wymagają dozwolonego Origin; sesja konta wymaga także CSRF.",
-    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
-    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    params(("id" = String, Path, description = "Identyfikator zamówienia."), ChatQuery),
+    responses((status = 200, description = "Strona rozmowy i stan przeczytania.", body = rapidmaker_storage::MessagePage), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []), ("guest" = []))
 )]
 async fn messages(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
+    Query(page): Query<ChatQuery>,
     headers: HeaderMap,
-) -> Result<Json<Value>, Error> {
+) -> Result<Json<rapidmaker_storage::MessagePage>, Error> {
+    page.validate()?;
     let (user, owner) = scope(&auth, &headers, false).await?;
-    let messages = auth
-        .database()?
-        .order_messages(&id, user.as_deref(), owner.as_deref(), false)
-        .await
-        .map_err(|_| unavailable())?
-        .ok_or_else(not_found)?;
-    Ok(Json(json!({"messages":messages})))
+    Ok(Json(
+        auth.database()?
+            .chat_messages(
+                &id,
+                user.as_deref(),
+                owner.as_deref(),
+                false,
+                page.after,
+                page.limit,
+            )
+            .await
+            .map_err(|_| unavailable())?
+            .ok_or_else(not_found)?,
+    ))
 }
+#[derive(Deserialize, utoipa::IntoParams)]
+#[serde(default, deny_unknown_fields)]
+struct ChatQuery {
+    after: i64,
+    limit: i64,
+}
+impl Default for ChatQuery {
+    fn default() -> Self {
+        Self {
+            after: 0,
+            limit: 50,
+        }
+    }
+}
+impl ChatQuery {
+    fn validate(&self) -> Result<(), Error> {
+        if self.after < 0 || !(1..=100).contains(&self.limit) {
+            return Err(error(
+                StatusCode::BAD_REQUEST,
+                "Podaj after >= 0 oraz limit od 1 do 100.",
+            ));
+        }
+        Ok(())
+    }
+}
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct ReadCursor {
+    sequence: i64,
+}
+fn read_error(e: rapidmaker_storage::StorageError) -> Error {
+    if matches!(
+        e.to_string().as_str(),
+        "invalid message cursor" | "message cursor exceeds history"
+    ) {
+        error(StatusCode::BAD_REQUEST, "Nieprawidłowy kursor wiadomości.")
+    } else {
+        unavailable()
+    }
+}
+#[utoipa::path(post,path="/api/account/orders/{id}/messages/read",operation_id="orders_messages_read",tag="Zamówienia",
+    params(("id"=String,Path)),request_body=ReadCursor,
+    responses((status=200,body=Value),(status=400,body=Value),(status=401,body=Value),(status=404,body=Value)),
+    security(("session"=[],"csrf"=[]),("guest"=[])))]
+async fn read(
+    State(auth): State<Arc<Auth>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(cursor): Json<ReadCursor>,
+) -> Result<Json<Value>, Error> {
+    let (user, owner) = scope(&auth, &headers, true).await?;
+    if !auth
+        .database()?
+        .chat_read(
+            &id,
+            user.as_deref(),
+            owner.as_deref(),
+            false,
+            cursor.sequence,
+        )
+        .await
+        .map_err(read_error)?
+    {
+        return Err(not_found());
+    }
+    Ok(Json(json!({"ok":true})))
+}
+#[utoipa::path(post,path="/api/admin/orders/{id}/messages/read",operation_id="orders_admin_messages_read",tag="Admin",
+    params(("id"=String,Path)),request_body=ReadCursor,
+    responses((status=200,body=Value),(status=400,body=Value),(status=401,body=Value),(status=403,body=Value),(status=404,body=Value)),
+    security(("session"=[],"csrf"=[])))]
+async fn admin_read(
+    State(db): State<Option<Storage>>,
+    Extension(auth): Extension<Arc<Auth>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(cursor): Json<ReadCursor>,
+) -> Result<Json<Value>, Error> {
+    let user = auth.administrator(&headers, true).await?.user;
+    if !db
+        .as_ref()
+        .ok_or_else(unavailable)?
+        .chat_read(&id, Some(&user.id), None, true, cursor.sequence)
+        .await
+        .map_err(read_error)?
+    {
+        return Err(not_found());
+    }
+    Ok(Json(json!({"ok":true})))
+}
+
 #[derive(Deserialize, utoipa::ToSchema)]
 #[schema(as = OrderMessage)]
 #[serde(deny_unknown_fields)]
@@ -314,16 +416,26 @@ async fn status(
     tag = "Admin",
     summary = "Pobierz rozmowę zamówienia.",
     description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
-    params(("id" = String, Path, description = "Identyfikator zamówienia.")),
-    responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
+    params(("id" = String, Path, description = "Identyfikator zamówienia."), ChatQuery),
+    responses((status = 200, description = "Strona rozmowy i stan przeczytania.", body = rapidmaker_storage::MessagePage), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
 )]
 async fn admin_messages(
     State(db): State<Option<Storage>>,
+    Extension(auth): Extension<Arc<Auth>>,
     Path(id): Path<String>,
-) -> Result<Json<Value>, Error> {
+    Query(page): Query<ChatQuery>,
+    headers: HeaderMap,
+) -> Result<Json<rapidmaker_storage::MessagePage>, Error> {
+    page.validate()?;
+    let user = auth.administrator(&headers, false).await?.user;
     Ok(Json(
-        json!({"messages":db.as_ref().ok_or_else(unavailable)?.order_messages(&id,None,None,true).await.map_err(|_|unavailable())?.ok_or_else(not_found)?}),
+        db.as_ref()
+            .ok_or_else(unavailable)?
+            .chat_messages(&id, Some(&user.id), None, true, page.after, page.limit)
+            .await
+            .map_err(|_| unavailable())?
+            .ok_or_else(not_found)?,
     ))
 }
 #[utoipa::path(
@@ -340,14 +452,17 @@ async fn admin_messages(
 )]
 async fn admin_message(
     State(db): State<Option<Storage>>,
+    Extension(auth): Extension<Arc<Auth>>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(m): Json<Message>,
 ) -> Result<Json<Value>, Error> {
     valid_body(&m.body)?;
+    let user = auth.administrator(&headers, true).await?.user;
     if !db
         .as_ref()
         .ok_or_else(unavailable)?
-        .order_message(&id, None, None, true, &m.body, None, now())
+        .order_message(&id, Some(&user.id), None, true, &m.body, None, now())
         .await
         .map_err(|_| unavailable())?
     {

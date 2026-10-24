@@ -191,11 +191,10 @@ impl Storage {
         owner: Option<&str>,
         operator: bool,
     ) -> Result<Option<Vec<Value>>, StorageError> {
-        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM orders WHERE id=$1 AND ($4 OR user_id=$2 OR (user_id IS NULL AND owner_hash=$3 AND created_at>extract(epoch from now())::bigint-86400)))").bind(id).bind(user).bind(owner).bind(operator).fetch_one(&self.pool).await?;
-        if !exists {
-            return Ok(None);
-        }
-        Ok(Some(sqlx::query_scalar("SELECT jsonb_build_object('id',id,'operator',operator,'body',body,'created_at',created_at) FROM order_messages WHERE order_id=$1 ORDER BY created_at,id LIMIT 200").bind(id).fetch_all(&self.pool).await?))
+        Ok(self
+            .chat_messages(id, user, owner, operator, 0, 100)
+            .await?
+            .map(|p| p.messages))
     }
     #[allow(clippy::too_many_arguments)]
     pub async fn order_message(
@@ -208,56 +207,8 @@ impl Storage {
         admin_to: Option<&str>,
         now: i64,
     ) -> Result<bool, StorageError> {
-        if body.trim().is_empty()
-            || body.len() > 4000
-            || body
-                .chars()
-                .any(|c| c.is_control() && c != '\n' && c != '\t')
-        {
-            return Err("invalid message".into());
-        }
-        let mut tx = self.pool.begin().await?;
-        let row=sqlx::query("SELECT user_id,contact,guest_updates FROM orders WHERE id=$1 AND ($4 OR user_id=$2 OR (user_id IS NULL AND owner_hash=$3 AND created_at>extract(epoch from now())::bigint-86400)) FOR UPDATE")
-            .bind(id).bind(user).bind(owner).bind(operator).fetch_optional(&mut *tx).await?;
-        let Some(row) = row else { return Ok(false) };
-        let counts=sqlx::query("SELECT count(*) AS total,count(*) FILTER(WHERE created_at>$2) AS recent FROM order_messages WHERE order_id=$1").bind(id).bind(now-60).fetch_one(&mut *tx).await?;
-        if counts.get::<i64, _>("total") >= 200 || counts.get::<i64, _>("recent") >= 10 {
-            return Err("message limit".into());
-        }
-        let message_id = uuid::Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO order_messages(id,order_id,author_id,operator,body,created_at) VALUES($1,$2,$3,$4,$5,$6)")
-            .bind(&message_id).bind(id).bind(user).bind(operator).bind(body).bind(now).execute(&mut *tx).await?;
-        let order_user: Option<String> = row.try_get("user_id")?;
-        let contact: Value = row.try_get("contact")?;
-        let recipient = if operator {
-            contact["email"].as_str()
-        } else {
-            admin_to
-        };
-        if let Some(to) = recipient {
-            enqueue(
-                &mut tx,
-                id,
-                &format!("message:{message_id}"),
-                if operator {
-                    order_user.as_deref()
-                } else {
-                    None
-                },
-                to,
-                "chat_message",
-                json!({"reference":id}),
-                if operator {
-                    row.try_get("guest_updates")?
-                } else {
-                    true
-                },
-                now,
-            )
-            .await?;
-        }
-        tx.commit().await?;
-        Ok(true)
+        self.chat_web_message(id, user, owner, operator, body, admin_to, now)
+            .await
     }
 }
 

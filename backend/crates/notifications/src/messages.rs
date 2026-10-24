@@ -16,11 +16,13 @@ pub enum Notification<'a> {
     },
     ChatMessage {
         reference: &'a str,
+        body: &'a str,
+        operator: bool,
     },
 }
 
 impl Notification<'_> {
-    pub(crate) fn render(self) -> Result<(&'static str, String), MailError> {
+    pub(crate) fn render(self) -> Result<(String, String), MailError> {
         let field = |v: &str| {
             if v.is_empty() || v.len() > 160 || v.chars().any(char::is_control) {
                 Err(MailError::InvalidMessage)
@@ -28,7 +30,11 @@ impl Notification<'_> {
                 Ok(())
             }
         };
-        Ok(match self {
+        let chat_reference = match &self {
+            Self::ChatMessage { reference, .. } => Some(*reference),
+            _ => None,
+        };
+        let (subject, body) = match self {
             Self::Test => ("Rapidmaker — test email", "Wysyłka testowa z backendu Rust Rapidmaker. Ta wiadomość nie zawiera kodu logowania ani danych zamówienia.".into()),
             Self::LoginCode(code) => {
                 if code.len() != 8 || !code.bytes().all(|v| v.is_ascii_digit()) {
@@ -49,11 +55,23 @@ impl Notification<'_> {
                 field(status)?;
                 ("Rapidmaker — status zamówienia", format!("Zamówienie {reference}\nNowy status: {status}"))
             }
-            Self::ChatMessage { reference } => {
+            Self::ChatMessage { reference, body, operator } => {
                 field(reference)?;
-                ("Rapidmaker — nowa wiadomość", format!("Masz nową wiadomość dotyczącą zamówienia {reference}.\n\nZaloguj się do panelu: https://rapidmaker.pl/konto/zamowienia"))
+                if !reference.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') { return Err(MailError::InvalidMessage); }
+                if body.len() > 24000 || body.chars().any(|c| c.is_control() && c != '\n' && c != '\t') { return Err(MailError::InvalidMessage); }
+                let origin = std::env::var("AUTH_ORIGIN").unwrap_or_else(|_| "http://localhost:18430".into());
+                if origin.len() > 512 || !origin.starts_with("https://") && !origin.starts_with("http://localhost:") && !origin.starts_with("http://127.0.0.1:") || origin.chars().any(char::is_control) || origin.contains(['?', '#', '@']) { return Err(MailError::Configuration); }
+                let panel = if operator { "admin/zamowienia" } else { "konto/zamowienia" };
+                let reply = if body.is_empty() { "Odpowiedz w panelu." } else { "Odpowiedz na ten email lub w panelu." };
+                ("Rapidmaker — nowa wiadomość", format!("Zamówienie {reference}\n\n{body}\n\nRozmowa: {}/{panel}/{reference}\n{reply}", origin.trim_end_matches('/')))
             }
-        })
+        };
+        Ok((
+            chat_reference
+                .map(|id| format!("Rapidmaker — zamówienie {id}"))
+                .unwrap_or_else(|| subject.to_owned()),
+            body,
+        ))
     }
 }
 
@@ -81,6 +99,16 @@ pub enum EmailNotification {
     },
     ChatMessage {
         reference: String,
+        #[serde(default)]
+        body: String,
+        #[serde(default)]
+        operator: bool,
+        #[serde(default)]
+        reply_route: Option<String>,
+        #[serde(default)]
+        first_sequence: i64,
+        #[serde(default)]
+        last_sequence: i64,
     },
 }
 
@@ -88,6 +116,30 @@ impl EmailPayload {
     pub fn validate(&self) -> Result<(), MailError> {
         if self.version != 1 {
             return Err(MailError::InvalidMessage);
+        }
+        if let EmailNotification::ChatMessage {
+            reference,
+            body,
+            reply_route,
+            first_sequence,
+            last_sequence,
+            ..
+        } = &self.notification
+        {
+            if reference.is_empty()
+                || reference.len() > 160
+                || reference.chars().any(char::is_control)
+                || body.len() > 24000
+                || body
+                    .chars()
+                    .any(|c| c.is_control() && c != '\n' && c != '\t')
+                || *first_sequence < 0
+                || *last_sequence < *first_sequence
+                || reply_route.as_ref().is_some_and(|v| v.len() != 36)
+            {
+                return Err(MailError::InvalidMessage);
+            }
+            return Ok(());
         }
         self.notification.borrowed().render().map(|_| ())
     }
@@ -107,7 +159,16 @@ impl EmailNotification {
             Self::StatusChanged { reference, status } => {
                 Notification::StatusChanged { reference, status }
             }
-            Self::ChatMessage { reference } => Notification::ChatMessage { reference },
+            Self::ChatMessage {
+                reference,
+                body,
+                operator,
+                ..
+            } => Notification::ChatMessage {
+                reference,
+                body,
+                operator: *operator,
+            },
         }
     }
 }

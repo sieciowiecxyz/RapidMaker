@@ -1,19 +1,19 @@
 # Rozmowa zamówienia: strona i email
 
-Status: plan backendu, CH0–CH4 TODO. Nie oznacza wdrożenia IMAP. Bez frontendu, WebSocketów, załączników i nowego brokera.
+Status: CH0–CH4 PASS lokalnie, 2026-10-24. SMTP/IMAP i historia są zaimplementowane. Bez frontendu, WebSocketów, załączników i nowego brokera.
 
 ## Cel i punkt wyjścia
 
 Jedna historia przy zamówieniu w PostgreSQL. Klient i uprawniony operator odpowiadają przez API albo email; druga strona widzi ten sam tekst. Email kopiuje nową wiadomość, nie całą historię. Wyłączenie powiadomień nie usuwa rozmowy.
 
-Działają `GET/POST /api/account/orders/{id}/messages`, odpowiedniki `/api/admin/orders/{id}/messages`, własność, sesje/CSRF, zapis wiadomości z outboxem w jednej transakcji, preferencje i SMTP iCloud. Brakuje odbioru maili, powiązań odpowiedzi, paginacji, przeczytania i grupowania alertów. Obecnie email zawiera tylko informację/link; link operatora błędnie prowadzi do panelu klienta. Rozmowa ma twardy limit 200 wiadomości.
+Działają `GET/POST /api/account/orders/{id}/messages`, odpowiedniki `/api/admin/orders/{id}/messages`, własność, sesje/CSRF, zapis wiadomości z outboxem w jednej transakcji, preferencje i SMTP iCloud. Wdrożone: odbiór IMAP, podpisane referencje, treść w kopiach email, link klient/admin do konkretnego zamówienia, paginacja i przeczytanie oraz grupowanie przez 60 s. Dawny limit 200 wiadomości został usunięty.
 
 ## Przepływ i granice
 
 `API lub IMAP → ta sama autoryzowana operacja zapisu → order_messages + email_outbox → SMTP do drugiej strony`.
 
 - `storage/orders.rs`: wspólne reguły uczestnictwa i transakcja. Kanał `web/email`, autor, kolejność wiadomości; email nie omija aktualnej własności, blokad konta ani limitów. Rola operatora pochodzi z bazy, nie z nagłówka poczty.
-- `notifications`: treść i nagłówki SMTP oraz ograniczony parser MIME/transport IMAP. Użyj utrzymywanych bibliotek Rust; dobierz features i sprawdź zależności przed implementacją. Nie pisz własnego parsera ani protokołu.
+- `notifications`: treść i nagłówki SMTP oraz ograniczony parser MIME/transport IMAP. Użyj utrzymywanych bibliotek Rust; features ograniczone do potrzebnego transportu/parsing MIME. Nie pisz własnego parsera ani protokołu.
 - `api`: obecne endpointy i jeden worker odbioru, start/stop razem z aplikacją. Poll co 30 s, ograniczone partie, timeout/retry; jeden odbiorca skrzynki przez lease PostgreSQL. Bez HTTP i IMAP pod blokadą/transakcją DB.
 - Rozszerz obecne tabele rozmów/outboxa. Dodaj tylko trwałe powiązania odpowiedzi oraz rejestr odebranych maili z retry/deduplikacją. Metadane wyszukiwania i unikalności jako kolumny. Nie przechowuj całej skrzynki ani załączników w DB.
 
@@ -29,7 +29,7 @@ To model zaufania do posiadania prywatnej kopii emaila: przekazanie jej dalej mo
 
 ## Odbiór, limity i niezawodność
 
-- iCloud IMAP przez TLS, osobny tryb odbioru domyślnie wyłączony; konfiguracja/sekrety przez `.env`/SOPS i launcher. Testowo wyłącznie `void@sieciowiec.xyz`. Nie zakładaj, że konfiguracja SMTP oznacza działający dostęp IMAP.
+- iCloud IMAP przez TLS, `MAIL_INBOUND_MODE=disabled/test/live` (domyślnie disabled). Lokalne `.env`: test i folder `MAIL_IMAP_MAILBOX=void@sieciowiec.xyz`; bez ustawienia folderu domyślny INBOX. Odbiór read-only przez EXAMINE/BODY.PEEK; do 20 UID na partię, timeout 30 s i budżet odpowiedzi 8 MiB. Testowo wyłącznie `void@sieciowiec.xyz`.
 - Odbieraj tylko odpowiedzi powiązane z naszymi wiadomościami. Pozostałych maili nie importuj, nie kasuj i nie oznaczaj jako przeczytane. Przy pierwszym starcie ustaw jawny punkt rozpoczęcia; nie importuj całej starej skrzynki.
 - Deduplikacja po skrzynce, `UIDVALIDITY` i UID; dodatkowo rozpoznaj powtórną dostawę tej samej wiadomości. `Message-ID` nie jest dowodem uprawnień. Dopisanie do rozmowy, zapis odbioru i outbox w jednej transakcji. Awaria/restart nie gubi wiadomości ani nie dopisuje jej ponownie.
 - Limit surowego maila 256 KiB, nowej treści 4000 bajtów zgodnie z obecnym API, timeout i ograniczona głębokość MIME. Preferuj tekst; HTML zamieniaj na bezpieczny tekst. Usuń cytaty i podpis tylko przy jednoznacznym rozpoznaniu. Przy pustej/za dużej/niejednoznacznej treści jawny stan do weryfikacji, bez cichego obcięcia.
@@ -38,11 +38,11 @@ To model zaufania do posiadania prywatnej kopii emaila: przekazanie jej dalej mo
 
 ## Historia i powiadomienia
 
-Dodaj stabilną kolejność/kursor wiadomości i paginację (domyślnie 50, maks. 100). Usuń blokowanie całej rozmowy po 200 wpisach; zachowaj limity wielkości/prędkości i jawną politykę retencji. Odczyt nie oznacza automatycznie przeczytania: osobny idempotentny zapis kursora uczestnika, aktualizowany tylko w przód.
+Stabilna kolejność `sequence` i paginacja: `GET .../messages?after=0&limit=50`, limit maks. 100. Odpowiedź zawiera `messages,next_after,read_sequence,unread`. `POST .../messages/read {"sequence":N}` działa dla klienta i admina. Limit 4000 bajtów wiadomości i 10 wiadomości/min na zamówienie pozostaje. Historia zostaje razem z zamówieniem; metadane odbioru 30 dni, referencje odpowiedzi wygasają po 30 dniach. Odczyt nie oznacza automatycznie przeczytania: osobny idempotentny zapis kursora uczestnika, aktualizowany tylko w przód.
 
-Zgrupuj wiadomości dla jednego odbiorcy/zamówienia przez 60 s od pierwszej niepowiadomionej wiadomości, bez ciągłego przesuwania okna. Outbox zawiera stały zakres ID wiadomości i `Message-ID`; retry wysyła ten sam zakres. Własne wiadomości nie generują kopii do autora. Przeczytane przed wysłaniem można pominąć, a wyłączenie preferencji nie blokuje zapisu odpowiedzi. SMTP może dostarczyć kopię ponownie po niepewnym wyniku; nie obiecuj exactly-once dostarczenia.
+Zgrupuj wiadomości dla jednego odbiorcy/zamówienia przez 60 s od pierwszej niepowiadomionej wiadomości, bez ciągłego przesuwania okna. Outbox zawiera stały zakres ID wiadomości i `Message-ID`; retry wysyła ten sam zakres. Własne wiadomości nie generują kopii do autora. Odczyt nie wycofuje już zakolejkowanej kopii; aktualne preferencje i dostęp są ponownie sprawdzane przed SMTP. Wyłączenie powiadomień nie blokuje zapisu odpowiedzi. SMTP może dostarczyć kopię ponownie po niepewnym wyniku; nie obiecuj exactly-once dostarczenia.
 
-## Kolejność i kryteria
+## Etapy — PASS lokalnie
 
 | Etap | Implementacja | Krótkie potwierdzenie |
 |---|---|---|
@@ -54,6 +54,16 @@ Zgrupuj wiadomości dla jednego odbiorcy/zamówienia przez 60 s od pierwszej nie
 
 Zakres testów proporcjonalny: regresje powiązania/uprawnień i MIME, jeden test transakcji PostgreSQL i rzeczywisty round-trip przez testową skrzynkę. Bez Astry, testujących subagentów i frontendu. Nie wysyłaj do klientów produkcyjnych. Test końcowy może wymagać dwóch rozróżnialnych tożsamości pocztowych pod kontrolą właściciela; wspólne `void` nie dowodzi izolacji klient/admin.
 
-Blokery CH0: dostęp IMAP/app-password, zachowanie nagłówków przez wybranych klientów pocztowych, odrębne tożsamości do testu dwóch stron. Catch-all ani nowy dostawca nie są wymaganiem podstawowego wariantu. Bez obsługiwanej referencji wiadomość zostaje do ręcznej weryfikacji; bezpieczny fallback to odpowiedź w panelu.
+Warunki odbioru: dostęp IMAP/app-password, zachowanie nagłówków przez wybranych klientów pocztowych, odrębne tożsamości do testu dwóch stron. Catch-all ani nowy dostawca nie są wymaganiem podstawowego wariantu. Bez obsługiwanej referencji wiadomość zostaje do ręcznej weryfikacji; bezpieczny fallback to odpowiedź w panelu.
 
 Konfiguracja IMAP iCloud: [Apple](https://support.apple.com/en-in/102525). Opis wspiera możliwość transportu; dostęp konkretnego konta i round-trip wymagają własnego testu CH0.
+
+## Konfiguracja i diagnostyka
+
+- `MAIL_REPLY_KEY`: osobny losowy sekret min. 32 bajty, `.env`/SOPS; zmiana klucza unieważnia stare referencje.
+- IMAP korzysta z `MAIL_USER`/`MAIL_PASSWORD`; opcjonalnie oddzielne `MAIL_IMAP_USER`/`MAIL_IMAP_PASSWORD`. Serwer iCloud `imap.mail.me.com:993`, TLS; `MAIL_IMAP_MAILBOX` wskazuje folder docelowy.
+- `python backend/run.py --mail-receive`: jedna partia tą samą ścieżką co worker; wypisuje liczniki imported/duplicate/rejected/review/ignored. Zajęty lease może dać zera. Pierwsze uruchomienie ustala punkt rozpoczęcia, bez importu starej poczty.
+- `python backend/run.py --mail-operator EMAIL on` lub `off`: lokalne uprawnienie odpowiadania emailem dla istniejącego admina. `off` odwołuje dotychczasowe referencje operatora. Samo otrzymanie alertu nie nadaje tego uprawnienia.
+- Formularze logowania/frontendu nadal wymagają podłączenia. API admina zachowuje sesję/passkey/CSRF; kanał email daje tylko wąskie uprawnienie dopisania wiadomości.
+
+Dowód CH4: osobna baza; wiadomości przez API gościa/admina oraz SMTP → rzeczywisty folder iCloud → Rust IMAP → wspólna historia w obu kierunkach. Grupowanie, treść/link, restart/replay UID, paginacja/read/CSRF i odwołanie referencji PASS. Dwie role używały jednego fizycznego `void`; izolację różnych kont, rollback, 205 wpisów i preferencje sprawdzono osobno w PostgreSQL. Test używał sesji admina z fixture, bez ponownego testu fizycznego passkey. W izolowanej bazie przyspieszono `available_at` outboxa oraz cofnięto kursor UID/zwolniono lease, aby wymusić ponowny odbiór tego samego maila. Reguły produktu pozostały bez zmian. Testy nie obejmują dostarczalności produkcyjnej ani wszystkich klientów pocztowych.

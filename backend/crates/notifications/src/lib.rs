@@ -1,6 +1,10 @@
 //! Small SMTP sender. Callers own authorization, rate limits and delivery policy.
+mod inbound;
 mod messages;
+mod replies;
+pub use inbound::{Imap, ImapBatch, ImapCursor, InboundDisposition, InboundMail};
 pub use messages::{EmailNotification, EmailPayload, Notification};
+pub use replies::{parse_inbound, reply_reference, verify_reply_reference};
 
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
@@ -48,6 +52,7 @@ struct Sender {
     reply_to: Mailbox,
     test_to: Option<Mailbox>,
     test_mode: bool,
+    reply_key: Option<String>,
 }
 
 impl Mailer {
@@ -86,7 +91,11 @@ impl Mailer {
                 let from = address(&required("MAIL_FROM")?)?;
                 let reply_to = address(&required("MAIL_REPLY_TO")?)?;
                 let test_to = get("MAIL_TEST_TO")?.map(|v| address(&v)).transpose()?;
-                if mode == "test" && test_to.is_none() {
+                if mode == "test"
+                    && test_to
+                        .as_ref()
+                        .is_none_or(|v| v.email.to_string() != "void@sieciowiec.xyz")
+                {
                     return Err(MailError::Configuration);
                 }
                 let transport = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)
@@ -104,6 +113,7 @@ impl Mailer {
                     reply_to,
                     test_to,
                     test_mode: mode == "test",
+                    reply_key: get("MAIL_REPLY_KEY")?.filter(|v| v.len() >= 32),
                 })
             }
             _ => return Err(MailError::Configuration),
@@ -139,7 +149,22 @@ impl Mailer {
         self.send_inner(
             recipient,
             payload.notification.borrowed(),
-            Some(format!("<{id}@rapidmaker.pl>")),
+            Some(match &payload.notification {
+                EmailNotification::ChatMessage {
+                    reply_route: Some(route),
+                    ..
+                } => {
+                    let sender = self.enabled.as_ref().ok_or(MailError::Disabled)?;
+                    reply_reference(
+                        route,
+                        sender
+                            .reply_key
+                            .as_deref()
+                            .ok_or(MailError::Configuration)?,
+                    )?
+                }
+                _ => format!("<{id}@rapidmaker.pl>"),
+            }),
         )
         .await
     }

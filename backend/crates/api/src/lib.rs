@@ -7,7 +7,9 @@ mod checkout_worker;
 mod docs;
 mod email;
 mod files;
+mod mail_inbound;
 mod models;
+pub use mail_inbound::receive_once as mail_receive_once;
 mod orders;
 mod packing;
 mod passkeys;
@@ -20,12 +22,18 @@ pub use models::worker;
 pub use slice_worker::SliceWorker;
 pub struct Workers {
     mail: Option<email::MailWorker>,
+    inbound: Option<mail_inbound::InboundWorker>,
     slicer: Option<SliceWorker>,
     checkout: Option<checkout_worker::CheckoutWorker>,
 }
 impl Workers {
     pub async fn shutdown(self) {
         tokio::join!(
+            async {
+                if let Some(worker) = self.inbound {
+                    worker.shutdown().await;
+                }
+            },
             async {
                 if let Some(worker) = self.mail {
                     worker.shutdown().await;
@@ -58,6 +66,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     } else {
         None
     };
+    let imap = rapidmaker_notifications::Imap::from_env()?;
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
     let (checkout, webhook, checkout_worker) = checkout::router(storage.clone())?;
     let api = utoipa_axum::router::OpenApiRouter::new()
@@ -79,6 +88,14 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .as_ref()
         .filter(|_| mailer.enabled())
         .map(|db| email::MailWorker::start(db.clone(), mailer));
+    let inbound = imap
+        .map(|imap| {
+            storage
+                .clone()
+                .ok_or("IMAP requires database")
+                .map(|db| mail_inbound::InboundWorker::start(db, imap))
+        })
+        .transpose()?;
     let slicer = match std::env::var("SLICER_WORKER_MODE")
         .as_deref()
         .unwrap_or("embedded")
@@ -91,6 +108,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         router,
         Workers {
             mail: worker,
+            inbound,
             slicer,
             checkout: checkout_worker,
         },

@@ -2,7 +2,7 @@
 
 C1–C6: PASS lokalnie (Stripe test, Furgonetka sandbox). Tylko Rust/PostgreSQL/API; bez strony. Decyzje i kontrakt: [PLAN.md](PLAN.md). B1–B8 pozostają ukończonym lokalnym POC; dowody w [checkpoincie](milestones/backend.md).
 
-Aktywny plan: CH0–CH4 poniżej, jeszcze niewdrożone.
+CH0–CH4 poniżej: PASS lokalnie (API/SMTP/IMAP), bez frontendu.
 
 ## C1 — Adres i kontrakt — PASS lokalnie
 
@@ -77,14 +77,15 @@ Dowody i granice: [checkpoint](milestones/backend.md#checkout-c1c6--2026-10-24).
 - PASS: fmt, zakresowe Clippy/build. Bez migracji, nowych plików i zależności. Cache procesu nie łączy zapytań między oddzielnymi instancjami backendu; snapshoty PostgreSQL pozostają trwałe.
 - LOC (tokei, 3 zmienione pliki Rust): produkcja 1749 → 1926 (+177), testy 204 → 427 (+223), bez pustych linii i komentarzy.
 
-## CH0–CH4 — Rozmowy przez email — TODO
+## CH0–CH4 — Rozmowy przez email — PASS lokalnie
 
-Szczegóły i kryteria: [plan rozmów](chat-email.md#kolejność-i-kryteria).
+Szczegóły i kryteria: [plan rozmów](chat-email.md).
 
-- CH0 TODO: sprawdź IMAP iCloud oraz prawdziwe „Odpowiedz” z zachowaniem referencji. Brak konfiguracji oznacza NOT RUN.
-- CH1 TODO: wspólne uprawnienia/zapis, paginacja i kursor przeczytania; bez limitu 200 wpisów na całą rozmowę.
-- CH2 TODO: kopia nowej treści, link właściwego panelu, referencja odbiorcy, grupowanie i trwały outbox.
-- CH3 TODO: worker IMAP, bezpieczne przypisanie autora/rozmowy, MIME, limity, deduplikacja i restart.
-- CH4 TODO: dwukierunkowy test API → email → odpowiedź → historia, izolacja uczestników i preferencje. Bez pisania strony ani wysyłania do produkcyjnych klientów.
+- CH0 PASS: sprawdź IMAP iCloud oraz prawdziwe „Odpowiedz” z zachowaniem referencji. Brak konfiguracji oznacza NOT RUN.
+- CH1 PASS: wspólne uprawnienia/zapis, paginacja i kursor przeczytania; bez limitu 200 wpisów na całą rozmowę.
+- CH2 PASS: kopia nowej treści, link właściwego panelu, referencja odbiorcy, grupowanie i trwały outbox.
+- CH3 PASS: worker IMAP, bezpieczne przypisanie autora/rozmowy, MIME, limity, deduplikacja i restart.
+- CH4 PASS: dwukierunkowy test API → email → odpowiedź → historia, izolacja uczestników i preferencje. Bez pisania strony ani wysyłania do produkcyjnych klientów.
 
-Samo dodanie planu nie zmienia statusów na PASS. Przed implementacją CH0 wyjaśnij dostęp IMAP i tożsamości pocztowe do testu dwóch stron.
+Dowody: 19 testów jednostkowych PASS; osobny test PostgreSQL (205 wpisów, własność, grupowanie, deduplikacja i rollback) oraz migracja starej historii PASS. Rzeczywisty SMTP/IMAP round-trip w obie strony, restart/replay i cofnięcie uprawnienia PASS, wyłącznie void@sieciowiec.xyz. Dwie role w jednej skrzynce; różne konta sprawdzone w DB. Fmt/Clippy/build PASS. Cargo audit: 9 wcześniejszych zgłoszeń, żadne nie dotyczy nowych pakietów IMAP/MIME. Szczegóły i granice: chat-email.md.
+- Pomiar tokei (zmienione i nowe źródła Rust): produkcja 1692 → 3034 (+1342), testy 510 → 931 (+421), bez pustych linii/komentarzy. 4 nowe moduły Rust i migracja 0014; nowe biblioteki transportu IMAP/MIME oraz istniejące zależności TLS/HMAC. Bez nowego crate’a aplikacji.
