@@ -110,7 +110,10 @@ async fn packages(
         })
         .collect()
 }
-async fn actor(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<bool, StorageError> {
+pub(super) async fn actor(
+    tx: &mut Transaction<'_, Postgres>,
+    id: &str,
+) -> Result<bool, StorageError> {
     Ok(sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND role='admin' AND disabled_at IS NULL)",
     )
@@ -186,7 +189,7 @@ impl Storage {
         {
             return Ok(false);
         }
-        Ok(sqlx::query("UPDATE shipments SET state='manual_review',last_error=$3,lease_token=NULL,lease_until=NULL,next_attempt=$4+900,updated_at=$4 WHERE id=$1 AND lease_token=$2 AND lease_until>$4 AND state<>'delivered'").bind(&s.id).bind(&s.lease_token).bind(code).bind(now).execute(&self.pool).await?.rows_affected()==1)
+        Ok(sqlx::query("UPDATE shipments SET state='manual_review',last_error=$3,lease_token=NULL,lease_until=NULL,next_attempt=$4+900,updated_at=$4 WHERE id=$1 AND lease_token=$2 AND lease_until>$4 AND state NOT IN ('delivered','canceled')").bind(&s.id).bind(&s.lease_token).bind(code).bind(now).execute(&self.pool).await?.rows_affected()==1)
     }
     pub async fn shipment_get(&self, order: &str) -> Result<Option<Shipment>, StorageError> {
         let mut tx = self.pool.begin().await?;
@@ -411,9 +414,9 @@ impl Storage {
     }
     pub async fn shipment_lease(&self, now: i64) -> Result<Option<Shipment>, StorageError> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("UPDATE shipments SET state='manual_review',last_error='retry_exhausted',lease_token=NULL,lease_until=NULL WHERE id IN (SELECT id FROM shipments WHERE attempts>=1000 AND state NOT IN ('draft','delivered') AND COALESCE(lease_until,0)<=$1 LIMIT 100 FOR UPDATE SKIP LOCKED)").bind(now).execute(&mut *tx).await?;
+        sqlx::query("UPDATE shipments SET state='manual_review',last_error='retry_exhausted',lease_token=NULL,lease_until=NULL WHERE id IN (SELECT id FROM shipments WHERE attempts>=1000 AND state NOT IN ('draft','delivered','canceled') AND COALESCE(lease_until,0)<=$1 LIMIT 100 FOR UPDATE SKIP LOCKED)").bind(now).execute(&mut *tx).await?;
         let token = uuid::Uuid::new_v4().to_string();
-        let row=sqlx::query("UPDATE shipments SET lease_token=$2,lease_until=$1+120,attempts=attempts+1,updated_at=$1 WHERE id=(SELECT id FROM shipments WHERE attempts<1000 AND state NOT IN ('draft','delivered') AND (state<>'manual_review' OR EXISTS(SELECT 1 FROM shipment_packages p WHERE p.shipment_id=shipments.id AND p.state IN ('booked','dispatched'))) AND next_attempt<=$1 AND (lease_until IS NULL OR lease_until<=$1) ORDER BY next_attempt FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *").bind(now).bind(token).fetch_optional(&mut *tx).await?;
+        let row=sqlx::query("UPDATE shipments SET lease_token=$2,lease_until=$1+120,attempts=attempts+1,updated_at=$1 WHERE id=(SELECT id FROM shipments WHERE attempts<1000 AND state NOT IN ('draft','delivered','canceled') AND (state<>'manual_review' OR EXISTS(SELECT 1 FROM shipment_packages p WHERE p.shipment_id=shipments.id AND p.state IN ('booked','dispatched')) OR EXISTS(SELECT 1 FROM shipment_actions a WHERE a.shipment_id=shipments.id AND a.state IN ('queued','submitting','pending'))) AND next_attempt<=$1 AND (lease_until IS NULL OR lease_until<=$1) ORDER BY next_attempt FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *").bind(now).bind(token).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             tx.commit().await?;
             return Ok(None);
@@ -441,7 +444,7 @@ impl Storage {
                 | ("ordering", "booked")
                 | ("booked", "dispatched")
                 | ("dispatched", "delivered")
-        ) || to == "manual_review";
+        ) || (to == "manual_review" && from != "canceled");
         if !allowed
             || provider
                 .is_some_and(|p| p.is_empty() || p.len() > 128 || p.chars().any(char::is_control))
@@ -479,7 +482,7 @@ impl Storage {
         {
             return Ok(false);
         }
-        Ok(sqlx::query("UPDATE shipments SET state=CASE WHEN state='delivered' THEN state ELSE $3 END,next_attempt=$4+$5,lease_token=NULL,lease_until=NULL,updated_at=$4 WHERE id=$1 AND lease_token=$2 AND lease_until>$4").bind(&s.id).bind(&s.lease_token).bind(state).bind(now).bind(delay).execute(&self.pool).await?.rows_affected()==1)
+        Ok(sqlx::query("UPDATE shipments SET state=CASE WHEN state IN ('delivered','canceled') THEN state ELSE $3 END,next_attempt=$4+$5,lease_token=NULL,lease_until=NULL,updated_at=$4 WHERE id=$1 AND lease_token=$2 AND lease_until>$4").bind(&s.id).bind(&s.lease_token).bind(state).bind(now).bind(delay).execute(&self.pool).await?.rows_affected()==1)
     }
     /// Set command phase without releasing the lease; never changes a previously stored command ID.
     pub async fn shipment_order_start(&self, s: &Shipment, now: i64) -> Result<bool, StorageError> {
@@ -531,7 +534,7 @@ impl Storage {
             .bind(&s.order_id)
             .fetch_optional(&mut *tx)
             .await?;
-        let changed=sqlx::query("UPDATE shipment_packages p SET tracking=CASE WHEN p.state='delivered' THEN p.tracking ELSE $4 END,state=CASE WHEN $6 THEN 'delivered' WHEN $5 AND p.state='booked' THEN 'dispatched' ELSE p.state END,updated_at=$7 FROM shipments s WHERE p.shipment_id=s.id AND s.id=$1 AND s.lease_token=$2 AND s.lease_until>$7 AND p.id=$3 AND p.state IN ('booked','dispatched','delivered')").bind(&s.id).bind(&s.lease_token).bind(package).bind(tracking).bind(dispatched).bind(delivered).bind(now).execute(&mut *tx).await?.rows_affected()==1;
+        let changed=sqlx::query("UPDATE shipment_packages p SET tracking=CASE WHEN p.state='delivered' THEN p.tracking ELSE $4 END,state=CASE WHEN $6 THEN 'delivered' WHEN $5 AND p.state='booked' THEN 'dispatched' ELSE p.state END,updated_at=$7 FROM shipments s WHERE p.shipment_id=s.id AND s.id=$1 AND s.lease_token=$2 AND s.lease_until>$7 AND p.id=$3 AND p.state IN ('booked','dispatched','delivered') AND NOT EXISTS(SELECT 1 FROM shipment_actions a WHERE a.shipment_id=s.id AND a.state IN ('queued','submitting','pending','manual_review'))").bind(&s.id).bind(&s.lease_token).bind(package).bind(tracking).bind(dispatched).bind(delivered).bind(now).execute(&mut *tx).await?.rows_affected()==1;
         if changed {
             progress(&mut tx, &s.order_id, &s.id, now).await?;
         }
@@ -569,6 +572,11 @@ impl Storage {
             return Ok(Err(ShipmentError::NotFound));
         };
         let s = shipment(row)?;
+        let busy: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM shipment_actions WHERE shipment_id=$1 AND state IN ('queued','submitting','pending','manual_review'))")
+            .bind(&s.id).fetch_one(&mut *tx).await?;
+        if busy || s.state == "canceled" {
+            return Ok(Err(ShipmentError::Conflict));
+        }
         let count:i64=sqlx::query_scalar("SELECT count(*) FROM shipment_packages WHERE shipment_id=$1 AND id=ANY($2) AND state IN ('booked','dispatched','delivered') AND ((jsonb_typeof(tracking->'numbers')='array' AND jsonb_array_length(tracking->'numbers')>0) OR length(tracking->>'number')>0)").bind(&s.id).bind(ids).fetch_one(&mut *tx).await?;
         let distinct = ids.iter().collect::<std::collections::HashSet<_>>().len();
         if count as usize != distinct {
@@ -602,7 +610,7 @@ impl Storage {
             .bind(order)
             .fetch_optional(&mut *tx)
             .await?;
-        let changed=sqlx::query("UPDATE shipment_packages p SET provider_id=$3,state='created',updated_at=$4 FROM shipments s WHERE p.shipment_id=s.id AND s.order_id=$1 AND p.id=$2 AND NOT EXISTS(SELECT 1 FROM shipment_packages other WHERE other.provider_id=$3 AND other.id<>p.id) AND p.state IN ('creating','manual_review') AND p.provider_id IS NULL AND (s.lease_until IS NULL OR s.lease_until<=$4)").bind(order).bind(package).bind(provider).bind(now).execute(&mut *tx).await?.rows_affected()==1;
+        let changed=sqlx::query("UPDATE shipment_packages p SET provider_id=$3,state='created',updated_at=$4 FROM shipments s WHERE p.shipment_id=s.id AND s.order_id=$1 AND p.id=$2 AND NOT EXISTS(SELECT 1 FROM shipment_packages other WHERE other.provider_id=$3 AND other.id<>p.id) AND p.state IN ('creating','manual_review') AND p.provider_id IS NULL AND s.state<>'canceled' AND NOT EXISTS(SELECT 1 FROM shipment_actions a WHERE a.shipment_id=s.id AND a.state IN ('queued','submitting','pending','manual_review')) AND (s.lease_until IS NULL OR s.lease_until<=$4)").bind(order).bind(package).bind(provider).bind(now).execute(&mut *tx).await?.rows_affected()==1;
         if changed {
             sqlx::query("UPDATE shipments SET state='queued',lease_token=NULL,lease_until=NULL,next_attempt=$2,updated_at=$2 WHERE order_id=$1").bind(order).bind(now).execute(&mut *tx).await?;
         }

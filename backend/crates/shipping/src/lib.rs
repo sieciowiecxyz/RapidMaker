@@ -1,7 +1,9 @@
 //! Domestic address validation and bounded Furgonetka sandbox adapter. Shipment purchases are restricted to sandbox.
 mod address;
+mod operations;
 mod shipments;
 pub use address::{DeliveryChoice, Invoice, Method, Recipient, Validation};
+pub use operations::PickupDate;
 use rapidmaker_packing::Estimate;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};

@@ -97,7 +97,7 @@ Status: PASS lokalnie i w sandboxie, bez frontendu/live. DPD: zamówienie jednej
 
 `opłacone → druk → ready → potwierdzenie paczek → akceptacja aktualnego kosztu → nadanie → etykiety → przekazanie → doręczenie`.
 
-Klient płaci i wybiera usługę/punkt. Admin potwierdza rzeczywistą liczbę, zewnętrzne wymiary i masę paczek na podstawie propozycji algorytmu. Dopiero jawny POST `book` upoważnia worker do zamówienia przewozu. Wersja, UUID żądania i ID zaakceptowanej oferty chronią przed zmianą danych/podwójnym kliknięciem. Etykieta nie oznacza wysłania. W v1 paczki zanosimy do przewoźnika: `request_collection=false`, bez zamawiania podjazdu.
+Klient płaci i wybiera usługę/punkt. Admin potwierdza rzeczywistą liczbę, zewnętrzne wymiary i masę paczek na podstawie propozycji algorytmu. Dopiero jawny POST `book` upoważnia worker do zamówienia przewozu. Wersja, UUID żądania i ID zaakceptowanej oferty chronią przed zmianą danych/podwójnym kliknięciem. Etykieta nie oznacza wysłania. Nadanie używa `request_collection=false`; podjazd jest osobną decyzją admina przez L1 poniżej.
 
 ### API i użycie
 
@@ -124,7 +124,7 @@ Przygotowanie i nadanie wymagają paid+ready. Odbiór osobisty omija tę ścież
 - Jeden batch/zamówienie, do 30 rzeczywistych kartonów. Adapter dzieli je według limitów wybranej usługi i sumuje cenę grup. Przesyłka Furgonetki może zawierać kilka kartonów; nie utożsamiamy jej ID z jednym kartonem.
 - Przed HTTP zapisujemy dane, krótką unikalną referencję i UUID komendy. Lease 120 s; jedna próba workera ograniczona do 90 s, retry/backoff, do 1000 podjęć. HTTP poza transakcją. Po wyczerpaniu budżetu: `manual_review`, `retry_exhausted`.
 - Dodawanie przez POST nie jest ponawiane w ciemno: po utracie odpowiedzi tylko odczyt po referencji i sprawdzenie zgodności usługi, adresów, wymiarów oraz masy. Niejasny wynik → `manual_review`. Po PUT zamawiania odczytujemy tę samą komendę UUID, bez nowego zlecenia. Reopen wymaga dowodu, że poprzednia operacja nie istnieje i nie doszło do zamówienia.
-- Częściowy sukces zachowuje znane zamówione przesyłki; reszta wymaga interwencji. Nie zamawiamy ponownie całego batcha. `last_error` rozróżnia m.in. `provider_terms`, `shipping_account`, `package_unknown`, `command_unknown`, `price_or_data_changed`. Anulowanie już zamówionego kuriera i rozliczenie jego opłaty poza v1.
+- Częściowy sukces zachowuje znane zamówione przesyłki; reszta wymaga interwencji. Nie zamawiamy ponownie całego batcha. `last_error` rozróżnia m.in. `provider_terms`, `shipping_account`, `package_unknown`, `command_unknown`, `price_or_data_changed`. Podjazdy i anulowanie rozszerza L1–L2 poniżej; rozliczenie opłaty przewozowej pozostaje osobną decyzją operatora.
 - PDF max. 8 MiB, stały host API, bez redirectów, `no-store`/`nosniff`/attachment. Bez publicznych etykiet i logowania danych odbiorcy/sekretów.
 
 ### Tracking i email
@@ -137,4 +137,18 @@ Przekazanie potwierdza admin lub skan przewoźnika. Przy wielu kartonach jednego
 
 [Oficjalna specyfikacja REST](https://furgonetka.pl/js/swagger/api-rest-documentation.4cc02d4621.yaml): POST /packages dodaje, PUT/GET /order-commands/{uuid} zamawia/odczytuje wynik; GET etykiety i trackingu, PUT sandboxowej symulacji. Żaden kod nie akceptuje regulaminów ani nie ustawia zgód marketingowych.
 
-Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu, odnowienie tokena i zamawianie podjazdu pozostają poza wdrożeniem. Właściciel zaakceptował krajowy regulamin DPD i zweryfikował telefon konta w panelu; wcześniejsze 409 terms_and_conditions_not_valid oraz 400 /phone zostały usunięte. Odczyt API potwierdził pustą listę wymaganych regulaminów. Marketingu ani innych przewoźników nie włączano. Nowa/zmieniona konfiguracja konta może wymagać ponownej interwencji właściciela.
+Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu i odnowienie tokena pozostają poza wdrożeniem. Właściciel zaakceptował krajowy regulamin DPD i zweryfikował telefon konta w panelu; wcześniejsze 409 terms_and_conditions_not_valid oraz 400 /phone zostały usunięte. Odczyt API potwierdził pustą listę wymaganych regulaminów. Marketingu ani innych przewoźników nie włączano. Nowa/zmieniona konfiguracja konta może wymagać ponownej interwencji właściciela.
+
+
+## L1–L2 — Podjazdy i anulowanie
+
+Bez frontendu. Istniejące crate’y, worker i lease nadania; jedna tabela `shipment_actions`. Admin po passkey + CSRF, aktualna wersja nadania, `request_id` UUID. Wybrane `package_ids` to lokalne ID z GET nadania; od 1 do 30 przesyłek jednego zamówienia. Jedna aktywna operacja, maksymalnie 100 operacji historii na zamówienie. Łączenie podjazdów różnych zamówień poza tym etapem.
+
+- **L1:** POST `/api/admin/orders/{id}/shipment/pickup/proposals` z `{package_ids,ready_date,repeat:false}` pobiera terminy. POST `/pickup` z `{version,request_id,package_ids,pickup_date:{date,min_time,max_time},repeat:false}` zleca wybrany wspólny termin. Ponowienie nieudanego odbioru: `repeat:true`, tylko jeśli przewoźnik udostępnia `repickup`. Worker ponownie sprawdza dostępność i termin przed HTTP. Dopiero wynik z numerem podjazdu i zgodnymi ID oznacza sukces. Podjazd nie oznacza wysłania zamówienia.
+- **L2:** POST `/api/admin/orders/{id}/shipment/cancel` z `{version,request_id,package_ids}` anuluje wybrane zamówione przesyłki. Sprawdzamy `cancel_available`. Ostateczne `canceled` wymaga stanu `cancelled` w szczegółach Furgonetki; anulowanie odroczone pozostaje `pending`. Przy anulowaniu części grup nadanie wymaga ręcznego rozstrzygnięcia. Nie tworzymy automatycznie nowej przesyłki i nie zmieniamy zamówienia ani Stripe. Anulowanie może podlegać opłatom przewoźnika.
+
+`202` oznacza trwały zapis, nie sukces u przewoźnika. GET `/api/admin/orders/{id}/shipment/actions` zwraca historię, stan i wynik. Ponowienie identycznego request_id zwraca tę samą operację; zmiana danych pod tym ID daje konflikt. Inne równoległe operacje, etykiety i przekazanie blokujemy na czas nierozstrzygniętego zlecenia. Anulowanych paczek nie przywraca tracking.
+
+Stan `submitting` zapisujemy przed jedynym PUT. Po utracie odpowiedzi/restartcie sprawdzamy GET tej samej komendy UUID; nie wysyłamy ponownie PUT. Nieznany lub niespójny wynik → `manual_review`; POST `/api/admin/orders/{id}/shipment/actions/{action_id}/reconcile` z `{version}` wznawia wyłącznie odczyt. Nie usuwa niepewnego zlecenia i nie upoważnia do kolejnej mutacji. Wyniki częściowe zachowują potwierdzone grupy. Anulowanie odroczone odpytujemy co 15 min; inne oczekujące operacje zwykle co minutę. Brak nowych sekretów i zależności.
+
+Źródło: [Furgonetka — podjazdy i anulowanie](https://furgonetka.pl/api/rest/packages-instruction). Dowody i ograniczenia: MILESTONES.md, L1–L2.

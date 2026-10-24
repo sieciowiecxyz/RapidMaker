@@ -1,13 +1,13 @@
 # Dokumentacja Rapidmaker
 
-Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, trackingiem i wysyłką emaila. Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
+Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, trackingiem i wysyłką emaila. Anulowanie L2 sprawdzone w sandboxie; podjazdy L1 zaimplementowane, potwierdzenie rezerwacji blokuje `carrierConnectionError` DPD. Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
 - [Plan checkoutu](PLAN.md)
   - przeczytaj gdy: projektujesz checkout lub nadawanie przesyłek.
-  - opis: checkout i kontrakt S0–S4 nadawania paczek.
+  - opis: checkout, nadawanie S0–S4, podjazdy i anulowanie L1–L2.
 - [Milestones checkoutu](MILESTONES.md)
   - przeczytaj gdy: wdrażasz kolejny etap backendu.
-  - opis: dowody działania, ograniczenia i blokery S0–S4.
+  - opis: dowody i blokery checkoutu oraz logistyki.
 - [Rozmowy i email](chat-email.md)
   - przeczytaj gdy: rozwijasz chat i odpowiadanie z poczty.
   - opis: API historii, SMTP/IMAP, konfiguracja i dowody CH0–CH4.

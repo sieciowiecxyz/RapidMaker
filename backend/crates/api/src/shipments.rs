@@ -76,7 +76,7 @@ pub(super) fn router() -> OpenApiRouter<Arc<App>> {
         .routes(routes!(reopen))
         .routes(routes!(account))
 }
-fn domain(e: ShipmentError) -> super::checkout::Error {
+pub(super) fn domain(e: ShipmentError) -> super::checkout::Error {
     let (status, code, message) = match e {
         ShipmentError::NotFound => (
             StatusCode::NOT_FOUND,
@@ -131,7 +131,7 @@ pub(super) fn provider_error(e: ProviderError) -> super::checkout::Error {
         _ => unavailable(),
     }
 }
-async fn stored(app: &App, id: &str) -> Result<Shipment> {
+pub(super) async fn stored(app: &App, id: &str) -> Result<Shipment> {
     app.db()?
         .shipment_get(id)
         .await
@@ -341,6 +341,14 @@ async fn label(
         return Err(domain(ShipmentError::Invalid));
     }
     let s = stored(&app, &id).await?;
+    if app
+        .db()?
+        .shipment_action_busy(&id)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        return Err(domain(ShipmentError::Conflict));
+    }
     let p = s
         .packages
         .iter()

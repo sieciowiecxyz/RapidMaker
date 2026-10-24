@@ -132,6 +132,21 @@ Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie n
 
 ## Nadawanie przesyłek
 
-Backend sandbox, bez nowego panelu i podjazdu kuriera. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po passkey oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
+Backend sandbox, bez nowego panelu. Podjazdy i anulowanie obsługuje backend opisany poniżej. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po passkey oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
 
 Używa istniejących FURGONETKA_SANDBOX_TOKEN/FURGONETKA_SENDER_JSON; bez nowych sekretów. DPD sandbox sprawdzony: dwa kartony/dwa numery w jednej przesyłce, PDF, restart i ponowienie bez duplikatu, przekazanie, jedna wysyłka SMTP oraz symulowane doręczenie. Właściciel zaakceptował regulamin DPD i zweryfikował telefon konta; kod nie zapisuje zgód. Test używał opłaconego zamówienia/sesji admina z fixtures i void@sieciowiec.xyz.
+
+
+### Podjazdy i anulowanie przesyłek
+
+Wymagają admin/passkey + CSRF. Używaj lokalnych ID przesyłek z GET `/api/admin/orders/{id}/shipment`, aktualnej `version` i nowego `request_id` UUID dla nowej decyzji.
+
+| Metoda i końcówka pod `/api/admin/orders/{id}/shipment` | Dane / wynik |
+| --- | --- |
+| POST `/pickup/proposals` | `{package_ids,ready_date:"YYYY-MM-DD",repeat:false}` → terminy Furgonetki |
+| POST `/pickup` | `{version,request_id,package_ids,pickup_date:{date,min_time,max_time},repeat:false}` → 202 i trwała operacja |
+| POST `/cancel` | `{version,request_id,package_ids}` → 202 i trwała operacja |
+| GET `/actions` | Historia, wynik, numer podjazdu lub błąd przewoźnika |
+| POST `/actions/{action_id}/reconcile` | `{version}` → ponowne sprawdzenie niepewnego wyniku, bez nowego zlecenia |
+
+Godziny kopiuj z dostępnej propozycji wspólnej dla wszystkich wybranych przesyłek. `repeat:true` służy do ponowienia nieudanego odbioru, jeśli Furgonetka na to pozwala. Jedna operacja obejmuje jedno zamówienie i maks. 30 przesyłek Furgonetki; pojedyncza przesyłka może zawierać wiele kartonów. Podjazd nie oznacza przekazania kurierowi. Anulowanie nie zwraca pieniędzy w Stripe. Przekazanych lub anulowanych lokalnie paczek nie można ponownie zlecić tymi endpointami. Kontrakt i ograniczenia: [L1–L2](../docs/PLAN.md#l1l2--podjazdy-i-anulowanie).

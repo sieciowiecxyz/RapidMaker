@@ -15,6 +15,8 @@ mod packing;
 mod passkeys;
 mod quotes;
 mod refunds;
+mod shipment_action_worker;
+mod shipment_actions;
 mod shipment_worker;
 mod shipments;
 mod slice_worker;

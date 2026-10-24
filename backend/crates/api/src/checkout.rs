@@ -794,6 +794,7 @@ pub fn router(
         .merge(super::checkout_legacy::router())
         .merge(super::refunds::router())
         .merge(super::shipments::router())
+        .merge(super::shipment_actions::router())
         .with_state(app.clone());
     let shipping_worker = app
         .db

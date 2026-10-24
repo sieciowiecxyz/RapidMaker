@@ -49,7 +49,7 @@ pub struct Tracking {
 fn invalid() -> ShipmentError {
     ShipmentError::Invalid("Sprawdź dane przesyłki i konfigurację konta przewoźnika.".into())
 }
-fn safe_id(value: &str) -> bool {
+pub(super) fn safe_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
         && value
@@ -59,7 +59,7 @@ fn safe_id(value: &str) -> bool {
 fn reference_valid(value: &str) -> bool {
     safe_id(value) && value.len() <= 22
 }
-fn valid_uuid(value: &str) -> bool {
+pub(super) fn valid_uuid(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(i, b)| {
             if [8, 13, 18, 23].contains(&i) {
@@ -100,7 +100,7 @@ async fn bounded(
     Ok(body)
 }
 impl Sandbox {
-    async fn shipment_request(
+    pub(super) async fn shipment_request(
         &self,
         method: reqwest::Method,
         path: &str,
@@ -131,7 +131,9 @@ impl Sandbox {
         {
             let value: Value = serde_json::from_slice(&bounded(response, 65536, mutation).await?)
                 .map_err(|_| invalid())?;
-            if path.starts_with("/order-commands/")
+            if ["/order-commands/", "/pickup-commands/", "/cancel-command/"]
+                .iter()
+                .any(|prefix| path.starts_with(prefix))
                 && value["errors"]
                     .as_array()
                     .is_some_and(|errors| errors.iter().any(|e| e["code"] == "commandNotExists"))

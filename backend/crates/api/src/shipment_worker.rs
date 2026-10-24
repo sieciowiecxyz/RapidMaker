@@ -85,6 +85,9 @@ fn backoff(attempts: i32) -> i64 {
     (5_i64 << attempts.clamp(0, 7)).min(900)
 }
 async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
+    if super::shipment_action_worker::process(app, s).await? {
+        return Ok(());
+    }
     let db = app.db.as_ref().ok_or("missing shipment database")?;
     let api = app.shipping.as_ref().ok_or("missing shipment provider")?;
     match s.state.as_str() {
