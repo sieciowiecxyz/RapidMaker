@@ -14,6 +14,12 @@ pub enum Notification<'a> {
         reference: &'a str,
         status: &'a str,
     },
+    ShipmentDispatched {
+        reference: &'a str,
+        carrier: &'a str,
+        tracking_numbers: &'a [String],
+        remaining_packages: u32,
+    },
     ChatMessage {
         reference: &'a str,
         body: &'a str,
@@ -54,6 +60,15 @@ impl Notification<'_> {
                 field(reference)?;
                 field(status)?;
                 ("Rapidmaker — status zamówienia", format!("Zamówienie {reference}\nNowy status: {status}"))
+            }
+            Self::ShipmentDispatched { reference, carrier, tracking_numbers, remaining_packages } => {
+                field(reference)?;
+                field(carrier)?;
+                if tracking_numbers.is_empty() || tracking_numbers.len() > 30 || remaining_packages > 30
+                    || tracking_numbers.iter().any(|n| n.is_empty() || n.len() > 100 || !n.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))) {
+                    return Err(MailError::InvalidMessage);
+                }
+                ("Rapidmaker — przesyłka przekazana przewoźnikowi", format!("Zamówienie {reference}\n\nPrzekazaliśmy przesyłkę przewoźnikowi: {carrier}.\nNumery śledzenia:\n{}\n\nPozostałe przesyłki czekające na przekazanie: {remaining_packages}.\nAktualny status sprawdzisz w swoim panelu zamówienia.", tracking_numbers.join("\n")))
             }
             Self::ChatMessage { reference, body, operator } => {
                 field(reference)?;
@@ -96,6 +111,12 @@ pub enum EmailNotification {
     StatusChanged {
         reference: String,
         status: String,
+    },
+    ShipmentDispatched {
+        reference: String,
+        carrier: String,
+        tracking_numbers: Vec<String>,
+        remaining_packages: u32,
     },
     ChatMessage {
         reference: String,
@@ -159,6 +180,17 @@ impl EmailNotification {
             Self::StatusChanged { reference, status } => {
                 Notification::StatusChanged { reference, status }
             }
+            Self::ShipmentDispatched {
+                reference,
+                carrier,
+                tracking_numbers,
+                remaining_packages,
+            } => Notification::ShipmentDispatched {
+                reference,
+                carrier,
+                tracking_numbers,
+                remaining_packages: *remaining_packages,
+            },
             Self::ChatMessage {
                 reference,
                 body,

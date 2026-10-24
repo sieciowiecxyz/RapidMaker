@@ -182,3 +182,32 @@ fn chat_copy_has_order_link_content_and_a_reply_reference_that_survives_mime() {
         );
     }
 }
+
+#[test]
+fn dispatched_email_contains_all_tracking_numbers_and_rejects_header_injection() {
+    let numbers = vec!["DPD123".to_string(), "DPD456".to_string()];
+    let notification = EmailPayload {
+        version: 1,
+        notification: EmailNotification::ShipmentDispatched {
+            reference: "RM-1".into(),
+            carrier: "DPD".into(),
+            tracking_numbers: numbers,
+            remaining_packages: 1,
+        },
+    };
+    notification.validate().unwrap();
+    let (subject, body) = notification.notification.borrowed().render().unwrap();
+    assert!(subject.contains("przewoźnikowi"));
+    assert!(body.contains("DPD123") && body.contains("DPD456"));
+    let bad = vec!["number\r\nBcc: other@example.invalid".to_string()];
+    assert!(
+        Notification::ShipmentDispatched {
+            reference: "RM-1",
+            carrier: "DPD",
+            tracking_numbers: &bad,
+            remaining_packages: 0
+        }
+        .render()
+        .is_err()
+    );
+}

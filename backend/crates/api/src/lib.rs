@@ -15,6 +15,8 @@ mod packing;
 mod passkeys;
 mod quotes;
 mod refunds;
+mod shipment_worker;
+mod shipments;
 mod slice_worker;
 
 pub use checkout_worker::operator_status as checkout_operator;
@@ -26,10 +28,16 @@ pub struct Workers {
     inbound: Option<mail_inbound::InboundWorker>,
     slicer: Option<SliceWorker>,
     checkout: Option<checkout_worker::CheckoutWorker>,
+    shipping: Option<shipment_worker::ShipmentWorker>,
 }
 impl Workers {
     pub async fn shutdown(self) {
         tokio::join!(
+            async {
+                if let Some(worker) = self.shipping {
+                    worker.shutdown().await;
+                }
+            },
             async {
                 if let Some(worker) = self.inbound {
                     worker.shutdown().await;
@@ -69,7 +77,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     };
     let imap = rapidmaker_notifications::Imap::from_env()?;
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
-    let (checkout, webhook, checkout_worker) = checkout::router(storage.clone())?;
+    let (checkout, webhook, checkout_worker, shipping_worker) = checkout::router(storage.clone())?;
     let api = utoipa_axum::router::OpenApiRouter::new()
         .merge(packing::router())
         .merge(checkout)
@@ -112,6 +120,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
             inbound,
             slicer,
             checkout: checkout_worker,
+            shipping: shipping_worker,
         },
     ))
 }

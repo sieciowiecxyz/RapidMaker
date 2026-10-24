@@ -72,6 +72,11 @@ async fn create(
 }
 fn prepare_error(reason: RefundPrepareError) -> super::checkout::Error {
     let (status, code, message) = match reason {
+        RefundPrepareError::ShipmentActive => (
+            StatusCode::CONFLICT,
+            "shipment_active",
+            "Nadanie przesyłki jest w toku. Najpierw sprawdź jego wynik przed zleceniem zwrotu.",
+        ),
         RefundPrepareError::NotFound => (
             StatusCode::NOT_FOUND,
             "not_found",

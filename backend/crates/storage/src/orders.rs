@@ -134,7 +134,7 @@ impl Storage {
     ) -> Result<bool, StorageError> {
         let mut tx = self.queue_transaction().await?;
         let row = sqlx::query(
-            "SELECT status,user_id,contact,guest_updates FROM orders WHERE id=$1 FOR UPDATE",
+            "SELECT status,user_id,contact,guest_updates,fulfillment FROM orders WHERE id=$1 FOR UPDATE",
         )
         .bind(id)
         .fetch_optional(&mut *tx)
@@ -143,13 +143,17 @@ impl Storage {
         let old: String = row.try_get("status")?;
         let allowed = matches!(
             (old.as_str(), status),
-            ("paid", "in_production")
-                | ("in_production", "ready")
-                | ("ready", "shipped")
-                | ("ready", "completed")
-                | ("shipped", "completed")
+            ("paid", "in_production") | ("in_production", "ready") | ("ready", "completed")
         );
-        if !allowed {
+        if !allowed
+            || (status == "completed" && {
+                let f = row.try_get::<Value, _>("fulfillment")?;
+                f["delivery"]["method"]
+                    .as_str()
+                    .or_else(|| f["delivery"].as_str())
+                    != Some("pickup")
+            })
+        {
             return Ok(false);
         }
         let user: Option<String> = row.try_get("user_id")?;

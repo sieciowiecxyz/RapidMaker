@@ -128,3 +128,10 @@ Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie n
 ## Rozmowy i email
 
 [Kontrakt i diagnostyka](../docs/chat-email.md): wspólna historia przez API/SMTP/IMAP, kopie treści, grupowanie 60 s, paginacja i read cursor. `MAIL_INBOUND_MODE=test`, `MAIL_IMAP_MAILBOX=void@sieciowiec.xyz`, osobny `MAIL_REPLY_KEY` w SOPS. Domyślnie odbiór disabled; worker startuje razem z API, odczytuje folder bez zmiany flag/usuwania. CLI `--mail-receive` odbiera jedną partię, `--mail-operator EMAIL on|off` nadaje/cofa wąską zgodę istniejącemu operatorowi. Frontend rozmów nadal wymaga podłączenia.
+
+
+## Nadawanie przesyłek
+
+Backend sandbox, bez nowego panelu i podjazdu kuriera. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po passkey oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
+
+Używa istniejących FURGONETKA_SANDBOX_TOKEN/FURGONETKA_SENDER_JSON; bez nowych sekretów. Obecny pełny test blokuje zgoda krajowego DPD w sandboxie; kod nie zapisuje regulaminów. Weryfikację prawdziwej etykiety/trackingu/emaila po nadaniu należy dokończyć po usunięciu blokera.

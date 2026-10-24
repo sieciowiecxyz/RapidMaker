@@ -34,7 +34,7 @@ pub fn admin_router<S: Clone + Send + Sync + 'static>(db: Option<Storage>) -> Ro
         .routes(utoipa_axum::routes!(stats))
         .with_state(db)
 }
-async fn scope(
+pub(super) async fn scope(
     auth: &Auth,
     headers: &HeaderMap,
     mutate: bool,

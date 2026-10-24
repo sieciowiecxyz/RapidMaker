@@ -38,6 +38,7 @@ pub enum RefundPrepareError {
     Conflict,
     Limit,
     Forbidden,
+    ShipmentActive,
 }
 fn refund(row: PgRow) -> Result<Refund, StorageError> {
     Ok(Refund {
@@ -112,6 +113,10 @@ impl Storage {
             } else {
                 Err(Conflict)
             });
+        }
+        if sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM shipments WHERE order_id=$1 AND state IN ('queued','creating','ordering'))")
+            .bind(order).fetch_one(&mut *tx).await? {
+            return Ok(Err(ShipmentActive));
         }
         if row.try_get::<Option<i64>, _>("paid_at")?.is_none()
             || row.try_get::<String, _>("status")? == "awaiting_payment"

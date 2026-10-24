@@ -20,12 +20,14 @@ pub use passkeys::{PasskeyInfo, PasskeyStart};
 mod order_files;
 mod orders;
 mod refunds;
+mod shipments;
 pub use admin::{MaterialInput, validate_color};
 pub use auth::{AuthSession, AuthUser};
 pub use email::{EmailOutcome, EmailStats, QueuedEmail};
 pub use models::{StoredModel, account_owner};
 pub use orders::OrderInput;
 pub use refunds::{Refund, RefundPrepareError};
+pub use shipments::{Shipment, ShipmentError, ShipmentPackage};
 
 pub type StorageError = Box<dyn Error + Send + Sync>;
 

@@ -1,10 +1,15 @@
-//! Domestic address validation and bounded Furgonetka sandbox adapter. No labels are purchased.
+//! Domestic address validation and bounded Furgonetka sandbox adapter. Shipment purchases are restricted to sandbox.
 mod address;
+mod shipments;
 pub use address::{DeliveryChoice, Invoice, Method, Recipient, Validation};
 use rapidmaker_packing::Estimate;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+pub use shipments::{
+    CommandStatus, MeasuredParcel, PreparedPackage, ProviderPackage, ShipQuote, ShipmentError,
+    Tracking, matches_prepared,
+};
 use std::{
     collections::HashMap,
     sync::Arc,

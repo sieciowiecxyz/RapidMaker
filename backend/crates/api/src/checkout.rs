@@ -770,16 +770,15 @@ async fn payment(
     };
     Ok((status, Json(PaymentView::from_attempt(&attempt))))
 }
+type CheckoutRoutes = (
+    OpenApiRouter,
+    OpenApiRouter,
+    Option<super::checkout_worker::CheckoutWorker>,
+    Option<super::shipment_worker::ShipmentWorker>,
+);
 pub fn router(
     db: Option<Storage>,
-) -> std::result::Result<
-    (
-        OpenApiRouter,
-        OpenApiRouter,
-        Option<super::checkout_worker::CheckoutWorker>,
-    ),
-    Box<dyn std::error::Error + Send + Sync>,
-> {
+) -> std::result::Result<CheckoutRoutes, Box<dyn std::error::Error + Send + Sync>> {
     let app = App::new(db)?;
     let worker = app
         .db
@@ -794,12 +793,18 @@ pub fn router(
         .routes(routes!(payment))
         .merge(super::checkout_legacy::router())
         .merge(super::refunds::router())
+        .merge(super::shipments::router())
         .with_state(app.clone());
+    let shipping_worker = app
+        .db
+        .as_ref()
+        .filter(|_| app.shipping.is_some())
+        .map(|_| super::shipment_worker::ShipmentWorker::start(app.clone()));
     let webhook = OpenApiRouter::new()
         .routes(routes!(super::checkout_worker::webhook))
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .with_state(app);
-    Ok((router, webhook, worker))
+    Ok((router, webhook, worker, shipping_worker))
 }
 
 pub(super) fn local_authority(authority: &str) -> bool {

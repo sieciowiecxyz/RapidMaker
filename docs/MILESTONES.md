@@ -1,6 +1,6 @@
 # Milestones — backend
 
-Aktywny następny zakres: **S0–S4 — plan, NOT RUN**. Nie oznacza wdrożonego nadawania.
+**S0–S4:** backend wdrożony; pełny przebieg sandbox BLOCKED regulaminem DPD. Szczegóły i granice poniżej.
 
 C1–C6: PASS lokalnie (Stripe test, Furgonetka sandbox). Tylko Rust/PostgreSQL/API; bez strony. Decyzje i kontrakt: [PLAN.md](PLAN.md). B1–B8 pozostają ukończonym lokalnym POC; dowody w [checkpoincie](milestones/backend.md).
 
@@ -102,16 +102,16 @@ Dowody: 19 testów jednostkowych PASS; osobny test PostgreSQL (205 wpisów, wła
 - LOC tokei, 8 zmienionych/nowych źródeł Rust: produkcja 2072 → 2652 (+580), testy 326 → 651 (+325); bez pustych linii i komentarzy. Trzy nowe moduły `refunds.rs` i migracja 0015. Kontrakt: [checkout](checkout.md#zwroty-płatności).
 
 
-## S0–S4 — Nadawanie przesyłek — plan
+## S0–S4 — Nadawanie przesyłek
 
-Tylko backend Rust/PostgreSQL; przyszły panel wywoła te API. [Flow i kontrakt](PLAN.md#s0s4--nadawanie-przesyłek--plan). Status wszystkich etapów: **NOT RUN**.
+[Kontrakt i uruchomienie](PLAN.md#s0s4--nadawanie-przesyłek). Bez frontendu/live. Status nie oznacza potwierdzonego rzeczywistego nadania.
 
-| Etap | Zakres | Krótkie kryterium ukończenia |
-| --- | --- | --- |
-| S0 | Kontrakt i sandbox | Zweryfikowane tworzenie/zamawianie, odczyt po UUID, etykieta, tracking i symulacja; ustalone reguły ponowień, grup paczek, maili dostawcy oraz blokery konta. Bez realnych nadań. |
-| S1 | Model i API przygotowania | Migracja, własność, admin/passkey/CSRF, wersje, snapshot oraz potwierdzenie masy/wymiarów. Tylko paid+ready, odbiór osobisty i zwroty obsłużone. Aktualny koszt i różnica jawne; zmiana danych unieważnia akceptację. |
-| S2 | Nadanie i etykiety | Trwałe zlecenie przed HTTP, lease i UUID; wielopaczkowość/częściowy sukces. Sandbox: ponowienie/restart bez podwójnego zamówienia; niepewny POST nie jest ponawiany w ciemno. Admin może uzgodnić wynik; PDF prywatny i ograniczony. |
-| S3 | Tracking i email | Polling/cached read; etykieta nie zmienia statusu na shipped. Ręczne/skanowane przekazanie, częściowa wysyłka i końcowe stany nie cofają się. Outbox/preferencje/deduplikacja; email wyłącznie do void@sieciowiec.xyz w testach. |
-| S4 | Jeden przebieg końcowy | Opłacone testowe zamówienie → ready → potwierdzenie paczek/ceny → nadanie → PDF → symulowany tracking → doręczenie obu paczek i email. Odmowa dostępu klienta, brak ceny/salda oraz niepewny/duplikowany wynik sprawdzone zakresowo; fmt/Clippy/build. |
+| Etap | Stan i dowód |
+| --- | --- |
+| S0 | Częściowy PASS: konto/usługi, walidacja204, rzeczywista cena i POST dodania200. Zamówienie409 `terms_and_conditions_not_valid`; nie zaakceptowano zgód automatycznie. Komenda nie powstała. |
+| S1 | PASS lokalnie: snapshot, rzeczywiste paczki, cena kupionej usługi, admin/passkey-session/CSRF, wersje; ponowienie i refund gating w PG. |
+| S2 | Kod + lokalne PG PASS: trwały booking, lease/retry, odzyskiwanie, reopen bez nowych paczek, częściowy sukces. Realne zamówienie/PDF BLOCKED regulaminem; nie raportujemy PASS. |
+| S3 | Lokalna logika/parser/PG PASS: wiele numerów, częściowy sukces, dedup email, preferencje i completed/retencja, bez cofania doręczenia. Rzeczywisty tracking i wysyłka nowego szablonu po nadaniu NOT RUN. |
+| S4 | BLOCKED: API sandbox sprawdzone do zlecenia nadania (dwa kartony testowe, fixture opłaconego ready i sesji admina); dalsza etykieta → tracking → email czeka na zapis DPD. Fizycznego passkey ani nowej płatności Stripe nie powtarzano. |
 
-Po każdym etapie krótki dowód i aktualizacja statusu; bez testujących subagentów i powtarzania pełnych zestawów. Publiczne live, palety, pobranie, podział realizacji na osobne partie i anulowanie zamówionego kuriera są poza tym zakresem. Zmiany implementacji na tym etapie: brak; Rust LOC delta 0, bez nowych zależności.
+Weryfikacja: 33 testy jednostkowe API/shipping/notifications; osobny izolowany PG dostawy oraz regresja zwrotów. Jedna starsza integracja cen sandbox pominięta w jednostkowym zestawie, bez zmiany oczekiwań. Fmt, zakresowe Clippy `-D warnings` i locked build PASS. Pomiar tokei, 15 zmienionych/nowych źródeł Rust: produkcja 3615 → 5911 (+2296), testy 1161 → 1556 (+395), bez pustych linii/komentarzy; osobny tests.rs i moduły inline policzone jako testy. Cztery nowe moduły Rust i migracja 0016; bez nowych crate’ów. Bez nowych zależności. Testowe szkice z sandboxa nie oznaczają kupionych etykiet; żadnych live/nadań z podjazdem.

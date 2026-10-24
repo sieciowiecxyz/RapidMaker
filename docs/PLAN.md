@@ -1,6 +1,6 @@
 # Backend Rust — checkout, dostawa i rozmowy
 
-Aktywny następny zakres: **S0–S4 — nadawanie przesyłek**, wyłącznie plan, jeszcze bez implementacji. Szczegóły poniżej; [kryteria etapów](MILESTONES.md#s0s4--nadawanie-przesyłek--plan).
+**S0–S4 — nadawanie przesyłek:** backend wdrożony, sprawdzony lokalnie i częściowo w sandboxie. Pełne nadanie/etykieta/tracking nadal zablokowane wymaganym regulaminem DPD. [Dowody i granice](MILESTONES.md#s0s4--nadawanie-przesyłek).
 
 R1 — zwroty płatności: wdrożone i sprawdzone lokalnie w Stripe test (400 + 600 = 1000 gr, ponowienie i restart bez duplikatu). Pełny lub częściowy zwrot przez API admina, bez frontendu. Rejestr PostgreSQL rezerwuje kwotę przed Stripe; wspólny worker płatności ponawia ten sam klucz i uzgadnia status. Wymagane: admin/passkey/CSRF, potwierdzona płatność, brak nadmiarowego lub podwójnego zwrotu. Zwrot nie zmienia statusu produkcji. Kontrakt i granice: [checkout](checkout.md#zwroty-płatności).
 
@@ -64,7 +64,7 @@ Nie zwalniaj plików tylko dlatego, że minął TTL oferty. Próba niepewna lub 
 
 Używaj obecnych kont/gości, kontroli własności, CSRF/Origin i limitów. Dodaj limity liczby szkiców, prób, punktów i wywołań dostawców; ograniczony czas/rozmiar odpowiedzi HTTP. URL powrotu z konfiguracji serwera. Loguj ID i rezultat, bez adresów, tokenów, podpisów ani sekretów Stripe. Nie przechowuj danych kart.
 
-Krótkie testy istotnych awarii w każdym etapie; na końcu jeden przebieg sandbox przez HTTP/CLI, bez implementacji frontendu. Stripe Hosted Checkout można wykorzystać do ręcznego zakończenia płatności testowej. Bez produkcyjnych obciążeń, nadawania paczek, refundacji, IMAP, panelu admina i wdrożenia publicznego. Brak nowej integracji Grafany w tym feature.
+Krótkie testy istotnych awarii w każdym etapie; na końcu jeden przebieg sandbox przez HTTP/CLI, bez implementacji frontendu. Stripe Hosted Checkout można wykorzystać do ręcznego zakończenia płatności testowej. W pierwotnym C1–C6 nie obejmowano nadawania, zwrotów i IMAP; późniejsze etapy poniżej dodają te funkcje. Nadal bez produkcyjnych obciążeń, nowego panelu i publicznego wdrożenia. Brak nowej integracji Grafany w tym feature.
 
 Potrzebne: lokalny PostgreSQL, istniejące testowe Stripe/Furgonetka, poprawne dane nadawcy, jawne ceny i aktywny materiał. Nowy sekret webhooka oraz Stripe CLI do przekazywania zdarzeń na localhost; brak dostępu może wymagać logowania właściciela. Wpisy `.env` synchronizuje SOPS przed commitem. Produkcyjne HTTPS, konto Stripe/live, zasady retencji i kalibracja pakowania wymagają osobnego etapu.
 
@@ -89,55 +89,52 @@ Rozwijamy istniejące rozmowy PostgreSQL i outbox SMTP: treść w kopii email, b
 Projekt, granice zaufania i blokery: [chat-email.md](chat-email.md). SMTP/IMAP i wspólna historia sprawdzone rzeczywistymi mailami testowymi, bez frontendu.
 
 
-## S0–S4 — Nadawanie przesyłek — plan
+## S0–S4 — Nadawanie przesyłek
 
-### Flow i panel admina
+Status: API i worker zaimplementowane, bez frontendu i live. Rzeczywisty sandbox: wycena/walidacja/dodanie paczki PASS; zamawianie zatrzymane na `provider_terms` (409 `terms_and_conditions_not_valid`). Regulaminów nie zaakceptowano automatycznie. Etykieta, symulowany tracking i email po nadaniu czekają na odblokowanie konta; nie są potwierdzonym pełnym przebiegiem.
 
-`opłacone → druk → gotowe → potwierdzenie paczek i kosztu → zamówienie przesyłek → etykiety → przekazanie przewoźnikowi → doręczenie`.
+### Flow
 
-Płatność klienta zapisuje wybór dostawy, adres/punkt i szacowane pakowanie. Nie zamawia kuriera. Przy `ready` admin widzi ten snapshot, potwierdza rzeczywiste wymiary zewnętrzne i masę paczek, sprawdza aktualną cenę, następnie klika „Zamów przesyłki”. To jedyna akcja upoważniająca backend do płatnego zamówienia. Dalej: „Pobierz etykiety”, „Przekazano przewoźnikowi”, lista numerów/statusów i czytelny błąd do obsługi. Najpierw API/Swagger; frontend panelu jest osobnym zadaniem. Kupujący ma tylko odczyt własnej dostawy; nie zamawia kuriera ani nie wybiera opcji na koszt sklepu.
+`opłacone → druk → ready → potwierdzenie paczek → akceptacja aktualnego kosztu → nadanie → etykiety → przekazanie → doręczenie`.
 
-### Dane i koszt
+Klient płaci i wybiera usługę/punkt. Admin potwierdza rzeczywistą liczbę, zewnętrzne wymiary i masę paczek na podstawie propozycji algorytmu. Dopiero jawny POST `book` upoważnia worker do zamówienia przewozu. Wersja, UUID żądania i ID zaakceptowanej oferty chronią przed zmianą danych/podwójnym kliknięciem. Etykieta nie oznacza wysłania. W v1 paczki zanosimy do przewoźnika: `request_collection=false`, bez zamawiania podjazdu.
 
-- Wykorzystaj `orders.fulfillment`, obecne pakowanie, adresy, adapter `shipping`, auth/passkey/CSRF oraz outbox. Algorytm podpowiada paczki; przed nadaniem operator potwierdza faktyczne parametry. Nie zmieniaj opłaconego snapshotu checkoutu: finalne pakowanie i aktualny koszt zapisz osobno.
-- Zachowaj metodę, usługę i punkt kupującego. Zmiana przewoźnika/punktu/adresu wymaga uzgodnienia z klientem i osobnej rewizji. Odbiór osobisty omija Furgonetkę. Duże zamówienie bez dostępnej usługi trafia do wyceny ręcznej; v1 bez palet i pobrania.
-- Pokazuj osobno pobraną od klienta cenę dostawy, aktualny koszt przewoźnika oraz różnicę; koszt opakowań osobno. Admin akceptuje aktualną ofertę dla konkretnej wersji danych. Zmiana paczek/danych unieważnia akceptację; przed zamówieniem ponowna walidacja i wycena, różnica wymaga ponownego zatwierdzenia. Bez automatycznej dopłaty klienta lub ukrytej podmiany usługi. Dopłaty przewoźnika po pomiarze są możliwe; lokalna akceptacja nie gwarantuje ceny ostatecznej faktury.
-- Nadanie tylko przy potwierdzonej płatności i `ready`. Pełny zwrot blokuje nowe nadanie. Oczekujący/niepewny zwrot wstrzymuje automatyczne przetwarzanie; po częściowym zwrocie admin potwierdza, co faktycznie wysyła. Zlecenie zwrotu po rozpoczęciu nadania wymaga interwencji, nie automatycznego usuwania przesyłki. Lokalne decyzje serializuj na zamówieniu; operacje Stripe i Furgonetki nie są jedną transakcją.
+### API i użycie
 
-### Minimalny backend
-
-Bez nowych crate’ów, serwisu i brokera. `shipping` — transport Furgonetki; `storage` — transakcje i lease; `api/shipments.rs` — uprawnienia/HTTP; mały worker w tym samym procesie — zlecenia i tracking; `notifications` — treść emaila. Nie przenoś całej logiki do routera.
-
-Dwie tabele: `shipments` (wersja danych, snapshot, zaakceptowany koszt, UUID żądania i komendy, autor, stan, lease/retry) i `shipment_packages` (powiązania paczek z ID Furgonetki, numery, statusy). Jeden aktywny batch nadania na zamówienie; v1 wysyła wszystkie jego części. Batch może mieć wiele paczek, także częściowy sukces dostawcy. ID przesyłki Furgonetki nie musi oznaczać jednego kartonu: zachowaj grupowanie oraz limity przewoźnika z walidacji i wyceny. Unikalne ID dostawcy, ograniczone payloady i liczba paczek; bez ogólnej tabeli dowolnych komend.
-
-Proponowane API (jeszcze nie istnieje):
+Wszystkie trasy admina wymagają sesji po passkey; zapisy także CSRF/Origin. Odczyt klienta korzysta z dotychczasowej własności konta/gościa. DTO i błędy są w Swaggerze.
 
 | Endpoint | Działanie |
 | --- | --- |
-| `GET /api/admin/orders/{id}/shipment` | Snapshot, koszt, statusy, błędy i dozwolone akcje. |
-| `PUT /api/admin/orders/{id}/shipment` | Potwierdzenie paczek, kontrola wersji; bez zakupu. |
-| `POST /api/admin/orders/{id}/shipment/quote` | Aktualna walidacja/cena dla tej wersji. |
-| `POST /api/admin/orders/{id}/shipment/book` | UUID ponowienia + zaakceptowana oferta; `202` oznacza zapis zlecenia. |
-| `GET /api/admin/orders/{id}/shipment/labels/{package_id}` | Prywatny PDF A6, opcjonalnie A4, wyłącznie zapisane ID tej przesyłki. |
-| `POST /api/admin/orders/{id}/shipment/handover` | Potwierdzenie faktycznego przekazania konkretnych paczek. |
-| `GET /api/account/orders/{id}/shipment` | Własne numery/statusy z DB, bez etykiet, kosztów zakupu i sekretów. |
+| `GET /api/admin/orders/{id}/shipment` | Oryginalny snapshot zamówienia, propozycja pakowania, stan i kod błędu nadania. |
+| `PUT /api/admin/orders/{id}/shipment` | `version`, `parcels:[{outer_mm:[120,100,80],weight_g:500}]`, opcjonalnie `refund_reviewed`. Początkowo version=0, później wersja z odpowiedzi. |
+| `POST …/shipment/quote` | `{version}`: walidacja/cena wyłącznie kupionej usługi; brak zakupu. |
+| `POST …/shipment/book` | `{version,request_id:UUID,quote_id}`; `202` oznacza zapis zlecenia. Identyczne ponowienie zwraca istniejący batch. |
+| `GET …/shipment/labels/{package_id}?format=a6` | Prywatny PDF dla ID z tej dostawy; opcjonalnie a4. |
+| `POST …/shipment/handover` | `{package_ids:[…]}`: faktyczne przekazanie wskazanych przesyłek. |
+| `POST …/shipment/reconcile` | `{package_id,provider_id}`: odzyskanie ID po niepewnym dodaniu; potwierdza dane i stan waiting w Furgonetce. |
+| `POST …/shipment/reopen` | `{version}`: po pewnym odrzuceniu/zmianie ceny, tylko gdy komenda nie istnieje, a wszystkie znane paczki nadal czekają. Nowa wersja i ponowna quote/book, te same paczki. Nie odblokowuje niepewnego zamówienia. |
+| `GET /api/account/orders/{id}/shipment` | Zapisane statusy i numery, także stan każdego kartonu w grupie; bez etykiet, kosztu zakupu i payloadów operatora. |
 
-### Wywołania Furgonetki i awarie
+Przygotowanie i nadanie wymagają paid+ready. Odbiór osobisty omija tę ścieżkę. Pełny zwrot blokuje nadanie; oczekujący/niepewny zwrot wstrzymuje operację. Częściowy wymaga potwierdzenia admina; zmiana zwróconej kwoty po potwierdzeniu zatrzyma worker. Zlecenie nowego zwrotu jest blokowane podczas queued/creating/ordering, dopóki nie rozstrzygniemy nadania. Stripe i Furgonetka nie są wspólną transakcją.
 
-Zweryfikowana [oficjalna specyfikacja REST](https://furgonetka.pl/js/swagger/api-rest-documentation.4cc02d4621.yaml), 2026-10-24: `POST /packages` dodaje dane; `PUT /order-commands/{uuid}` zleca zamówienie, a `GET` tej komendy podaje wynik. Etykieta: `GET /packages/{package_id}/label`; tracking: `GET /packages/{package_id}/tracking`. Sandbox oferuje `PUT /packages/tracking/simulate`. Dokładne kontrakty powtórzeń i identyfikacji grup trzeba sprawdzić w S0, bez zakładania idempotencji niedokumentowanego POST.
+### Cena i trwałość
 
-- Przed HTTP zapisz snapshot, lokalny UUID, referencję i UUID komendy w PostgreSQL; blokada/lease uniemożliwia dwa równoległe nadania. Powtórzenie identycznego żądania oddaje istniejący batch; inny payload dla tego UUID — konflikt. Żadnego HTTP pod blokadą SQL.
-- `POST /packages` nie ma tu potwierdzonego klucza idempotencji. Po timeout szukaj po zapisanej krótkiej unikalnej referencji, potwierdź zgodność danych; brak jednoznacznego wyniku → `manual_review`, bez nowego POST. Referencja nie jest gwarancją deduplikacji dostawcy. Po utracie odpowiedzi zamawiania odczytaj istniejącą komendę UUID; nie generuj kolejnej. Ponowienia PUT tylko po potwierdzeniu kontraktu w sandboxie.
-- Zapisuj sukces/błąd każdej przesyłki. Częściowy sukces nie uprawnia do zamówienia całego batcha ponownie. Stan niepewny zachowuje blokadę; admin widzi referencje i może uzgodnić wynik z Furgonetką przez chronioną akcję z dowodem dostawcy, bez ręcznej edycji SQL. Anulowanie już zamówionej przesyłki i rozliczenie jej kosztu poza v1; nie traktuj skasowania szkicu/komendy jako potwierdzonego anulowania kuriera.
-- Etykiety pobieraj przez stały host API, bez dowolnych URL/redirectów; limit czasu/rozmiaru, `application/pdf`, `no-store`, attachment. Nie ujawniaj etykiet klientowi ani w logach. Błędy pól pokaż przy konkretnych danych; konto, saldo, token i regulamin to błędy operatora, nie błędnego adresu klienta.
+- Checkout pozostaje niezmiennym snapshotem. Finalne paczki i koszt są osobno w `shipments`/`shipment_packages`. Zachowujemy usługę, punkt i adres klienta; v1 nie podmienia ich ani nie obsługuje palet/pobrania/osobnych partii realizacji.
+- Oferta nadania ma 120 s. Osobno: `collected_shipping_grosze`, `price_grosze`, `difference_grosze`, `packaging_grosze`. Zmiana danych unieważnia akceptację. Book ponownie wycenia, a worker sprawdza cenę jeszcze przed płatną komendą. Różnica wymaga ponownej akceptacji; bez automatycznej dopłaty klienta. Dopłaty przewoźnika po pomiarze pozostają możliwe.
+- Jeden batch/zamówienie, do 30 rzeczywistych kartonów. Adapter dzieli je według limitów wybranej usługi i sumuje cenę grup. Przesyłka Furgonetki może zawierać kilka kartonów; nie utożsamiamy jej ID z jednym kartonem.
+- Przed HTTP zapisujemy dane, krótką unikalną referencję i UUID komendy. Lease 120 s; jedna próba workera ograniczona do 90 s, retry/backoff, do 1000 podjęć. HTTP poza transakcją. Po wyczerpaniu budżetu: `manual_review`, `retry_exhausted`.
+- Dodawanie przez POST nie jest ponawiane w ciemno: po utracie odpowiedzi tylko odczyt po referencji i sprawdzenie zgodności usługi, adresów, wymiarów oraz masy. Niejasny wynik → `manual_review`. Po PUT zamawiania odczytujemy tę samą komendę UUID, bez nowego zlecenia. Reopen wymaga dowodu, że poprzednia operacja nie istnieje i nie doszło do zamówienia.
+- Częściowy sukces zachowuje znane zamówione przesyłki; reszta wymaga interwencji. Nie zamawiamy ponownie całego batcha. `last_error` rozróżnia m.in. `provider_terms`, `shipping_account`, `package_unknown`, `command_unknown`, `price_or_data_changed`. Anulowanie już zamówionego kuriera i rozliczenie jego opłaty poza v1.
+- PDF max. 8 MiB, stały host API, bez redirectów, `no-store`/`nosniff`/attachment. Bez publicznych etykiet i logowania danych odbiorcy/sekretów.
 
-### Tracking, statusy i email
+### Tracking i email
 
-- Rozdziel stan operacji (`draft/queued/booking/unknown/booked/failed/manual_review`) od transportu (`awaiting_handover/in_transit/delivered/exception/returned`). Etykieta ≠ wysłanie. Istniejąca ręczna zmiana `ready → shipped/completed` musi respektować nowy flow; odbiór osobisty pozostaje oddzielną ścieżką.
-- Najpierw polling w workerze: szybkie, ograniczone odczyty komendy z backoff; tracking aktywnych przesyłek np. co 15 min, z jitterem i retry/backoff. Odczyt panelu korzysta z DB, nie wywołuje dostawcy. Po doręczeniu/zwrocie zatrzymaj regularne odpytywanie; awaria API nie oznacza anulowania. Publiczne webhooki dopiero później, po sprawdzeniu uwierzytelniania dostawcy.
-- Potwierdzenie admina lub wiarygodny skan przewoźnika oznacza przekazanie paczki; późne/zdublowane zdarzenia nie cofają terminalnego stanu. `completed` po doręczeniu wszystkich paczek; wyjątki/zwrot do nadawcy pokazuj adminowi. Przekazanie części paczek nie oznacza wysłania wszystkich.
-- Zmiana statusu i email przez istniejący outbox w jednej transakcji. Po faktycznym przekazaniu: przewoźnik, numery/linki i informacja, jeśli pozostałe paczki czekają. Jeden logiczny email na nowo przekazaną grupę, deduplikacja przy restartach i preferencje klienta; bez podwójnego ogólnego „status changed”. Nie wysyłaj powiadomień przy każdym skanie. Wyłącz mail z dokumentami Furgonetki do nadawcy (`skip_email_send`); osobne SMS/maile przewoźnika sprawdź w S0, bez obietnicy ich wyłączenia.
+Jeden worker Tokio w tym samym procesie, bez nowego crate’a/brokera. Fazy operacji: draft/queued/creating/ordering/booked/dispatched/delivered/manual_review. Osobno zapisany tracking: awaiting_handover/in_transit/delivered/exception/returned, numery i status każdego kartonu. Tracking odpytuje najwyżej 4 przesyłki równolegle, zwykle co 15 min; panel czyta DB. Niepełny lub obcy zestaw numerów nie może potwierdzić doręczenia grupy. Doręczenie/zwrot zatrzymują jej regularne odpytywanie; terminalne doręczenie nie cofa się.
 
-### Blokery i zakres
+Przekazanie potwierdza admin lub skan przewoźnika. Przy wielu kartonach jednego listu grupę uznajemy za przekazaną/doręczoną po potwierdzeniu wszystkich kartonów. Nie kończymy zamówienia po pierwszej paczce. Status i outbox są atomowe: jedna kopia email z przewoźnikiem, wszystkimi znanymi numerami i liczbą pozostałych grup; preferencje sprawdzane ponownie przed SMTP. Bez maila przy każdym skanie i bez zdublowanego ogólnego status_changed. Istniejąca ręczna zmiana shipped/completed nie omija dostawy; odbiór osobisty ready→completed pozostaje dozwolony. Completed ustawia retencję plików 90 dni.
 
-S0: sprawdzić sandbox, bieżący token/odnowienie, uprawnienia API, kompletność nadawcy, regulaminy, dostępność usługi, środki testowe i zachowanie wielopaczkowe. W produkcji dodatkowo saldo/rozliczenie, poprawne dane firmy i jawne włączenie nadawania live; obecny adapter jest sandbox-only. Brak salda/uprawnień/regulaminu → czytelny blokujący błąd, bez automatycznego akceptowania warunków. Kod nie nadawał jeszcze paczek i nie był tu testowany integracyjnie; ten etap to tylko plan. Testy wdrożenia: krótki sandbox, w tym dwie paczki, częściowy błąd, utrata odpowiedzi/restart i brak duplikatu/emaila; bez Astry i pełnych audytów.
+### Źródło, konfiguracja i blokery
+
+[Oficjalna specyfikacja REST](https://furgonetka.pl/js/swagger/api-rest-documentation.4cc02d4621.yaml): POST /packages dodaje, PUT/GET /order-commands/{uuid} zamawia/odczytuje wynik; GET etykiety i trackingu, PUT sandboxowej symulacji. Żaden kod nie akceptuje regulaminów ani nie ustawia zgód marketingowych.
+
+Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu, odnowienie tokena i zamawianie podjazdu pozostają poza wdrożeniem. Sandbox obecnie wymaga krajowego regulaminu DPD: zaznacz właściwą zgodę i Zapisz w [panelu testowym](https://sandbox.furgonetka.pl/konto/regulaminy); API dla przygotowanej paczki zwraca servicesRegulation=[dpd]. Pozostałe regulaminy/marketing nie były wymagane przez tę próbę. Dalsze wymagania konta mogą ujawnić się po odblokowaniu.
