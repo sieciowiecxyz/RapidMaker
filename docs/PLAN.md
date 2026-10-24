@@ -1,18 +1,18 @@
 # Checkout, adres i dostawa — backend Rust
 
-Status: plan, implementacja C1–C6 jeszcze nie rozpoczęta. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
+Status: C1–C6 wdrożone i sprawdzone lokalnie w sandboxach; bez Stripe live/publicznego wdrożenia. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
 
 ## Cel i punkt wyjścia
 
 Jedno API prowadzi od własnych wycen slicera i danych odbiorcy przez ofertę dostawy do potwierdzonego zamówienia. Restart, timeout lub ponowione żądanie nie mogą zgubić płatności ani utworzyć drugiej należności.
 
-Działają już: auth klient/gość/admin, katalog i slicer, pakowanie, wyceny Furgonetki sandbox, Stripe test, zamówienia i outbox PostgreSQL, ochrona plików oraz Swagger. Oferty checkoutu i część stanu płatności są w RAM; brak webhooków. Obecna walidacja kontaktu jest podstawowa. B1–B8 i wcześniejsze dowody zostają w [checkpoincie](milestones/backend.md), [architekturze](ARCHITECTURE.md) i historii Git.
+Punkt wyjścia przed C1–C6: auth klient/gość/admin, katalog i slicer, pakowanie, wyceny Furgonetki sandbox, Stripe test, zamówienia i outbox PostgreSQL, ochrona plików oraz Swagger. Oferty checkoutu i część stanu płatności były w RAM; brakowało webhooków i pełnej walidacji adresu. B1–B8 i wcześniejsze dowody zostają w [checkpoincie](milestones/backend.md), [architekturze](ARCHITECTURE.md) i historii Git.
 
 ## Minimalna konstrukcja
 
 - Jeden proces Axum/Tokio i PostgreSQL/SQLx. Bez Redis, RabbitMQ, mikroserwisów ani nowego frameworka zadań.
 - `api`: HTTP, uprawnienia i koordynacja. `storage`: migracje, jawne SQL i transakcje. `pricing`/`packing` nadal liczą cenę i paczki.
-- Wypełnij istniejące `payments` i `shipping` tylko konkretnymi adapterami Stripe/Furgonetki wyjętymi z checkout.rs, gdy są potrzebne w etapach C3/C4. Bez dodatkowych crate’ów, generycznych repozytoriów i warstwy usług dla każdej funkcji.
+- Istniejące `payments` i `shipping` zawierają konkretne adaptery Stripe/Furgonetki wyjęte z checkout.rs. Bez dodatkowych crate’ów, generycznych repozytoriów i warstwy usług dla każdej funkcji.
 - Typowane request/response i błędy w OpenAPI; kwoty całkowite w groszach, waluta PLN. Dozwolone pola i rozmiary jawne; nie przenoś dowolnego JSON klienta do dostawców.
 - Docelowo jeden nowy flow: Stripe Hosted Checkout. Istniejące PaymentIntent/Checkout zachowują zgodność przez cienkie adaptery do wspólnej kontroli płatności; nie rozwijamy osobnego silnika dla każdego. Usunięcie starych tras dopiero po migracji ich klientów.
 
@@ -40,7 +40,7 @@ Błędy: `422` + `field_errors` dla konkretnych pól; poprawne dane bez dostępn
 | `POST /api/checkout/drafts/{id}/payment` | Wymaga wersji, ID oferty i `Idempotency-Key`; zwraca URL Stripe albo stan oczekiwania na rozstrzygnięcie. |
 | `POST /api/webhooks/stripe` | Odbiera podpisane zdarzenia Stripe bez sesji użytkownika. |
 
-To kontrakt planowany; C1 doprecyzuje DTO i mapowanie obecnych tras. Nie dodawaj osobnego CRUD adresów. Szkic nie jest jeszcze zamówieniem. Link powrotu ze Stripe pokazuje status; nie potwierdza zapłaty.
+Kontrakt wdrożony; rzeczywiste DTO i mapowanie starych tras są w OpenAPI oraz [checkout.md](checkout.md). Nie dodawaj osobnego CRUD adresów. Szkic nie jest jeszcze zamówieniem. Link powrotu ze Stripe pokazuje status; nie potwierdza zapłaty.
 
 ## PostgreSQL i płatność
 
@@ -63,3 +63,5 @@ Krótkie testy istotnych awarii w każdym etapie; na końcu jeden przebieg sandb
 Potrzebne: lokalny PostgreSQL, istniejące testowe Stripe/Furgonetka, poprawne dane nadawcy, jawne ceny i aktywny materiał. Nowy sekret webhooka oraz Stripe CLI do przekazywania zdarzeń na localhost; brak dostępu może wymagać logowania właściciela. Wpisy `.env` synchronizuje SOPS przed commitem. Produkcyjne HTTPS, konto Stripe/live, zasady retencji i kalibracja pakowania wymagają osobnego etapu.
 
 Źródła kontraktu: [webhooki Stripe](https://docs.stripe.com/webhooks), [idempotencja](https://docs.stripe.com/api/idempotent_requests), [potwierdzanie Checkout](https://docs.stripe.com/payments/checkout/fulfill-orders). Szczegóły zdarzeń i okna retry potwierdź przy implementacji dla przypiętej wersji API.
+
+Dowody, aktualne ograniczenia i pomiar LOC: [checkpoint C1–C6](milestones/backend.md#checkout-c1c6--2026-10-24).

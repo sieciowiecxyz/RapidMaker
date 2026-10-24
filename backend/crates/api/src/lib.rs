@@ -2,6 +2,8 @@ mod admin;
 mod auth;
 mod cart;
 mod checkout;
+mod checkout_legacy;
+mod checkout_worker;
 mod docs;
 mod email;
 mod files;
@@ -12,18 +14,25 @@ mod passkeys;
 mod quotes;
 mod slice_worker;
 
+pub use checkout_worker::operator_status as checkout_operator;
 pub use models::worker;
 
 pub use slice_worker::SliceWorker;
 pub struct Workers {
     mail: Option<email::MailWorker>,
     slicer: Option<SliceWorker>,
+    checkout: Option<checkout_worker::CheckoutWorker>,
 }
 impl Workers {
     pub async fn shutdown(self) {
         tokio::join!(
             async {
                 if let Some(worker) = self.mail {
+                    worker.shutdown().await;
+                }
+            },
+            async {
+                if let Some(worker) = self.checkout {
                     worker.shutdown().await;
                 }
             },
@@ -50,16 +59,20 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         None
     };
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
+    let (checkout, webhook, checkout_worker) = checkout::router(storage.clone())?;
     let api = utoipa_axum::router::OpenApiRouter::new()
         .merge(packing::router())
-        .merge(checkout::router(storage.clone()))
+        .merge(checkout)
         .merge(models::router())
         .merge(quotes::router(storage.clone())?)
         .merge(auth::router(auth.clone()))
         .merge(passkeys::router(auth.clone()))
         .merge(orders::router(auth.clone()));
-    let (router, document) = api.split_for_parts();
+    let (router, mut document) = api.split_for_parts();
+    let (webhook, webhook_document) = webhook.split_for_parts();
+    document.merge(webhook_document);
     let router = checkout::protect(router.merge(docs::router(document)), auth.clone())
+        .merge(webhook)
         .layer(axum::Extension(mailer.clone()))
         .layer(axum::Extension(auth));
     let worker = storage
@@ -79,6 +92,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         Workers {
             mail: worker,
             slicer,
+            checkout: checkout_worker,
         },
     ))
 }

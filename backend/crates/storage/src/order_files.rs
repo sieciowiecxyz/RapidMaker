@@ -12,72 +12,10 @@ impl Storage {
         quotes: &[String],
         now: i64,
     ) -> Result<bool, StorageError> {
-        if uuid::Uuid::parse_str(order).is_err()
-            || owner.len() != 64
-            || !owner.bytes().all(|b| b.is_ascii_hexdigit())
-            || quotes.is_empty()
-            || quotes.len() > 20
-        {
-            return Ok(false);
-        }
-        let mut ids = quotes.to_vec();
-        ids.sort();
-        ids.dedup();
-        if ids.len() != quotes.len() {
-            return Ok(false);
-        }
         let mut tx = self.queue_transaction().await?;
-        let existing: Option<String> =
-            sqlx::query_scalar("SELECT owner_hash FROM order_file_holds WHERE order_id=$1")
-                .bind(order)
-                .fetch_optional(&mut *tx)
-                .await?;
-        if let Some(existing) = existing {
-            let held: Vec<String> = sqlx::query_scalar(
-                "SELECT quote_id FROM order_files WHERE order_id=$1 ORDER BY quote_id",
-            )
-            .bind(order)
-            .fetch_all(&mut *tx)
-            .await?;
-            return Ok(existing == owner && held == ids);
-        }
-        let recent: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM order_file_holds WHERE owner_hash=$1 AND created_at>$2-86400",
-        )
-        .bind(owner)
-        .bind(now)
-        .fetch_one(&mut *tx)
-        .await?;
-        if recent >= 30 {
-            return Ok(false);
-        }
-        // Snapshot expiry and hash are server-produced; no client line metadata is trusted.
-        let valid: Vec<(String, String, String)> = sqlx::query_as("SELECT q.id,m.id,m.filename FROM quotes q JOIN private_models m ON m.id=q.request->>'model_id' WHERE q.id=ANY($1) AND q.request->>'owner_hash'=$2 AND (q.request->>'expires_at')::bigint>$3 AND m.owner_hash=$2 AND m.expires_at>$3 AND NOT m.deletion_started AND q.request->>'model_sha256'=m.sha256")
-            .bind(&ids).bind(owner).bind(now).fetch_all(&mut *tx).await?;
-        if valid.len() != ids.len() {
-            return Ok(false);
-        }
-        sqlx::query(
-            "INSERT INTO order_file_holds(order_id,owner_hash,created_at) VALUES($1,$2,$3)",
-        )
-        .bind(order)
-        .bind(owner)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
-        for (quote, model, filename) in valid {
-            sqlx::query(
-                "INSERT INTO order_files(order_id,quote_id,model_id,filename) VALUES($1,$2,$3,$4)",
-            )
-            .bind(order)
-            .bind(quote)
-            .bind(model)
-            .bind(filename)
-            .execute(&mut *tx)
-            .await?;
-        }
+        let held = hold_files(&mut tx, order, owner, quotes, now).await?;
         tx.commit().await?;
-        Ok(true)
+        Ok(held)
     }
 
     /// Caller must authorize access to the order before exposing these records.
@@ -97,6 +35,77 @@ impl Storage {
             .bind(order).bind(model).bind(now).fetch_optional(&self.pool).await?;
         row.map(stored_model).transpose()
     }
+}
+
+pub(crate) async fn hold_files(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    order: &str,
+    owner: &str,
+    quotes: &[String],
+    now: i64,
+) -> Result<bool, StorageError> {
+    if uuid::Uuid::parse_str(order).is_err()
+        || owner.len() != 64
+        || !owner.bytes().all(|b| b.is_ascii_hexdigit())
+        || quotes.is_empty()
+        || quotes.len() > 20
+    {
+        return Ok(false);
+    }
+    let mut ids = quotes.to_vec();
+    ids.sort();
+    ids.dedup();
+    if ids.len() != quotes.len() {
+        return Ok(false);
+    }
+    let existing: Option<String> =
+        sqlx::query_scalar("SELECT owner_hash FROM order_file_holds WHERE order_id=$1")
+            .bind(order)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if let Some(existing) = existing {
+        let held: Vec<String> = sqlx::query_scalar(
+            "SELECT quote_id FROM order_files WHERE order_id=$1 ORDER BY quote_id",
+        )
+        .bind(order)
+        .fetch_all(&mut **tx)
+        .await?;
+        return Ok(existing == owner && held == ids);
+    }
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM order_file_holds WHERE owner_hash=$1 AND created_at>$2-86400",
+    )
+    .bind(owner)
+    .bind(now)
+    .fetch_one(&mut **tx)
+    .await?;
+    if recent >= 30 {
+        return Ok(false);
+    }
+    // Snapshot expiry and hash are server-produced; no client line metadata is trusted.
+    let valid: Vec<(String, String, String)> = sqlx::query_as("SELECT q.id,m.id,m.filename FROM quotes q JOIN private_models m ON m.id=q.request->>'model_id' WHERE q.id=ANY($1) AND q.request->>'owner_hash'=$2 AND (q.request->>'expires_at')::bigint>$3 AND m.owner_hash=$2 AND m.expires_at>$3 AND NOT m.deletion_started AND q.request->>'model_sha256'=m.sha256")
+            .bind(&ids).bind(owner).bind(now).fetch_all(&mut **tx).await?;
+    if valid.len() != ids.len() {
+        return Ok(false);
+    }
+    sqlx::query("INSERT INTO order_file_holds(order_id,owner_hash,created_at) VALUES($1,$2,$3)")
+        .bind(order)
+        .bind(owner)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    for (quote, model, filename) in valid {
+        sqlx::query(
+            "INSERT INTO order_files(order_id,quote_id,model_id,filename) VALUES($1,$2,$3,$4)",
+        )
+        .bind(order)
+        .bind(quote)
+        .bind(model)
+        .bind(filename)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]

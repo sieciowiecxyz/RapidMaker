@@ -24,6 +24,8 @@ rapidmaker-storage = { path = "crates/storage" }
 rapidmaker-slicer = { path = "crates/slicer" }
 rapidmaker-notifications = { path = "crates/notifications" }
 rapidmaker-auth = { path = "crates/auth" }
+rapidmaker-payments = { path = "crates/payments" }
+rapidmaker-shipping = { path = "crates/shipping" }
 
 utoipa = { version = "6", features = ["axum_extras"] }
 utoipa-axum = "0.3"

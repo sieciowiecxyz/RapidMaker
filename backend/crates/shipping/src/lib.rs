@@ -1,2 +1,568 @@
-//! TODO: extract Furgonetka integration and add labels/tracking. Current sandbox adapter remains in app/api/checkout.rs; packing is a separate crate.
-//! Reserved scaffold: no implementation, dependencies or active runtime behavior.
+//! Domestic address validation and bounded Furgonetka sandbox adapter. No labels are purchased.
+mod address;
+pub use address::{DeliveryChoice, Invoice, Method, Recipient, Validation};
+use reqwest::{Client, Response, StatusCode};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::time::Duration;
+use utoipa::ToSchema;
+
+const API: &str = "https://api.sandbox.furgonetka.pl";
+#[derive(Debug)]
+pub enum Error {
+    Validation(Validation),
+    Unavailable(String),
+    NoService(String),
+}
+fn unavailable() -> Error {
+    Error::Unavailable("Dostawca dostawy jest chwilowo niedostępny. Spróbuj ponownie.".into())
+}
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PointAddress {
+    pub street: String,
+    pub postcode: String,
+    pub city: String,
+    pub country_code: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Point {
+    pub code: String,
+    pub name: String,
+    pub address: PointAddress,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Offer {
+    pub id: String,
+    pub name: String,
+    pub price_grosze: u32,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Quote {
+    pub offers: Vec<Offer>,
+    pub point: Option<Point>,
+    pub manual_required: bool,
+    pub reason: Option<String>,
+}
+impl Quote {
+    pub fn pickup() -> Self {
+        Self {
+            offers: vec![Offer {
+                id: "pickup".into(),
+                name: "Odbiór osobisty".into(),
+                price_grosze: 0,
+            }],
+            point: None,
+            manual_required: false,
+            reason: None,
+        }
+    }
+    fn manual(reason: &str) -> Self {
+        Self {
+            offers: vec![],
+            point: None,
+            manual_required: true,
+            reason: Some(reason.into()),
+        }
+    }
+}
+#[derive(Clone)]
+pub struct Sandbox {
+    client: Client,
+    token: String,
+    sender: Value,
+}
+impl Sandbox {
+    pub fn new(token: String, sender: Value) -> Result<Self, Error> {
+        if token.is_empty()
+            || token.len() > 8192
+            || token.chars().any(char::is_control)
+            || !sender.is_object()
+            || serde_json::to_vec(&sender).map_or(true, |v| v.len() > 16384)
+        {
+            return Err(unavailable());
+        }
+        let client = Client::builder()
+            .timeout(Duration::from_secs(8))
+            .connect_timeout(Duration::from_secs(3))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| unavailable())?;
+        Ok(Self {
+            client,
+            token,
+            sender,
+        })
+    }
+    fn build_request(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        version: u8,
+        body: Option<&Value>,
+    ) -> Result<reqwest::Request, Error> {
+        let mime = format!("application/vnd.furgonetka.v{version}+json");
+        let mut request = self
+            .client
+            .request(method, format!("{API}{path}"))
+            .bearer_auth(&self.token)
+            .header("Accept", &mime);
+        // Furgonetka rejects bodyless GETs carrying Content-Type with an unstructured 400.
+        if let Some(body) = body {
+            request = request.header("Content-Type", mime).json(body);
+        }
+        request.build().map_err(|_| unavailable())
+    }
+    async fn request(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        version: u8,
+        body: Option<&Value>,
+    ) -> Result<Response, Error> {
+        self.client
+            .execute(self.build_request(method, path, version, body)?)
+            .await
+            .map_err(|_| unavailable())
+    }
+    pub async fn points(&self, query: &str) -> Result<Vec<Point>, Error> {
+        match self.find_points(query, false).await {
+            Err(Error::NoService(_)) => Err(unavailable()),
+            result => result,
+        }
+    }
+    pub async fn verify_point(&self, id: &str) -> Result<Point, Error> {
+        if !address::valid_point_id(id) {
+            return Err(Error::Validation(Validation::field(
+                "delivery.point_id",
+                "Wybierz dostępny punkt odbioru.",
+            )));
+        }
+        self.find_points(id, true)
+            .await?
+            .into_iter()
+            .find(|p| p.code == id)
+            .ok_or_else(|| {
+                Error::Validation(Validation::field(
+                    "delivery.point_id",
+                    "Punkt jest niedostępny. Wybierz inny.",
+                ))
+            })
+    }
+    async fn find_points(&self, query: &str, exact: bool) -> Result<Vec<Point>, Error> {
+        if !(2..=100).contains(&query.len()) || query.chars().any(char::is_control) {
+            return Err(Error::Validation(Validation::field(
+                "postal_code",
+                "Podaj kod pocztowy lub miejscowość do wyszukania punktów.",
+            )));
+        }
+        let mut filters = json!({"services":["inpost"],"point_types":["delivery_points"],"type":"parcel_machine","country_codes":["PL"],"limit":12});
+        if exact {
+            filters["point_id"] = json!(query);
+        }
+        let postcode = query.len() == 6
+            && query.as_bytes()[2] == b'-'
+            && query
+                .bytes()
+                .enumerate()
+                .all(|(i, c)| i == 2 || c.is_ascii_digit());
+        let location = if !exact && postcode {
+            json!({"address":{"postcode":query,"country_code":"PL"},"points_max_distance":10})
+        } else {
+            json!({"search_phrase":query})
+        };
+        let data = provider_json(
+            self.request(
+                reqwest::Method::POST,
+                "/points/map",
+                1,
+                Some(&json!({"location":location,"filters":filters})),
+            )
+            .await?,
+        )
+        .await?;
+        let points = data["points"].as_array().ok_or_else(unavailable)?;
+        let mut result = vec![];
+        for point in points.iter().take(100) {
+            if point["active"] != true
+                || point["is_delivery_point"] != true
+                || point["service"] != "inpost"
+            {
+                continue;
+            }
+            let Some(code) = point["code"]
+                .as_str()
+                .filter(|id| address::valid_point_id(id))
+            else {
+                return Err(unavailable());
+            };
+            if exact && code != query {
+                continue;
+            }
+            let field = |key: &str| {
+                point["address"][key]
+                    .as_str()
+                    .filter(|v| !v.is_empty() && v.len() <= 254 && !v.chars().any(char::is_control))
+                    .map(str::to_owned)
+                    .ok_or_else(unavailable)
+            };
+            let country = point["address"]["country_code"].as_str().unwrap_or("PL");
+            if country != "PL" {
+                continue;
+            }
+            result.push(Point {
+                code: code.into(),
+                name: point["name"]
+                    .as_str()
+                    .filter(|v| v.len() <= 254)
+                    .unwrap_or(code)
+                    .into(),
+                address: PointAddress {
+                    street: field("street")?,
+                    postcode: field("postcode")?,
+                    city: field("city")?,
+                    country_code: "PL".into(),
+                },
+            });
+            if result.len() == 12 {
+                break;
+            }
+        }
+        Ok(result)
+    }
+    pub async fn quote(
+        &self,
+        packing: &rapidmaker_packing::Estimate,
+        recipient: &Recipient,
+        choice: &DeliveryChoice,
+    ) -> Result<Quote, Error> {
+        let mut recipient = recipient.clone();
+        recipient.normalize(choice).map_err(Error::Validation)?;
+        if choice.method == Method::Pickup {
+            return Ok(Quote::pickup());
+        }
+        if packing.status != "estimated" && packing.status != "estimated_poc" {
+            return Ok(Quote::manual(
+                packing
+                    .reason
+                    .unwrap_or("Paczki wymagają indywidualnej wyceny."),
+            ));
+        }
+        if packing.parcels.is_empty() || packing.parcels.len() > 30 {
+            return Ok(Quote::manual("Liczba paczek wymaga indywidualnej wyceny."));
+        }
+        match tokio::time::timeout(
+            Duration::from_secs(30),
+            self.quote_inner(packing, &recipient, choice),
+        )
+        .await
+        .map_err(|_| unavailable())?
+        {
+            Err(Error::NoService(reason)) => Ok(Quote::manual(&reason)),
+            result => result,
+        }
+    }
+    async fn quote_inner(
+        &self,
+        packing: &rapidmaker_packing::Estimate,
+        recipient: &Recipient,
+        choice: &DeliveryChoice,
+    ) -> Result<Quote, Error> {
+        let data = provider_json(
+            self.request(reqwest::Method::GET, "/account/services", 1, None)
+                .await?,
+        )
+        .await?;
+        let services = data["services"]
+            .as_array()
+            .ok_or_else(unavailable)?
+            .iter()
+            .filter_map(|service| {
+                let name = service["service"].as_str()?;
+                if if choice.method == Method::Locker {
+                    name != "inpost"
+                } else {
+                    !["dpd", "dhl", "ups", "gls", "fedex"].contains(&name)
+                } {
+                    return None;
+                }
+                Some((id(&service["id"])?, name.to_owned()))
+            })
+            .take(10)
+            .collect::<Vec<_>>();
+        if services.is_empty() {
+            return Err(Error::Unavailable(
+                "Konto Furgonetki nie ma aktywnych usług tej metody dostawy.".into(),
+            ));
+        }
+        let parcels=packing.parcels.iter().map(|p|json!({"width":p.outer_mm[0].div_ceil(10),"depth":p.outer_mm[1].div_ceil(10),"height":p.outer_mm[2].div_ceil(10),"weight":f64::from(p.weight_g)/1000.,"quantity":1,"type":"package"})).collect::<Vec<_>>();
+        let street = if recipient.apartment.is_empty() {
+            recipient.street.clone()
+        } else {
+            format!("{} / {}", recipient.street, recipient.apartment)
+        };
+        let mut receiver = json!({"name":recipient.name,"email":recipient.email,"phone":recipient.phone,"street":street,"city":recipient.city,"country_code":"PL","postcode":recipient.postal_code});
+        let point = if choice.method == Method::Locker {
+            let point = self
+                .verify_point(choice.point_id.as_deref().ok_or_else(|| {
+                    Error::Validation(Validation::field("point_id", "Wybierz punkt odbioru."))
+                })?)
+                .await?;
+            receiver["point"] = json!(point.code);
+            receiver["street"] = json!(point.address.street);
+            receiver["city"] = json!(point.address.city);
+            receiver["postcode"] = json!(point.address.postcode);
+            Some(point)
+        } else {
+            None
+        };
+        let mut package = json!({"pickup":self.sender,"receiver":receiver,"service_id":provider_id(&services[0].0),"parcels":parcels});
+        let rates=provider_json(self.request(reqwest::Method::POST,"/packages/calculate-price",2,Some(&json!({"package":package,"services":{"service_id":services.iter().map(|(id,_)|provider_id(id)).collect::<Vec<_>>()}}))).await?).await?;
+        let rows = rates["services_prices"]
+            .as_array()
+            .ok_or_else(unavailable)?;
+        let mut offers = vec![];
+        let mut rejection = None;
+        for row in rows.iter().take(100) {
+            if row["available"] != true {
+                if row["errors"].as_array().is_some_and(|v| !v.is_empty()) {
+                    rejection = Some(classify_rejection(row));
+                }
+                continue;
+            }
+            let service_id = id(&row["service_id"]).ok_or_else(unavailable)?;
+            let Some((_, name)) = services.iter().find(|(id, _)| id == &service_id) else {
+                continue;
+            };
+            let price_grosze = money(&row["pricing"]["price_gross"]).ok_or_else(unavailable)?;
+            if !offers.iter().any(|offer: &Offer| offer.id == service_id) {
+                offers.push(Offer {
+                    id: service_id,
+                    name: name.to_uppercase(),
+                    price_grosze,
+                });
+            }
+        }
+        offers.sort_by_key(|offer| offer.price_grosze);
+        let mut valid = vec![];
+        for offer in offers.into_iter().take(10) {
+            package["service_id"] = provider_id(&offer.id);
+            let response = self
+                .request(
+                    reqwest::Method::POST,
+                    "/packages/validate",
+                    2,
+                    Some(&package),
+                )
+                .await?;
+            if response.status() == StatusCode::NO_CONTENT {
+                valid.push(offer);
+            } else {
+                match provider_json(response).await {
+                    Err(Error::Validation(fields)) => {
+                        rejection = Some(Some(Error::Validation(fields)))
+                    }
+                    Err(Error::NoService(_)) => {
+                        rejection = Some(None);
+                    }
+                    Err(e) => return Err(e),
+                    Ok(_) => return Err(unavailable()),
+                }
+            }
+            if valid.len() == 3 {
+                break;
+            }
+        }
+        if valid.is_empty() {
+            if let Some(Some(error)) = rejection {
+                return Err(error);
+            }
+            return Ok(Quote::manual(
+                "Przewoźnicy nie przyjmują tych paczek dla wybranej metody. Poproś o indywidualną wycenę.",
+            ));
+        }
+        Ok(Quote {
+            offers: valid,
+            point,
+            manual_required: false,
+            reason: None,
+        })
+    }
+}
+fn id(value: &Value) -> Option<String> {
+    value
+        .as_str()
+        .filter(|s| !s.is_empty() && s.len() <= 64)
+        .map(str::to_owned)
+        .or_else(|| value.as_u64().map(|v| v.to_string()))
+}
+fn provider_id(id: &str) -> Value {
+    id.parse::<u64>()
+        .map(Value::from)
+        .unwrap_or_else(|_| Value::from(id))
+}
+fn money(value: &Value) -> Option<u32> {
+    let text = value
+        .as_str()
+        .map(str::to_owned)
+        .or_else(|| value.as_number().map(ToString::to_string))?;
+    let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
+    if whole.is_empty()
+        || whole.len() > 6
+        || !whole.bytes().all(|c| c.is_ascii_digit())
+        || fraction.len() > 2
+        || !fraction.bytes().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+    let amount =
+        whole
+            .parse::<u32>()
+            .ok()?
+            .checked_mul(100)?
+            .checked_add(match fraction.len() {
+                0 => 0,
+                1 => fraction.parse::<u32>().ok()? * 10,
+                _ => fraction.parse().ok()?,
+            })?;
+    (amount > 0 && amount <= 10_000_000).then_some(amount)
+}
+fn classify_rejection(body: &Value) -> Option<Error> {
+    let mut fields = std::collections::BTreeMap::new();
+    for issue in body["errors"].as_array().into_iter().flatten() {
+        let path = issue["path"]
+            .as_str()
+            .unwrap_or("")
+            .strip_prefix("/package")
+            .unwrap_or(issue["path"].as_str().unwrap_or(""));
+        if path.starts_with("/pickup/") {
+            return Some(Error::Unavailable(
+                "Konfiguracja adresu nadawcy wymaga poprawy przez obsługę.".into(),
+            ));
+        }
+        let field = match path {
+            "/receiver/street" => "street",
+            "/receiver/postcode" => "postal_code",
+            "/receiver/city" => "city",
+            "/receiver/phone" => "phone",
+            "/receiver/email" => "email",
+            "/receiver/name" => "name",
+            "/receiver/point" => "delivery.point_id",
+            _ => continue,
+        };
+        fields.insert(
+            field.into(),
+            "Przewoźnik wymaga poprawienia tego pola.".into(),
+        );
+    }
+    (!fields.is_empty()).then_some(Error::Validation(Validation {
+        field_errors: fields,
+    }))
+}
+fn rejection(body: &Value) -> Error {
+    if let Some(error) = classify_rejection(body) {
+        return error;
+    }
+    if body["errors"].as_array().is_some_and(|errors| {
+        errors.iter().any(|issue| {
+            issue["path"]
+                .as_str()
+                .is_some_and(|path| path.starts_with("/parcels/") || path == "/service_id")
+        })
+    }) {
+        Error::NoService("Przewoźnik nie przyjmuje tych paczek lub tej metody dostawy.".into())
+    } else {
+        unavailable()
+    }
+}
+async fn provider_json(mut response: Response) -> Result<Value, Error> {
+    let status = response.status();
+    if status == StatusCode::UNAUTHORIZED
+        || status == StatusCode::FORBIDDEN
+        || status == StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
+    {
+        return Err(unavailable());
+    }
+    let mut body = vec![];
+    while let Some(chunk) = response.chunk().await.map_err(|_| unavailable())? {
+        if body.len() + chunk.len() > 1_000_000 {
+            return Err(unavailable());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let value: Value = serde_json::from_slice(&body).map_err(|_| unavailable())?;
+    if status.is_success() {
+        Ok(value)
+    } else if status == StatusCode::BAD_REQUEST
+        || status == StatusCode::UNPROCESSABLE_ENTITY
+        || status == StatusCode::CONFLICT
+    {
+        Err(rejection(&value))
+    } else {
+        Err(unavailable())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn provider_wire_contract_and_unstructured_failures() {
+        let api = Sandbox::new("test-token".into(), json!({})).unwrap();
+        let request = api
+            .build_request(reqwest::Method::GET, "/account/services", 1, None)
+            .unwrap();
+        assert!(!request.headers().contains_key("Content-Type"));
+        assert!(request.body().is_none());
+        let request = api
+            .build_request(
+                reqwest::Method::POST,
+                "/packages/validate",
+                2,
+                Some(&json!({})),
+            )
+            .unwrap();
+        assert_eq!(
+            request.headers()["Content-Type"],
+            "application/vnd.furgonetka.v2+json"
+        );
+        assert!(matches!(
+            rejection(&json!({"message":"Bad request"})),
+            Error::Unavailable(_)
+        ));
+        assert!(matches!(
+            rejection(
+                &json!({"errors":[{"path":"/parcels/0/weight","code":"packageWeightLessThan"}]})
+            ),
+            Error::NoService(_)
+        ));
+    }
+    #[test]
+    fn carrier_amount_and_errors_are_not_silently_reinterpreted() {
+        assert_eq!(money(&json!("16.99")), Some(1699));
+        assert_eq!(money(&json!(16.9)), Some(1690));
+        for value in [
+            json!(0),
+            json!(-1),
+            json!("1.001"),
+            json!("1e3"),
+            json!("NaN"),
+        ] {
+            assert_eq!(money(&value), None);
+        }
+        assert!(matches!(
+            classify_rejection(&json!({"errors":[{"path":"/pickup/street"}]})),
+            Some(Error::Unavailable(_))
+        ));
+        let Some(Error::Validation(v)) =
+            classify_rejection(&json!({"errors":[{"path":"/receiver/postcode"}]}))
+        else {
+            panic!("field error lost")
+        };
+        assert!(v.field_errors.contains_key("postal_code"));
+        assert!(classify_rejection(&json!({"errors":[{"path":"/parcels/0/weight"}]})).is_none());
+    }
+}

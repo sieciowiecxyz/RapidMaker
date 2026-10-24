@@ -19,6 +19,8 @@ rapidmaker-slicer.workspace = true
 rapidmaker-storage.workspace = true
 rapidmaker-notifications.workspace = true
 rapidmaker-auth.workspace = true
+rapidmaker-payments.workspace = true
+rapidmaker-shipping.workspace = true
 sha2 = "0.10"
 percent-encoding = "2"
 

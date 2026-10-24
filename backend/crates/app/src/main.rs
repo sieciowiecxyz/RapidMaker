@@ -10,6 +10,33 @@ fn main() {
 }
 
 async fn serve() {
+    if let Some(mode) = std::env::args()
+        .nth(1)
+        .filter(|m| matches!(m.as_str(), "--checkout-status" | "--checkout-close"))
+    {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        if args.is_empty() || args.len() > 2 {
+            eprintln!("Provide attempt UUID and optional original Stripe reference");
+            std::process::exit(1);
+        }
+        match api::checkout_operator(
+            &args[0],
+            args.get(1).map(String::as_str),
+            mode == "--checkout-close",
+        )
+        .await
+        {
+            Ok(value) => println!("{value}"),
+            Err(_) => {
+                eprintln!(
+                    "Checkout recovery refused; check stored attempt and original Stripe reference. No new payment was created."
+                );
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if std::env::args().nth(1).as_deref() == Some("--slicer-worker") {
         let worker = api::slicer_worker().await.unwrap_or_else(|_| {
             eprintln!("Cannot initialize slicer worker; check database configuration.");

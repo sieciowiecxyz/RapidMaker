@@ -55,7 +55,7 @@ impl Storage {
         if let Some(row) = existing {
             if row.get::<String, _>("owner_hash") != o.owner_hash
                 || row.get::<i64, _>("amount_grosze") != o.amount_grosze
-                || row.get::<String, _>("provider_id") != o.provider_id
+                || row.get::<Option<String>, _>("provider_id").as_deref() != Some(o.provider_id)
             {
                 return Err("order changed".into());
             }
@@ -93,7 +93,7 @@ impl Storage {
         user: Option<&str>,
         owner: Option<&str>,
     ) -> Result<Vec<Value>, StorageError> {
-        let rows=sqlx::query_scalar("SELECT jsonb_build_object('id',id,'status',status,'amount_grosze',amount_grosze,'created_at',created_at,'paid_at',paid_at) FROM orders WHERE user_id=$1 OR (user_id IS NULL AND owner_hash=$2 AND created_at>extract(epoch from now())::bigint-86400) ORDER BY created_at DESC LIMIT 100")
+        let rows=sqlx::query_scalar("SELECT jsonb_build_object('id',o.id,'status',o.status,'payment_state',p.state,'amount_grosze',o.amount_grosze,'created_at',o.created_at,'paid_at',o.paid_at) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id WHERE o.user_id=$1 OR (o.user_id IS NULL AND o.owner_hash=$2 AND o.created_at>extract(epoch from now())::bigint-86400) ORDER BY o.created_at DESC LIMIT 100")
             .bind(user).bind(owner).fetch_all(&self.pool).await?;
         Ok(rows)
     }
@@ -103,12 +103,12 @@ impl Storage {
         user: Option<&str>,
         owner: Option<&str>,
     ) -> Result<Option<Value>, StorageError> {
-        Ok(sqlx::query_scalar("SELECT to_jsonb(o)-'owner_hash'-'user_id' FROM orders o WHERE id=$1 AND (user_id=$2 OR (user_id IS NULL AND owner_hash=$3 AND created_at>extract(epoch from now())::bigint-86400))")
+        Ok(sqlx::query_scalar("SELECT (to_jsonb(o)-'owner_hash'-'user_id')||jsonb_build_object('payment_state',p.state) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id WHERE o.id=$1 AND (o.user_id=$2 OR (o.user_id IS NULL AND o.owner_hash=$3 AND o.created_at>extract(epoch from now())::bigint-86400))")
             .bind(id).bind(user).bind(owner).fetch_optional(&self.pool).await?)
     }
     pub async fn admin_orders(&self) -> Result<Vec<Value>, StorageError> {
         Ok(sqlx::query_scalar(
-            "SELECT to_jsonb(o)-'owner_hash' FROM orders o ORDER BY created_at DESC LIMIT 100",
+            "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id ORDER BY o.created_at DESC LIMIT 100",
         )
         .fetch_all(&self.pool)
         .await?)
@@ -121,34 +121,11 @@ impl Storage {
         now: i64,
     ) -> Result<bool, StorageError> {
         let mut tx = self.pool.begin().await?;
-        let row=sqlx::query("SELECT user_id,contact FROM orders WHERE id=$1 AND provider_id=$2 AND amount_grosze=$3 AND status='awaiting_payment' FOR UPDATE")
-            .bind(id).bind(provider).bind(amount).fetch_optional(&mut *tx).await?;
-        let Some(row) = row else {
-            tx.commit().await?;
-            return Ok(false);
-        };
-        let user: Option<String> = row.try_get("user_id")?;
-        let contact: Value = row.try_get("contact")?;
-        sqlx::query("UPDATE orders SET status='paid',paid_at=$2 WHERE id=$1")
-            .bind(id)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-        enqueue(
-            &mut tx,
-            id,
-            "paid",
-            user.as_deref(),
-            contact["email"].as_str().ok_or("invalid order contact")?,
-            "payment_received",
-            json!({"reference":id,"amount_grosze":amount}),
-            true,
-            now,
-        )
-        .await?;
+        let paid = mark_paid(&mut tx, id, provider, amount, now).await?;
         tx.commit().await?;
-        Ok(true)
+        Ok(paid)
     }
+
     pub async fn order_status(
         &self,
         id: &str,
@@ -284,8 +261,42 @@ impl Storage {
     }
 }
 
+pub(crate) async fn mark_paid(
+    tx: &mut Transaction<'_, Postgres>,
+    id: &str,
+    provider: &str,
+    amount: i64,
+    now: i64,
+) -> Result<bool, StorageError> {
+    let row=sqlx::query("SELECT user_id,contact FROM orders WHERE id=$1 AND provider_id=$2 AND amount_grosze=$3 AND status='awaiting_payment' FOR UPDATE")
+            .bind(id).bind(provider).bind(amount).fetch_optional(&mut **tx).await?;
+    let Some(row) = row else {
+        return Ok(false);
+    };
+    let user: Option<String> = row.try_get("user_id")?;
+    let contact: Value = row.try_get("contact")?;
+    sqlx::query("UPDATE orders SET status='paid',paid_at=$2 WHERE id=$1")
+        .bind(id)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    enqueue(
+        tx,
+        id,
+        "paid",
+        user.as_deref(),
+        contact["email"].as_str().ok_or("invalid order contact")?,
+        "payment_received",
+        json!({"reference":id,"amount_grosze":amount}),
+        true,
+        now,
+    )
+    .await?;
+    Ok(true)
+}
+
 #[allow(clippy::too_many_arguments)]
-async fn enqueue(
+pub(crate) async fn enqueue(
     tx: &mut Transaction<'_, Postgres>,
     id: &str,
     event: &str,

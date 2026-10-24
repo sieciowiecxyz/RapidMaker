@@ -2383,7 +2383,9 @@ dependencies = [
  "rapidmaker-geometry",
  "rapidmaker-notifications",
  "rapidmaker-packing",
+ "rapidmaker-payments",
  "rapidmaker-pricing",
+ "rapidmaker-shipping",
  "rapidmaker-slicer",
  "rapidmaker-storage",
  "reqwest",
@@ -2462,6 +2464,13 @@ dependencies = [
 [[package]]
 name = "rapidmaker-payments"
 version = "0.1.0"
+dependencies = [
+ "hmac",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "rapidmaker-pricing"
@@ -2474,6 +2483,14 @@ dependencies = [
 [[package]]
 name = "rapidmaker-shipping"
 version = "0.1.0"
+dependencies = [
+ "rapidmaker-packing",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "utoipa",
+]
 
 [[package]]
 name = "rapidmaker-slicer"

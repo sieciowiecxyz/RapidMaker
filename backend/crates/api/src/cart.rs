@@ -6,7 +6,7 @@ use axum::{
 use rapidmaker_packing::Part;
 use rapidmaker_pricing::{Price, PrintLine, Rates};
 use rapidmaker_storage::Storage;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::HashSet,
@@ -72,7 +72,7 @@ pub async fn identity(
 pub async fn owner(storage: Option<&Storage>, headers: &HeaderMap) -> Result<String, Error> {
     identity(storage, headers).await.map(|(owner, _)| owner)
 }
-#[derive(Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CartPart {
     id: String,

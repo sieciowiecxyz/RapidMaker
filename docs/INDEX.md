@@ -43,3 +43,7 @@ Aktualny zakres: trwały checkout, adres i dostawa — wyłącznie backend. ARCH
 - [Kolejka slicera i pliki](slicer-queue.md)
   - przeczytaj gdy: rozwijasz upload, zadania lub uruchamiasz osobnego workera.
   - opis: API, lease/retry, limity, retencja i lokalne uruchomienie.
+
+- [Checkout — kontrakt](checkout.md)
+  - przeczytaj gdy: używasz adresów, dostawy lub płatności.
+  - opis: trwały flow, webhooki i odzyskiwanie prób.

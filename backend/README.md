@@ -17,7 +17,9 @@ backend/
     ├── packing/         # rozmieszczenie w paczkach
     ├── notifications/   # iCloud SMTP i tekstowe wiadomości
     ├── auth/            # crypto kodów, sesji i CSRF
-    └── ...              # rezerwa orders/payments/shipping/observability
+    ├── payments/        # Stripe test i podpisy webhooków
+    ├── shipping/        # adres PL i Furgonetka sandbox
+    └── ...              # rezerwa orders/observability
 ```
 
 ## Start
@@ -85,7 +87,7 @@ Import aktualizuje źródłowe metadane materiału, zachowując konfigurację op
 
 Koszty części sumowane przed naliczeniem jednej opłaty przygotowania, marży, minimum i VAT. Podział brutto między pozycje zachowuje dokładną sumę groszy. Pakowanie bierze wymiary modelu i masę slicera na sztukę, łącznie z odpadami/podporami (konserwatywny szacunek). Różne modele mają oddzielne partie; brak optymalizacji wspólnej płyty. Nieobsługiwane wymagania/brak snapshotu → ręczna ocena bez płatnej oferty.
 
-Stripe test i Furgonetka sandbox używają wyłącznie kwoty/danych serwera. Utworzenie, status i wznowienie płatności sprawdzają właściciela; przed utworzeniem także ważność wyceny i dostępność. Oferty/sekrety wznowienia Stripe nadal są w RAM. Zamówienie, referencja płatności, status, rozmowa i powiadomienia są w PostgreSQL. Własny `/api/account/orders/{id}/payment-status` sprawdza Stripe także po restarcie; potwierdzenie płatności zapisuje z mailem atomowo. Nie ma jeszcze produkcyjnych webhooków ani automatycznego monitorowania Stripe bez odpytywania. Frontend klienta trzeba podłączyć do nowego auth i zamówień.
+Checkout ma trwały szkic, ofertę i próbę płatności w PostgreSQL. Przed Stripe atomowo zapisuje zamówienie, kwotę, wybraną dostawę/paczki i ochronę plików. Worker obsługuje podpisane webhooki, retry i odczyt po restarcie; zapłata i outbox zapisują się raz. Stare trasy są adapterami wspólnego silnika. Nowe DTO, kody błędów, lokalny listener i odzyskiwanie: [kontrakt checkoutu](../docs/checkout.md). Integracja pozostaje testowa; frontend kont/auth wymaga podłączenia.
 
 ## Spis API
 

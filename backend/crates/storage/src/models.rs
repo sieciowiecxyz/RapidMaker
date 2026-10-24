@@ -158,14 +158,18 @@ impl Storage {
             .bind(user).bind(guest).bind(&account).execute(&mut *tx).await?;
         let quotes = sqlx::query("UPDATE quotes q SET user_id=$1,request=jsonb_set(jsonb_set(request,'{owner_hash}',to_jsonb($3::text)),'{user_id}',to_jsonb($1::text)) WHERE user_id IS NULL AND request->>'owner_hash'=$2 AND (request->>'expires_at')::bigint>$4 AND EXISTS(SELECT 1 FROM private_models m WHERE m.id=q.request->>'model_id' AND m.user_id=$1 AND m.owner_hash=$3)")
             .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();
-        let orders: Vec<String> = sqlx::query_scalar("UPDATE orders SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND created_at>$4-86400 RETURNING id")
+        let orders: Vec<String> = sqlx::query_scalar("UPDATE orders SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND (created_at>$4-86400 OR EXISTS(SELECT 1 FROM payment_attempts p JOIN checkout_drafts d ON d.id=p.draft_id WHERE p.id=orders.payment_attempt_id AND d.owner_hash=$2 AND d.locked)) RETURNING id")
             .bind(user).bind(guest).bind(&account).bind(now).fetch_all(&mut *tx).await?;
         for id in &orders {
             sqlx::query("UPDATE email_outbox SET user_id=$1 WHERE left(event_key,length($2))=$2 AND user_id IS NULL AND status IN ('pending','sending')")
                 .bind(user).bind(format!("order:{id}:")).execute(&mut *tx).await?;
         }
+        let drafts = sqlx::query("UPDATE checkout_drafts SET user_id=$1,owner_hash=$3 WHERE user_id IS NULL AND owner_hash=$2 AND (expires_at>$4 OR locked)")
+            .bind(user).bind(guest).bind(&account).bind(now).execute(&mut *tx).await?.rows_affected();
+        sqlx::query("UPDATE payment_attempts p SET owner_hash=$3 WHERE owner_hash=$2 AND EXISTS(SELECT 1 FROM checkout_drafts d WHERE d.id=p.draft_id AND d.user_id=$1 AND d.owner_hash=$3)")
+            .bind(user).bind(guest).bind(&account).execute(&mut *tx).await?;
         tx.commit().await?;
-        Ok(models + quotes + orders.len() as u64)
+        Ok(models + quotes + orders.len() as u64 + drafts)
     }
 }
 
