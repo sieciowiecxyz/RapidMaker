@@ -17,7 +17,7 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 - `notifications`: iCloud SMTP (`lettre`/Tokio/rustls), tekstowe wiadomości, disabled/test/live. `api/email.rs` uruchamia jeden worker outboxa, 10 prób/min, lease/CAS/retry i kontrola preferencji. App kończy go po SIGINT/SIGTERM z limitem 25 s. Kody nie trafiają do outboxa. Lokalny `--mail-test` nie wymaga DB/HTTP. Szczegóły: [email](email.md).
 - Zamówienia/rozmowy: `api/orders.rs` i `storage/orders.rs`, kontrola własności w SQL, chronione trasy operatora. Potwierdzenie płatności tylko z odpowiedzi Stripe sprawdzonej przez backend. Własność modeli/wycen/zamówień może przejść z gościa na konto, atomowo i bez nadpisywania innych właścicieli. `orders` i `observability` pozostają rezerwą.
 - `payments`: konkretny transport Stripe test, przypięta wersja API, kontrola kwoty/PLN/metadata, Hosted Checkout i zgodność PaymentIntent; podpisy HMAC webhooków.
-- `shipping`: walidacja/normalizacja adresu PL, punkty i zweryfikowane oferty Furgonetki sandbox; bez nadawania paczek.
+- `shipping`: walidacja/normalizacja adresu PL, punkty i zweryfikowane oferty Furgonetki sandbox. Cache usług 6 h, identycznych wycen 120 s; `OnceCell` łączy równoczesne obliczenia, do 64 wpisów/4 aktywnych liderów, błędy 2 s. Cache w procesie; bez nadawania paczek. `api/checkout.rs` ponownie wykorzystuje ważny snapshot PostgreSQL po weryfikacji własności i aktualnych danych; TTL nie jest odnawiany.
 
 ## Nowa wycena a istniejący checkout
 

@@ -71,3 +71,7 @@ Dowody, aktualne ograniczenia i pomiar LOC: [checkpoint C1–C6](milestones/back
 Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; najpierw najmniejsza liczba paczek w znalezionych planach, potem ceny Furgonetki + opakowania i walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 5 wycen zbiorczych/10 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
 
 Sprawdzone: regresje pakowania/rankingu, rzeczywiste ceny i walidacja kilku planów w sandboxie; szczegóły w milestone P1. Rezerwy i katalog kartonów wymagają kalibracji przed użyciem produkcyjnym.
+
+## P2 — Cache i łączenie zapytań dostawy — wdrożone
+
+Usługi Furgonetki w cache procesu 6 h; identyczne wyceny 120 s i jeden aktywny lider na klucz. Ważna oferta szkicu używana z PostgreSQL po lokalnej walidacji, bez nowego HTTP i zwiększenia wersji. Ważność nie odnawia się przy odczycie; zmiana danych unieważnia ofertę. Limit 64 wpisów/4 liderów, błędy 2 s; bez schedulera, nowych zależności, SQL i frontendu. Kontrakt: [checkout.md](checkout.md#cache-i-identyczne-żądania).

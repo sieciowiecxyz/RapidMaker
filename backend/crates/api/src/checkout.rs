@@ -296,7 +296,13 @@ async fn view(app: &App, headers: &HeaderMap, draft: CheckoutDraft) -> Result<Dr
         .map(PaymentView::from_attempt);
     let quote = draft.quote.map(|mut q| {
         if let Some(o) = q.as_object_mut() {
-            for k in ["quote_ids", "contact", "lines", "guest_updates"] {
+            for k in [
+                "quote_ids",
+                "contact",
+                "lines",
+                "guest_updates",
+                "_source_version",
+            ] {
                 o.remove(k);
             }
         }
@@ -460,6 +466,22 @@ pub(super) fn contact(input: &DraftInput, point: Option<&rapidmaker_shipping::Po
     }
     v
 }
+// A retry of the request that produced this quote may carry its previous version.
+// Any actual input edit clears the quote and increments the version in PostgreSQL.
+fn reusable_quote(draft: &CheckoutDraft, version: i64, at: i64) -> bool {
+    !draft.locked
+        && draft.expires_at > at
+        && draft.quote_expires_at.is_some_and(|expiry| expiry > at)
+        && draft.quote.as_ref().is_some_and(|quote| {
+            quote["manual_required"] == false
+                && quote["offers"]
+                    .as_array()
+                    .is_some_and(|offers| !offers.is_empty())
+                && (draft.version == version
+                    || (version.checked_add(1) == Some(draft.version)
+                        && quote["_source_version"].as_i64() == Some(version)))
+        })
+}
 pub(super) async fn quote_draft(
     app: &App,
     headers: &HeaderMap,
@@ -468,16 +490,26 @@ pub(super) async fn quote_draft(
     allow_incomplete: bool,
 ) -> Result<CheckoutDraft> {
     let draft = owned(app, id, headers).await?;
-    if draft.locked || draft.version != version {
+    let reuse = reusable_quote(&draft, version, now());
+    if draft.locked || (draft.version != version && !reuse) {
         return Err(conflict());
     }
-    let mut input: DraftInput = serde_json::from_value(draft.input).map_err(|_| unavailable())?;
+    let mut input: DraftInput =
+        serde_json::from_value(draft.input.clone()).map_err(|_| unavailable())?;
     let incomplete = input.recipient.normalize(&input.delivery).err();
     if !allow_incomplete && let Some(v) = &incomplete {
         return Err(validation(v.clone()));
     }
     let cart =
         super::cart::prepare(app.db.as_ref(), headers, input.parts.clone(), input.manual).await?;
+    // Even a cache hit must recheck owned models, current rates and stock.
+    if reuse {
+        return if reusable_quote(&draft, version, now()) {
+            Ok(draft)
+        } else {
+            Err(conflict())
+        };
+    }
     let mut plans = rapidmaker_packing::candidates(EstimateRequest {
         parts: cart.parts,
         delivery: match input.delivery.method {
@@ -496,6 +528,7 @@ pub(super) async fn quote_draft(
             offers: vec![],
             point: None,
             manual_required: false,
+            expires_at: None,
             reason: Some("Uzupełnij dane odbiorcy, aby wybrać dostawę.".into()),
         }
     } else if manual {
@@ -503,13 +536,13 @@ pub(super) async fn quote_draft(
             offers: vec![],
             point: None,
             manual_required: true,
+            expires_at: None,
             reason: Some("Zamówienie wymaga indywidualnej wyceny.".into()),
         }
     } else if input.delivery.method == Method::Pickup {
         rapidmaker_shipping::Quote::pickup()
     } else {
         app.provider_limit(&cart.owner).await?;
-        let _permit = app.permit()?;
         let (plan, quote) = app
             .shipping
             .as_ref()
@@ -545,7 +578,12 @@ pub(super) async fn quote_draft(
     }
     let lines = serde_json::to_value(&cart.lines).map_err(|_| unavailable())?;
     let contact = contact(&input, shipping.point.as_ref());
-    let expires_at = (cart.expires_at as i64).min(now() + 600);
+    let expires_at = (cart.expires_at as i64)
+        .min(now() + 600)
+        .min(shipping.expires_at.unwrap_or(i64::MAX));
+    if expires_at <= now() {
+        return Err(conflict());
+    }
     let details = QuoteDetails {
         packing,
         offers,
@@ -559,15 +597,26 @@ pub(super) async fn quote_draft(
         point: shipping.point,
     };
     let mut value = serde_json::to_value(details).map_err(|_| unavailable())?;
+    value["_source_version"] = json!(version);
     value["quote_ids"] = json!(cart.quote_ids);
     value["contact"] = contact;
     value["lines"] = lines;
     value["guest_updates"] = json!(input.email_order_updates);
-    app.db()?
+    if let Some(saved) = app
+        .db()?
         .checkout_quote(id, &cart.owner, version, &value, expires_at, now())
         .await
         .map_err(|_| unavailable())?
-        .ok_or_else(conflict)
+    {
+        return Ok(saved);
+    }
+    // Another identical request may have committed the shared provider result first.
+    let saved = owned(app, id, headers).await?;
+    if reusable_quote(&saved, version, now()) {
+        Ok(saved)
+    } else {
+        Err(conflict())
+    }
 }
 #[utoipa::path(post,path="/api/checkout/drafts/{id}/quote",tag="Checkout",operation_id="checkout_draft_quote",params(("id"=String,Path)),request_body=Version,
  responses((status=200,body=DraftView),(status=409,body=Problem),(status=422,body=Problem),(status=503,body=Problem)),security(("session"=[],"csrf"=[]),("guest"=[])))]
@@ -819,6 +868,32 @@ pub(super) use super::checkout_worker::refresh_order;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reusable_quote_requires_unexpired_snapshot_and_exact_input_version() {
+        let mut draft = CheckoutDraft {
+            id: "draft".into(),
+            version: 3,
+            input: json!({}),
+            quote: Some(
+                json!({"_source_version":2,"offers":[{"id":"service"}],"manual_required":false}),
+            ),
+            quote_expires_at: Some(200),
+            expires_at: 1000,
+            locked: false,
+        };
+        assert!(reusable_quote(&draft, 3, 100));
+        assert!(reusable_quote(&draft, 2, 100));
+        assert!(!reusable_quote(&draft, 1, 100));
+        assert!(!reusable_quote(&draft, 2, 200));
+        draft.locked = true;
+        assert!(!reusable_quote(&draft, 3, 100));
+        draft.locked = false;
+        draft.version += 1;
+        assert!(!reusable_quote(&draft, 2, 100));
+        draft.quote = None;
+        assert!(!reusable_quote(&draft, 4, 100));
+        assert!(!reusable_quote(&draft, i64::MAX, 100));
+    }
     #[test]
     fn stripe_form_freezes_server_amount_and_never_recollects_shipping_address() {
         let app = App {

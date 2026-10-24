@@ -5,11 +5,122 @@ use rapidmaker_packing::Estimate;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+use tokio::sync::{Mutex, OnceCell, Semaphore};
 use utoipa::ToSchema;
 
 const API: &str = "https://api.sandbox.furgonetka.pl";
-#[derive(Debug)]
+const SERVICES_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+const QUOTE_TTL: Duration = Duration::from_secs(120);
+const QUOTE_ERROR_TTL: Duration = Duration::from_secs(2);
+const MAX_QUOTE_KEYS: usize = 64;
+const MAX_QUOTE_KEY_BYTES: usize = 131072;
+
+fn quote_key(
+    plans: &[Estimate],
+    recipient: &Recipient,
+    choice: &DeliveryChoice,
+) -> Result<Vec<u8>, Error> {
+    // Keep plan order: the cached selected index refers to this exact ordering.
+    let plans = plans
+        .iter()
+        .map(|plan| {
+            (
+                plan.packaging_grosze,
+                plan.parcels
+                    .iter()
+                    .map(|parcel| (parcel.outer_mm, parcel.weight_g))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    serde_json::to_vec(&(plans, recipient, choice)).map_err(|_| unavailable())
+}
+
+type CachedQuote = (Instant, Result<(usize, Quote), Error>);
+#[derive(Default)]
+struct QuoteCache(Mutex<HashMap<Vec<u8>, Arc<OnceCell<CachedQuote>>>>);
+impl QuoteCache {
+    async fn get(
+        &self,
+        key: Vec<u8>,
+        load: impl Future<Output = Result<(usize, Quote), Error>>,
+    ) -> Result<(usize, Quote), Error> {
+        if key.len() > MAX_QUOTE_KEY_BYTES {
+            return Err(unavailable());
+        }
+        let entry = {
+            let mut entries = self.0.lock().await;
+            entries.retain(|_, cell| match cell.get() {
+                Some((saved, result)) => {
+                    saved.elapsed()
+                        < if result.as_ref().is_ok_and(|(_, q)| !q.manual_required) {
+                            QUOTE_TTL
+                        } else {
+                            QUOTE_ERROR_TTL
+                        }
+                }
+                // A cancelled initializer leaves an empty cell; retain active waiters only.
+                None => Arc::strong_count(cell) > 1,
+            });
+            if !entries.contains_key(&key) && entries.len() >= MAX_QUOTE_KEYS {
+                return Err(unavailable());
+            }
+            Arc::clone(entries.entry(key).or_default())
+        };
+        entry
+            .get_or_init(|| async {
+                let mut result = load.await;
+                if let Ok((_, quote)) = &mut result
+                    && !quote.manual_required
+                {
+                    let expires_at = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .ok()
+                        .and_then(|d| d.as_secs().checked_add(QUOTE_TTL.as_secs()))
+                        .and_then(|s| i64::try_from(s).ok());
+                    if let Some(expires_at) = expires_at {
+                        quote.expires_at = Some(expires_at);
+                    } else {
+                        result = Err(unavailable());
+                    }
+                }
+                (Instant::now(), result)
+            })
+            .await
+            .1
+            .clone()
+    }
+}
+
+#[derive(Default)]
+struct ServicesCache(Mutex<Option<(Instant, Arc<Value>)>>);
+impl ServicesCache {
+    async fn get(
+        &self,
+        load: impl Future<Output = Result<Value, Error>>,
+    ) -> Result<Arc<Value>, Error> {
+        // Holding the async lock during refresh coalesces misses; cancellation releases it.
+        let mut entry = self.0.lock().await;
+        if let Some((saved, data)) = &*entry
+            && saved.elapsed() < SERVICES_TTL
+        {
+            return Ok(Arc::clone(data));
+        }
+        let data = load.await?;
+        if !data["services"].is_array() {
+            return Err(unavailable());
+        }
+        let data = Arc::new(data);
+        *entry = Some((Instant::now(), Arc::clone(&data)));
+        Ok(data)
+    }
+}
+#[derive(Clone, Debug)]
 pub enum Error {
     Validation(Validation),
     Unavailable(String),
@@ -47,6 +158,7 @@ pub struct Quote {
     pub point: Option<Point>,
     pub manual_required: bool,
     pub reason: Option<String>,
+    pub expires_at: Option<i64>,
 }
 impl Quote {
     pub fn pickup() -> Self {
@@ -59,6 +171,7 @@ impl Quote {
             point: None,
             manual_required: false,
             reason: None,
+            expires_at: None,
         }
     }
     fn manual(reason: &str) -> Self {
@@ -67,6 +180,7 @@ impl Quote {
             point: None,
             manual_required: true,
             reason: Some(reason.into()),
+            expires_at: None,
         }
     }
 }
@@ -75,6 +189,9 @@ pub struct Sandbox {
     client: Client,
     token: String,
     sender: Value,
+    services: Arc<ServicesCache>,
+    quotes: Arc<QuoteCache>,
+    quote_slots: Arc<Semaphore>,
 }
 impl Sandbox {
     pub fn new(token: String, sender: Value) -> Result<Self, Error> {
@@ -96,6 +213,9 @@ impl Sandbox {
             client,
             token,
             sender,
+            services: Arc::default(),
+            quotes: Arc::default(),
+            quote_slots: Arc::new(Semaphore::new(4)),
         })
     }
     fn build_request(
@@ -256,12 +376,18 @@ impl Sandbox {
         {
             return Ok((0, Quote::manual("Paczki wymagają indywidualnej wyceny.")));
         }
-        tokio::time::timeout(
-            Duration::from_secs(30),
-            self.quote_inner(plans, &recipient, choice),
-        )
-        .await
-        .map_err(|_| unavailable())?
+        let key = quote_key(plans, &recipient, choice)?;
+        self.quotes
+            .get(key, async {
+                let _permit = self.quote_slots.try_acquire().map_err(|_| unavailable())?;
+                tokio::time::timeout(
+                    Duration::from_secs(30),
+                    self.quote_inner(plans, &recipient, choice),
+                )
+                .await
+                .map_err(|_| unavailable())?
+            })
+            .await
     }
     async fn quote_inner(
         &self,
@@ -269,11 +395,16 @@ impl Sandbox {
         recipient: &Recipient,
         choice: &DeliveryChoice,
     ) -> Result<(usize, Quote), Error> {
-        let data = provider_json(
-            self.request(reqwest::Method::GET, "/account/services", 1, None)
-                .await?,
-        )
-        .await?;
+        let data = self
+            .services
+            .get(async {
+                provider_json(
+                    self.request(reqwest::Method::GET, "/account/services", 1, None)
+                        .await?,
+                )
+                .await
+            })
+            .await?;
         let services = data["services"]
             .as_array()
             .ok_or_else(unavailable)?
@@ -426,6 +557,7 @@ impl Sandbox {
                     point,
                     manual_required: false,
                     reason: None,
+                    expires_at: None,
                 },
             ));
         }
@@ -579,6 +711,203 @@ async fn provider_json(mut response: Response) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn quote_key_uses_delivery_inputs_and_ignores_model_placements() {
+        let mut plans = rapidmaker_packing::candidates(rapidmaker_packing::EstimateRequest {
+            parts: vec![rapidmaker_packing::Part {
+                id: "private-part-id".into(),
+                quantity: 12,
+                analysis_id: None,
+                dimensions_mm: Some([120, 80, 45]),
+                weight_g: Some(60),
+            }],
+            delivery: rapidmaker_packing::Delivery::Courier,
+        });
+        assert!(plans.len() > 1);
+        let mut recipient = Recipient::default();
+        let mut choice = DeliveryChoice::default();
+        let key = quote_key(&plans, &recipient, &choice).unwrap();
+        plans[0].parcels[0].placements[0].part_id = "other-part".into();
+        plans[0].parcels[0].placements[0].position_mm = [5; 3];
+        assert_eq!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+        plans[0].parcels[0].weight_g += 1;
+        assert_ne!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+        plans[0].parcels[0].weight_g -= 1;
+        plans[0].packaging_grosze += 1;
+        assert_ne!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+        plans[0].packaging_grosze -= 1;
+        recipient.email = "changed@example.com".into();
+        assert_ne!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+        recipient.email.clear();
+        choice.method = Method::Locker;
+        assert_ne!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+        choice.method = Method::Courier;
+        plans.swap(0, 1);
+        assert_ne!(quote_key(&plans, &recipient, &choice).unwrap(), key);
+    }
+    #[tokio::test]
+    async fn quote_cache_coalesces_preserves_expiry_and_cools_down_errors() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let cache = QuoteCache::default();
+        let key = b"normalized request".to_vec();
+        let calls = AtomicUsize::new(0);
+        let slots = Semaphore::new(1);
+        let load = || async {
+            let _permit = slots.try_acquire().map_err(|_| unavailable())?;
+            calls.fetch_add(1, Ordering::Relaxed);
+            tokio::task::yield_now().await;
+            Ok((1, Quote::pickup()))
+        };
+        let (first, second) = tokio::join!(
+            cache.get(key.clone(), load()),
+            cache.get(key.clone(), load())
+        );
+        let expiry = first.unwrap().1.expires_at;
+        assert!(expiry.is_some());
+        assert_eq!(second.unwrap().1.expires_at, expiry);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        let cached = cache
+            .get(key.clone(), async { panic!("cache miss") })
+            .await
+            .unwrap();
+        assert_eq!(cached.1.expires_at, expiry);
+        {
+            let mut entries = cache.0.lock().await;
+            Arc::get_mut(entries.get_mut(&key).unwrap())
+                .unwrap()
+                .get_mut()
+                .unwrap()
+                .0 = Instant::now() - QUOTE_TTL;
+        }
+        assert!(
+            cache
+                .get(key.clone(), async { Err(unavailable()) })
+                .await
+                .is_err()
+        );
+        assert!(
+            cache
+                .get(key.clone(), async { panic!("error cooldown lost") })
+                .await
+                .is_err()
+        );
+        {
+            let mut entries = cache.0.lock().await;
+            Arc::get_mut(entries.get_mut(&key).unwrap())
+                .unwrap()
+                .get_mut()
+                .unwrap()
+                .0 = Instant::now() - QUOTE_ERROR_TTL;
+        }
+        cache.get(key, load()).await.unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+    #[tokio::test]
+    async fn quote_cache_bounds_capacity_and_recovers_after_cancellation() {
+        let cache = Arc::new(QuoteCache::default());
+        assert!(
+            cache
+                .get(vec![0; MAX_QUOTE_KEY_BYTES + 1], async {
+                    panic!("oversized key")
+                })
+                .await
+                .is_err()
+        );
+        let pending_cache = Arc::clone(&cache);
+        let (started, entered) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            pending_cache
+                .get(vec![0], async {
+                    started.send(()).unwrap();
+                    std::future::pending().await
+                })
+                .await
+        });
+        entered.await.unwrap();
+        for key in 1..MAX_QUOTE_KEYS as u8 {
+            cache
+                .get(vec![key], async { Ok((0, Quote::pickup())) })
+                .await
+                .unwrap();
+        }
+        assert!(
+            cache
+                .get(vec![255], async { panic!("full cache") })
+                .await
+                .is_err()
+        );
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        cache
+            .get(vec![0], async { Ok((0, Quote::manual("manual"))) })
+            .await
+            .unwrap();
+        assert_eq!(cache.0.lock().await.len(), MAX_QUOTE_KEYS);
+        assert!(
+            cache
+                .get(vec![0], async { panic!("manual cooldown lost") })
+                .await
+                .unwrap()
+                .1
+                .manual_required
+        );
+    }
+    #[tokio::test]
+    async fn services_cache_coalesces_refreshes_expires_and_does_not_cache_failures() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let api = Sandbox::new("test-token".into(), json!({})).unwrap();
+        let other = api.clone();
+        assert!(Arc::ptr_eq(&api.services, &other.services));
+        let calls = AtomicUsize::new(0);
+        let load = || async {
+            calls.fetch_add(1, Ordering::Relaxed);
+            tokio::task::yield_now().await;
+            Ok(json!({"services":[{"id":1,"service":"dpd"}]}))
+        };
+        let (first, second) = tokio::join!(api.services.get(load()), other.services.get(load()));
+        assert!(Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        api.services.0.lock().await.as_mut().unwrap().0 = Instant::now() - SERVICES_TTL;
+        assert!(
+            api.services
+                .get(async { Err(unavailable()) })
+                .await
+                .is_err()
+        );
+        assert!(
+            api.services
+                .get(async { Ok(json!({"unexpected":"response"})) })
+                .await
+                .is_err()
+        );
+        api.services.get(load()).await.unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+    #[tokio::test]
+    async fn services_refresh_cancellation_releases_waiters() {
+        let cache = Arc::new(ServicesCache::default());
+        let pending_cache = Arc::clone(&cache);
+        let (started, entered) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            pending_cache
+                .get(async {
+                    started.send(()).unwrap();
+                    std::future::pending().await
+                })
+                .await
+        });
+        entered.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            cache.get(async { Ok(json!({"services":[]})) }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result["services"], json!([]));
+    }
     #[test]
     fn ranking_compares_shipping_plus_packaging_and_keeps_plan_identity() {
         let mut plans = rapidmaker_packing::candidates(rapidmaker_packing::EstimateRequest {

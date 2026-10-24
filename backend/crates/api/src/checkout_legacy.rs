@@ -140,7 +140,13 @@ async fn quote(
     let draft = c::quote_draft(&app, &headers, &draft.id, draft.version, true).await?;
     let mut result = draft.quote.ok_or_else(unavailable)?;
     if let Some(o) = result.as_object_mut() {
-        for key in ["contact", "quote_ids", "lines", "guest_updates"] {
+        for key in [
+            "contact",
+            "quote_ids",
+            "lines",
+            "guest_updates",
+            "_source_version",
+        ] {
             o.remove(key);
         }
     }

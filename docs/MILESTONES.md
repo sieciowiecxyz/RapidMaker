@@ -66,3 +66,11 @@ Dowody i granice: [checkpoint](milestones/backend.md#checkout-c1c6--2026-10-24).
 - PASS: 27 testów API/pakowania/dostawy, w tym 12 sztuk zawsze w jednej paczce i 999 sztuk jako pełne kartony + reszta. Dawny test wymagający wariantu wielopaczkowego zmieniony zgodnie z nowym priorytetem.
 - PASS: rzeczywisty sandbox dla 12 sztuk: L=[12] i XL=[12], bez wariantu 12 osobnych paczek. Log pokazuje rozmiary kartonów i sztuki w każdej paczce. Fmt/Clippy/build zakresowe; bez nowych zależności i migracji.
 - Korekta LOC (tokei, 2 zmienione pliki Rust): produkcja 891 → 886 (-5), testy 396 → 427 (+31); bez pustych linii i komentarzy.
+
+## P2 — Cache i łączenie zapytań dostawy — PASS lokalnie
+
+- Usługi 6 h, wyceny 120 s, współdzielenie równoczesnych wyników i krótka przerwa po błędzie. Ograniczone zasoby; anulowanie nie blokuje cache. Oryginalny termin ważności zachowany.
+- PASS: 18 testów API/dostawy; jeden oddzielny test porównania taryf sandbox pominięty w tym zestawie. Regresje obejmują TTL, jeden loader, błędy, anulowanie, przepełnienie cache, klucz danych i wersję szkicu.
+- PASS: osobna baza PostgreSQL i rzeczywisty sandbox: upload/GLB/slicer → 8 równoczesnych wycen → ten sam zapis/wersja/termin; stare i aktualne wersje retry; starszy endpoint; zmiana magazynu odrzucona. Po restarcie bez Furgonetki ważna oferta działa, obcy właściciel nie ma dostępu. Wygasła oferta i zmieniony adres nie korzystają ze starej ceny.
+- PASS: fmt, zakresowe Clippy/build. Bez migracji, nowych plików i zależności. Cache procesu nie łączy zapytań między oddzielnymi instancjami backendu; snapshoty PostgreSQL pozostają trwałe.
+- LOC (tokei, 3 zmienione pliki Rust): produkcja 1749 → 1926 (+177), testy 204 → 427 (+223), bez pustych linii i komentarzy.
