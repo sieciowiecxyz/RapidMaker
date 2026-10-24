@@ -10,8 +10,10 @@ tracing.workspace = true
 gltf = { version = "1.4.1", features = ["import"] }
 lib3mf = { version = "0.1.7", default-features = false }
 ply-rs-bw = "4.0.0"
-truck-polymesh = "0.6.0"
-truck-meshalgo = { version = "0.4.0", default-features = false, features = ["tessellation"] }
-truck-stepio = "0.3.0"
+cxx = "1"
+tobj = { version = "4.0.3", default-features = false }
 serde_json = "1"
 flate2 = "1"
+
+[build-dependencies]
+cxx-build = "1"

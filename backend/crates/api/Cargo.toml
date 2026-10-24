@@ -31,5 +31,6 @@ utoipa-swagger-ui = { version = "10", default-features = false, features = ["axu
 prometheus-client = { version = "0.25.1", default-features = false }
 
 [dev-dependencies]
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres"] }
 tracing-subscriber.workspace = true
 tower = { version = "0.5", features = ["util"] }

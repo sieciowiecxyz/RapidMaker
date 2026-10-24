@@ -170,4 +170,8 @@ Osobny loopback:18435, dedykowany token z SOPS, brak publicznej trasy/CORS, limi
 
 ## L6 — Ograniczony przegląd bezpieczeństwa i dead code
 
-Aktualizacja parserów i wyłączenie nieużywanych features usuwa 8 zgłoszeń oraz 52 pakiety. Ścisłe cookie próby logowania, prywatny katalog tworzony atomowo z 0700 i zabezpieczony eksport CSV. Zakres testów i pozostałe RSA/cgmath: [security.md](security.md). Nie traktować jako pełnego pentestu ani czystego wyniku całego audytu zależności.
+Aktualizacja parserów i wyłączenie nieużywanych features usuwa 8 zgłoszeń oraz 52 pakiety. Ścisłe cookie próby logowania, prywatny katalog tworzony atomowo z 0700 i zabezpieczony eksport CSV. Historyczny zakres L6 i późniejsze usunięcie RSA/cgmath w L7: [security.md](security.md). Nie traktować jako pełnego pentestu ani czystego wyniku całego audytu zależności.
+
+## L7 — Domknięcie zależności i granic uprawnień
+
+SQLx 0.9 usuwa RSA z lockfile; Truck/cgmath/proc-macro-error zastąpione systemowym OCCT 7.9 i małym mostem CXX, bez zmiany API i bez nowej migracji SQL. Audyt Cargo: 0 podatności/ostrzeżeń, bez wyjątków. Test dwóch klientów/gościa/admina wykrył brak MFA na części ścieżek klienta dla admina; wspólna kontrola obejmuje teraz także claim. Zakres, wymagania natywne i dowody: [security.md](security.md).

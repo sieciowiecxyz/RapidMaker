@@ -40,15 +40,18 @@ pub(super) async fn scope(
     mutate: bool,
 ) -> Result<(Option<String>, Option<String>), Error> {
     let user = if super::auth::session_cookie(headers)?.is_some() {
-        Some(
-            if mutate {
-                auth.mutation(headers).await?
-            } else {
-                auth.current(headers).await?
-            }
-            .user
-            .id,
-        )
+        let session = if mutate {
+            auth.mutation(headers).await?
+        } else {
+            auth.current(headers).await?
+        };
+        if session.user.role == "admin" && session.admin_verified_at.is_none() {
+            return Err(error(
+                StatusCode::FORBIDDEN,
+                "Potwierdź dostęp kluczem passkey.",
+            ));
+        }
+        Some(session.user.id)
     } else {
         None
     };
@@ -314,12 +317,12 @@ async fn claim(
     headers: HeaderMap,
     Json(_input): Json<Value>,
 ) -> Result<Json<Value>, Error> {
-    let user = auth.mutation(&headers).await?.user;
-    let owner = super::files::owner(&headers)
-        .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Brak sesji gościa."))?;
+    let (user, owner) = scope(&auth, &headers, true).await?;
+    let user = user.ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się."))?;
+    let owner = owner.ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Brak sesji gościa."))?;
     let count = auth
         .database()?
-        .claim_guest(&user.id, &owner, now())
+        .claim_guest(&user, &owner, now())
         .await
         .map_err(|_| unavailable())?;
     Ok(Json(json!({"resources_claimed":count})))

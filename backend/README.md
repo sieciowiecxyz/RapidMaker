@@ -19,10 +19,13 @@ backend/
     ├── auth/            # crypto kodów, sesji i CSRF
     ├── payments/        # Stripe test i podpisy webhooków
     ├── shipping/        # adres PL i Furgonetka sandbox
-    └── ...              # rezerwa orders/observability
+    ├── observability/   # strukturalne logi JSON
+    └── orders/          # rezerwa
 ```
 
 ## Start
+
+Wymagane: Rust ≥1.94, Linux, kompilator C++17 i systemowy Open CASCADE **7.9** (nagłówki oraz biblioteki, w tym TKDESTEP). Na Arch pakiet `opencascade`; sprawdzono 7.9.3. STEP używa małego mostu CXX do OCCT, reszta backendu pozostaje w Rust. Build nie pobiera binariów OCCT. Domyślny include: `/usr/include/opencascade`; dla innej instalacji ustaw `OCCT_INCLUDE_DIR` i ewentualnie `OCCT_LIB_DIR` podczas budowania. Biblioteki współdzielone muszą być dostępne także podczas uruchamiania API i workera; sam plik binarny nie wystarczy.
 
 ```sh
 cargo build --locked --manifest-path backend/Cargo.toml
@@ -169,3 +172,5 @@ Sprawdzono rzeczywisty adapter Rust: sześciu kurierów i cztery sieci automató
 ### Metryki
 
 `METRICS_TOKEN` w `.env`/SOPS włącza prywatne `127.0.0.1:18435/metrics` z Bearer auth; brak zmiennej wyłącza zbieranie. HTTP: liczniki/klasy statusu, histogram opóźnienia, in-flight i uptime; bez danych klienta i surowych URL. Osobny listener, bez trasy w publicznym API. [Konfiguracja Prometheusa/Grafany i granice](../docs/metrics.md).
+
+Uprawnienia i aktualne wyniki audytu: [security.md](../docs/security.md). Izolowany test API obejmuje dwóch klientów, gościa, admina/MFA, CSRF i własność plików.

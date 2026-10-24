@@ -10,9 +10,7 @@ use ply_rs_bw::{
     parser::Parser as PlyParser,
     ply::{DefaultElement, Property},
 };
-use truck_meshalgo::prelude::*;
-use truck_polymesh::{Point3, PolygonMesh, obj};
-use truck_stepio::r#in::Table;
+mod step;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceFormat {
@@ -769,9 +767,36 @@ fn scene_from_obj(
     limits: &ConversionLimits,
     started: Instant,
 ) -> Result<MeshScene, PreviewError> {
-    let mesh = obj::read(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
+    let options = tobj::LoadOptions {
+        triangulate: true,
+        ignore_points: true,
+        ignore_lines: true,
+        ..Default::default()
+    };
+    // Materials are irrelevant to the canonical mesh; never read referenced files.
+    let (models, _) = tobj::load_obj_buf(&mut Cursor::new(input), &options, |_| {
+        Ok((Vec::new(), Default::default()))
+    })
+    .map_err(|_| PreviewError::MalformedInput)?;
     let mut builder = MeshSceneBuilder::default();
-    emit_standard_polygon_mesh(&mesh, limits, started, &mut builder)?;
+    for model in models {
+        for triangle in model.mesh.indices.chunks_exact(3) {
+            let mut points = [[0.0; 3]; 3];
+            for (point, index) in points.iter_mut().zip(triangle) {
+                let offset = (*index as usize)
+                    .checked_mul(3)
+                    .ok_or(PreviewError::MalformedInput)?;
+                point.copy_from_slice(
+                    model
+                        .mesh
+                        .positions
+                        .get(offset..offset + 3)
+                        .ok_or(PreviewError::MalformedInput)?,
+                );
+            }
+            builder.push_polygon(&points, limits, started)?;
+        }
+    }
     builder.finish()
 }
 
@@ -930,38 +955,21 @@ fn scene_from_step(
     {
         return Err(PreviewError::UnsupportedFormat);
     }
-    let table = Table::from_step(text).ok_or(PreviewError::MalformedInput)?;
-    let mut builder = MeshSceneBuilder::default();
-    for step_shell in table.shell.values() {
-        check_timeout(started, limits)?;
-        let cshell = table
-            .to_compressed_shell(step_shell)
-            .map_err(|_| PreviewError::MalformedInput)?;
-        let polygon = cshell.triangulation(0.01).to_polygon();
-        emit_standard_polygon_mesh(&polygon, limits, started, &mut builder)?;
+    let mesh = step::ffi::tessellate_step(input, limits.max_triangles, limits.max_vertices)
+        .map_err(|_| PreviewError::MalformedInput)?;
+    match mesh.status {
+        step::ffi::StepStatus::Ok => (),
+        step::ffi::StepStatus::TooManyTriangles => return Err(PreviewError::TooManyTriangles),
+        step::ffi::StepStatus::TooManyVertices => return Err(PreviewError::TooManyVertices),
+        step::ffi::StepStatus::Unsupported => return Err(PreviewError::UnsupportedFormat),
+        _ => return Err(PreviewError::MalformedInput),
     }
-    builder.finish()
-}
-
-fn emit_standard_polygon_mesh(
-    mesh: &PolygonMesh,
-    limits: &ConversionLimits,
-    started: Instant,
-    builder: &mut MeshSceneBuilder,
-) -> Result<(), PreviewError> {
-    for face in mesh.face_iter() {
-        check_timeout(started, limits)?;
-        let mut points = Vec::with_capacity(face.len());
-        for vertex in face {
-            let attr = mesh
-                .attributes()
-                .get(*vertex)
-                .ok_or(PreviewError::MalformedInput)?;
-            points.push(point3_to_mm(attr.position));
-        }
+    let mut builder = MeshSceneBuilder::default();
+    for triangle in mesh.points.chunks_exact(3) {
+        let points = [0, 1, 2].map(|i| point3_from_mm(triangle[i].x, triangle[i].y, triangle[i].z));
         builder.push_polygon(&points, limits, started)?;
     }
-    Ok(())
+    builder.finish()
 }
 
 fn emit_gltf_scene(
@@ -1037,7 +1045,7 @@ fn emit_gltf_primitive(
                 let c = positions
                     .get(triangle[2] as usize)
                     .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(a, b, c, transform, builder, limits, started)?;
+                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
             }
         }
         Mode::TriangleStrip => {
@@ -1056,7 +1064,7 @@ fn emit_gltf_primitive(
                 let c = positions
                     .get(c as usize)
                     .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(a, b, c, transform, builder, limits, started)?;
+                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
             }
         }
         Mode::TriangleFan => {
@@ -1070,7 +1078,7 @@ fn emit_gltf_primitive(
                 let c = positions
                     .get(indices[index + 1] as usize)
                     .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(a, b, c, transform, builder, limits, started)?;
+                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
             }
         }
         _ => {}
@@ -1306,10 +1314,6 @@ fn transform_point(matrix: [[f32; 4]; 4], point: [f32; 3]) -> [f32; 3] {
 
 fn point3_from_mm(x: f64, y: f64, z: f64) -> [f32; 3] {
     [x as f32, y as f32, z as f32]
-}
-
-fn point3_to_mm(point: Point3) -> [f32; 3] {
-    [point.x as f32, point.y as f32, point.z as f32]
 }
 
 #[derive(Default)]
@@ -1665,6 +1669,66 @@ mod tests {
                 assert_eq!(after.dimensions_mm[0], 200.0);
             }
         }
+    }
+
+    #[test]
+    fn step_tessellation_preserves_millimetres_winding_and_limits() {
+        let limits = ConversionLimits::default();
+        let mesh = scene_from_step(STEP_BLOCK, &limits, Instant::now()).unwrap();
+        let analysis = analyze_scene(&mesh, SourceFormat::Step, &limits).unwrap();
+        assert_eq!(analysis.dimensions_mm, [2.0; 3]);
+        assert!((signed_volume(&mesh) - 8.0).abs() < 0.0001);
+        for (limits, expected) in [
+            (
+                ConversionLimits {
+                    max_triangles: 1,
+                    ..Default::default()
+                },
+                PreviewError::TooManyTriangles,
+            ),
+            (
+                ConversionLimits {
+                    max_vertices: 2,
+                    ..Default::default()
+                },
+                PreviewError::TooManyVertices,
+            ),
+        ] {
+            assert_eq!(
+                source_to_stl("part.step", STEP_BLOCK, &limits, &ThreeMfLimits::default())
+                    .unwrap_err(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn step_rejects_multiple_solids_in_one_representation() {
+        let source = std::str::from_utf8(STEP_BLOCK)
+            .unwrap()
+            .replace("(#11,#15)", "(#11,#15,#99990)")
+            .replace(
+                "#15 = MANIFOLD_SOLID_BREP('',#16);",
+                "#15 = MANIFOLD_SOLID_BREP('',#16);\n#99990 = MANIFOLD_SOLID_BREP('',#16);",
+            );
+        assert_eq!(
+            source_to_stl(
+                "parts.step",
+                source.as_bytes(),
+                &ConversionLimits::default(),
+                &ThreeMfLimits::default()
+            )
+            .unwrap_err(),
+            PreviewError::UnsupportedFormat
+        );
+    }
+
+    #[test]
+    fn obj_external_materials_are_not_loaded() {
+        let mut source = b"mtllib /etc/shadow\nusemtl private\n".to_vec();
+        source.extend_from_slice(OBJ_SINGLE_CUBE);
+        let mesh = scene_from_obj(&source, &ConversionLimits::default(), Instant::now()).unwrap();
+        assert_eq!(mesh.indices.len() / 3, 12);
     }
 
     #[test]

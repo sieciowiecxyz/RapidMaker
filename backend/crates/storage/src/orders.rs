@@ -378,7 +378,7 @@ mod tests {
             "only mandatory confirmation and payment, neither optional mail"
         );
         // A failed queue write must roll back the matching business transition.
-        sqlx::query(&format!("ALTER TABLE email_outbox ADD CONSTRAINT reject_test_event CHECK(kind!='status_changed' OR payload->'notification'->>'reference' != '{id}')")).execute(&db.pool).await.unwrap();
+        sqlx::query("ALTER TABLE email_outbox ADD CONSTRAINT reject_test_event CHECK(kind!='status_changed') NOT VALID").execute(&db.pool).await.unwrap();
         db.auth_preferences(&user, true, true).await.unwrap();
         assert!(db.order_status(&id, "ready", 1006).await.is_err());
         assert_eq!(
