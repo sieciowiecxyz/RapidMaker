@@ -15,7 +15,7 @@ use std::{
     collections::HashMap,
     fs,
     io::{Read, Write},
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -85,18 +85,15 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
     })?;
     let workspace =
         Workspace(std::env::temp_dir().join(format!("rapidmaker-model-{}", uuid::Uuid::new_v4())));
-    fs::create_dir(&workspace.0).map_err(|_| {
-        error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Nie można przygotować analizy.",
-        )
-    })?;
-    fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700)).map_err(|_| {
-        error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Nie można przygotować analizy.",
-        )
-    })?;
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&workspace.0)
+        .map_err(|_| {
+            error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Nie można przygotować analizy.",
+            )
+        })?;
     let source = workspace.0.join(format!("model.{extension}"));
     fs::write(&source, input).map_err(|_| {
         error(

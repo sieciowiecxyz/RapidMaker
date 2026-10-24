@@ -49,3 +49,5 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 Nadawanie sandbox: transport `shipping/shipments.rs` i `operations.rs`, trzy tabele PostgreSQL, istniejący outbox i jeden worker aplikacji. Podjazd na decyzję admina i anulowanie: tabela operacji, UUID i GET po niepewnym PUT; bez live/akceptacji regulaminów; nadanie, PDF, tracking i anulowanie DPD sandbox sprawdzone; rezerwacja podjazdu zwraca `carrierConnectionError` i nie ma potwierdzonego sukcesu. Szczegóły i stan: [PLAN](PLAN.md#s0s4--nadawanie-przesyłek).
 
 Panel operatora Piotra: osobne wejście Vite `frontend/admin.html` i `src/admin/`, zaimportowane z `admin_panel_PG` (`b6629bf`) bez starej historii repo. Prototyp ma własne fikcyjne zamówienia/rozliczenia w localStorage; nie nadaje uprawnień, nie zmienia Stripe i nie jest jeszcze podłączony do API. Istniejące `/admin` pozostaje odrębnym widokiem workspace.
+
+Zależności geometrii używają `lib3mf` bez nieużywanych domyślnych operacji boolean i `truck-meshalgo` tylko z tessellacją (bez VTK/analyzers). Przegląd granic, aktualizacje i pozostałe ostrzeżenia: [security.md](security.md).

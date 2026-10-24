@@ -19,3 +19,9 @@ export function seed(): Order[] {
 export const total = (o: Order) => o.models.reduce((s,m)=>s+m.price*m.qty,0);
 export const pieces = (o: Order) => o.models.reduce((s,m)=>s+m.qty,0);
 export const money = (n:number) => new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(n);
+
+// Prefix dangerous cells inside quotes (OWASP CSV Injection); exported for spreadsheet viewing.
+export function csvCell(value: string): string {
+ const text = /^[\s\uFEFF]*[=+\-@＝＋－＠]|[\t\r\n]/u.test(value) ? "\t" + value : value;
+ return '"' + text.replaceAll('"', '""') + '"';
+}

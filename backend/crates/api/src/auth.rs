@@ -237,16 +237,22 @@ impl Auth {
         Ok(session)
     }
 }
-pub(crate) fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get(header::COOKIE)?
-        .to_str()
-        .ok()?
-        .split(';')
-        .find_map(|part| {
-            let (k, v) = part.trim().split_once('=')?;
-            (k == name && valid_token(v)).then_some(v)
-        })
+fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    let mut found = None;
+    for header in headers.get_all(header::COOKIE) {
+        for part in header.to_str().ok()?.split(';') {
+            let Some((key, value)) = part.trim().split_once('=') else {
+                continue;
+            };
+            if key == name {
+                if found.is_some() || !valid_token(value) {
+                    return None;
+                }
+                found = Some(value);
+            }
+        }
+    }
+    found
 }
 
 pub(crate) fn session_cookie(headers: &HeaderMap) -> Result<Option<&str>, Error> {
@@ -560,6 +566,23 @@ async fn save_preferences(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn login_attempt_cookies_reject_ambiguous_or_malformed_values() {
+        let token = "ab".repeat(32);
+        let mut headers = HeaderMap::new();
+        headers.insert(header::COOKIE, format!("attempt={token}").parse().unwrap());
+        assert_eq!(cookie(&headers, "attempt"), Some(token.as_str()));
+        headers.append(header::COOKIE, format!("attempt={token}").parse().unwrap());
+        assert!(cookie(&headers, "attempt").is_none());
+        for value in [
+            format!("attempt={token}; attempt={token}"),
+            format!("attempt=invalid; attempt={token}"),
+            format!("attempt={token}; attempt=invalid"),
+        ] {
+            headers.insert(header::COOKIE, value.parse().unwrap());
+            assert!(cookie(&headers, "attempt").is_none());
+        }
+    }
     #[test]
     fn session_cookies_are_opaque_mode_specific_and_unambiguous() {
         let token = "ab".repeat(32);

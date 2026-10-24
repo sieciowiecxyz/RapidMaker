@@ -17,6 +17,9 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 - [Workflow](workflow.md)
   - przeczytaj gdy: dzielisz pracę lub zamykasz etap.
   - opis: agenci, integracja i przekazanie.
+- [Bezpieczeństwo](security.md)
+  - przeczytaj gdy: zmieniasz granice uprawnień lub zależności.
+  - opis: poprawki, regresje i otwarte zgłoszenia.
 - [Walidacja](testing.md)
   - przeczytaj gdy: sprawdzasz zmianę.
   - opis: komendy i wymagane dowody działania.

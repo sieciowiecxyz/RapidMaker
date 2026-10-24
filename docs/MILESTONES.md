@@ -150,3 +150,10 @@ Weryfikacja: 33 testy jednostkowe API/shipping/notifications; osobny izolowany P
 - PASS: 17 testów API (w tym 3 nowe testy prywatności, anulowania i autoryzacji/limitów), fmt, Clippy API/app all-targets `-D warnings`, locked build. Rzeczywisty serwer: bez/z błędnym tokenem 401; z poprawnym 200; obcy Host/Origin/query 403; powtórzenie 429; publiczny port 404. Sprawdzony loopback socket, szablony tras i brak canary/tokena w metrykach. Dowód lokalny: `/tmp/rapidmaker-metrics-smoke.json`.
 - Nowa biblioteka `prometheus-client` 0.25.1 bez domyślnych features, dwie dodatkowe paczki kodera (`dtoa`, derive). Cargo audit nie zgłosił podatności tych trzech paczek. **Audyt całego istniejącego projektu FAIL**: zgłoszenia dla lz4_flex, quick-xml, rsa i zip, a także ostrzeżenia o innych starszych bibliotekach. Nie zmieniano tych zależności w tym etapie.
 - Dwa nowe moduły Rust: `api/metrics.rs` i `api/metrics_server.rs`; bez migracji. Tokei w trzech plikach Rust: produkcja 128→410 (+282), testy 0→169 (+169), bez pustych linii/komentarzy. Prometheus/Grafana nie były instalowane; przykład konfiguracji i granice w [metrics.md](metrics.md).
+
+## L6 — Bezpieczeństwo i martwy kod — poprawki wdrożone, 2026-10-24
+
+- Zależności: 8/9 zgłoszeń usunięte, 471→419 pakietów. Bez nowych bibliotek; wyłączono nieużywane funkcje VTK/boolean, zachowano STL/STEP/3MF. Pozostaje zgłoszenie RSA opcjonalnego SQLx/MySQL (niekompilowane w tej konfiguracji) oraz ostrzeżenia upstream; pełny cargo audit nadal FAIL.
+- Poprawione: niejednoznaczne cookie próby logowania, atomowe 0700 katalogu analizy, formuły w eksporcie CSV; usunięty nieużywany import. Backendowe kwoty/uprawnienia i sandboxy bez osłabiania kontroli.
+- PASS: 14 testów geometrii, 20 API/auth, regresja CSV, build Rust/frontend, fmt, Clippy zmienionych pakietów; npm audit 0. Localhost: OpenAPI/STL 200, niejednoznaczne cookie/admin bez sesji 401, 3MF traversal 422. Szczegóły i granice: [security.md](security.md).
+- Rust/tokei w dwóch zmienionych plikach: produkcja 1085→1088 (+3), testy 32→49 (+17), bez komentarzy/pustych linii. Brak nowych plików Rust i migracji; nowa regresja frontendu oraz dokument bezpieczeństwa.

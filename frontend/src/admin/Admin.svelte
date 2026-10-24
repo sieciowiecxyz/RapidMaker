@@ -1,8 +1,8 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
- import { IconLayoutList, IconCube, IconMessage, IconArrowUpRight, IconSearch, IconX, IconChevronRight, IconArrowRight, IconCheck, IconClock, IconPackage, IconArrowLeft, IconSun, IconMoon, IconAlertCircle, IconDownload, IconCreditCard, IconFileInvoice } from '@tabler/icons-svelte';
+ import { IconLayoutList, IconCube, IconMessage, IconArrowUpRight, IconSearch, IconX, IconChevronRight, IconArrowRight, IconCheck, IconClock, IconPackage, IconSun, IconMoon, IconAlertCircle, IconDownload, IconCreditCard, IconFileInvoice } from '@tabler/icons-svelte';
  import Finance, { type InvoiceDraft } from './Finance.svelte';
- import { seed, stages, total, pieces, money, type Order, type Stage } from './data';
+ import { seed, stages, total, pieces, money, csvCell, type Order, type Stage } from './data';
  let attachments = $state<Record<string, File>>({});
  let fileError = $state('');
  function attach(key:string, event:Event){const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];if(!file)return;if(!/\.(stl|step|stp|3mf)$/i.test(file.name)){fileError='Wybierz plik STL, STEP lub 3MF.';return;}if(file.size>25*1024*1024){fileError='Maksymalny rozmiar pliku to 25 MB.';return;}attachments[key]=file;fileError='';input.value='';}
@@ -36,7 +36,7 @@
  function updateStatus(o:Order,status:Stage){o.status=status;o.history.unshift(`Status zmieniony na „${status}”.`);o.attention='';save();feedback='Status zapisany w próbce.';}
  function advance(o:Order){const i=stages.indexOf(o.status);if(i<stages.length-1)updateStatus(o,stages[i+1]);}
  function addNote(){if(!selected||!note.trim())return;selected.notes.unshift(note.trim());selected.history.unshift('Dodano notatkę wewnętrzną.');note='';save();feedback='Notatka zapisana.';}
- function exportCsv(){const lines=[['Zamówienie','Klient','Status','Płatność','Termin','Wartość'],...visible.map(o=>[o.id,o.client,o.status,o.paid?'Opłacone':'Nieopłacone',o.due,String(total(o))])];const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(r=>r.map(v=>'"'+v.replaceAll('"','""')+'"').join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rapidmaker-zamowienia-demo.csv';a.click();URL.revokeObjectURL(url);}
+ function exportCsv(){const lines=[['Zamówienie','Klient','Status','Płatność','Termin','Wartość'],...visible.map(o=>[o.id,o.client,o.status,o.paid?'Opłacone':'Nieopłacone',o.due,String(total(o))])];const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(r=>r.map(csvCell).join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rapidmaker-zamowienia-demo.csv';a.click();URL.revokeObjectURL(url);}
  function theme(){light=!light;document.documentElement.dataset.theme=light?'light':'dark';}
  function keyboard(e:KeyboardEvent){if(e.key==='Escape'&&selected)close();}
 </script>

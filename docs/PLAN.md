@@ -167,3 +167,7 @@ Checkout i przygotowanie nadania stosują te same limity kartonów w zleceniu or
 ## L5 — Prywatne metryki HTTP dla Prometheusa/Grafany
 
 Osobny loopback:18435, dedykowany token z SOPS, brak publicznej trasy/CORS, limit eksportu. Biblioteka `prometheus-client` koduje OpenMetrics; etykiety tylko z szablonów tras i zamkniętych list metod/klas statusu. Liczniki odpowiedzi, histogram czasu przygotowania, in-flight i uptime; anulowanie żądania zwalnia in-flight. Bez zapytań do DB, danych klienta, nowych kolejek i zmian płatności. Prometheus zapisuje historię; jego instalacja, Grafana, metryki workerów/DB/hosta i health/readiness poza etapem. [Kontrakt i konfiguracja](metrics.md).
+
+## L6 — Ograniczony przegląd bezpieczeństwa i dead code
+
+Aktualizacja parserów i wyłączenie nieużywanych features usuwa 8 zgłoszeń oraz 52 pakiety. Ścisłe cookie próby logowania, prywatny katalog tworzony atomowo z 0700 i zabezpieczony eksport CSV. Zakres testów i pozostałe RSA/cgmath: [security.md](security.md). Nie traktować jako pełnego pentestu ani czystego wyniku całego audytu zależności.
