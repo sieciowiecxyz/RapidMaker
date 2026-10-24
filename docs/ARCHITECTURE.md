@@ -45,4 +45,4 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 
 [Auth](auth.md): email klienta, passkey admina, trwałe sesje, tryb HTTPS i własność zasobów przez konto są zaimplementowane. UI i publiczny reverse proxy TLS pozostają do konfiguracji.
 
-Nadawanie sandbox: transport `shipping/shipments.rs`, dwie tabele PostgreSQL, istniejący outbox i jeden worker aplikacji. Bez automatycznego podjazdu/live/akceptacji regulaminów; pełna integracja zablokowana wymaganym DPD. Szczegóły i stan: [PLAN](PLAN.md#s0s4--nadawanie-przesyłek).
+Nadawanie sandbox: transport `shipping/shipments.rs`, dwie tabele PostgreSQL, istniejący outbox i jeden worker aplikacji. Bez automatycznego podjazdu/live/akceptacji regulaminów; pełny przepływ DPD sandbox sprawdzony po akceptacji regulaminu i telefonu przez właściciela. Szczegóły i stan: [PLAN](PLAN.md#s0s4--nadawanie-przesyłek).

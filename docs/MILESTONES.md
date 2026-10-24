@@ -1,6 +1,6 @@
 # Milestones — backend
 
-**S0–S4:** backend wdrożony; pełny przebieg sandbox BLOCKED regulaminem DPD. Szczegóły i granice poniżej.
+**S0–S4:** PASS lokalnie i w pełnym przepływie sandbox DPD. Szczegóły i granice poniżej.
 
 C1–C6: PASS lokalnie (Stripe test, Furgonetka sandbox). Tylko Rust/PostgreSQL/API; bez strony. Decyzje i kontrakt: [PLAN.md](PLAN.md). B1–B8 pozostają ukończonym lokalnym POC; dowody w [checkpoincie](milestones/backend.md).
 
@@ -104,14 +104,14 @@ Dowody: 19 testów jednostkowych PASS; osobny test PostgreSQL (205 wpisów, wła
 
 ## S0–S4 — Nadawanie przesyłek
 
-[Kontrakt i uruchomienie](PLAN.md#s0s4--nadawanie-przesyłek). Bez frontendu/live. Status nie oznacza potwierdzonego rzeczywistego nadania.
+[Kontrakt i uruchomienie](PLAN.md#s0s4--nadawanie-przesyłek). PASS sandbox, 2026-10-24. Bez frontendu/live i rzeczywistego transportu.
 
 | Etap | Stan i dowód |
 | --- | --- |
-| S0 | Częściowy PASS: konto/usługi, walidacja204, rzeczywista cena i POST dodania200. Zamówienie409 `terms_and_conditions_not_valid`; nie zaakceptowano zgód automatycznie. Komenda nie powstała. |
+| S0 | PASS: rzeczywiste konto/usługi, walidacja, cena, dodanie i zamówienie. Właściciel zaakceptował DPD i zweryfikował telefon; wcześniejsze blokery 409 regulamin i 400 /phone usunięte. |
 | S1 | PASS lokalnie: snapshot, rzeczywiste paczki, cena kupionej usługi, admin/passkey-session/CSRF, wersje; ponowienie i refund gating w PG. |
-| S2 | Kod + lokalne PG PASS: trwały booking, lease/retry, odzyskiwanie, reopen bez nowych paczek, częściowy sukces. Realne zamówienie/PDF BLOCKED regulaminem; nie raportujemy PASS. |
-| S3 | Lokalna logika/parser/PG PASS: wiele numerów, częściowy sukces, dedup email, preferencje i completed/retencja, bez cofania doręczenia. Rzeczywisty tracking i wysyłka nowego szablonu po nadaniu NOT RUN. |
-| S4 | BLOCKED: API sandbox sprawdzone do zlecenia nadania (dwa kartony testowe, fixture opłaconego ready i sesji admina); dalsza etykieta → tracking → email czeka na zapis DPD. Fizycznego passkey ani nowej płatności Stripe nie powtarzano. |
+| S2 | PASS: trwały booking, lease/retry, odzyskiwanie/reopen bez nowych paczek. Ten sam batch po usunięciu blokad: jedno zamówienie DPD, dwa kartony/dwa numery, prywatny PDF; restart i powtórzenie bez duplikatu. Częściowy sukces sprawdzony osobno w PG. |
+| S3 | PASS: etykieta pozostawiła ready; potwierdzenie przekazania → shipped, dokładnie jeden outbox/SMTP do void@sieciowiec.xyz. Symulacja doręczenia obu numerów w API Furgonetki → completed, bez dodatkowego maila. Preferencje/terminalne stany/retencja także w PG. Odbioru wiadomości w IMAP w tym teście nie sprawdzano. |
+| S4 | PASS: sandbox przez nasze API → nadanie → PDF → przekazanie → SMTP → symulowany tracking/doręczenie; prywatny odczyt gościa, brak dostępu klienta do admina, CSRF i ponowienia. Płatność ready i sesja admina z fixtures; bez ponownego testu Stripe/fizycznego passkey. |
 
-Weryfikacja: 33 testy jednostkowe API/shipping/notifications; osobny izolowany PG dostawy oraz regresja zwrotów. Jedna starsza integracja cen sandbox pominięta w jednostkowym zestawie, bez zmiany oczekiwań. Fmt, zakresowe Clippy `-D warnings` i locked build PASS. Pomiar tokei, 15 zmienionych/nowych źródeł Rust: produkcja 3615 → 5911 (+2296), testy 1161 → 1556 (+395), bez pustych linii/komentarzy; osobny tests.rs i moduły inline policzone jako testy. Cztery nowe moduły Rust i migracja 0016; bez nowych crate’ów. Bez nowych zależności. Testowe szkice z sandboxa nie oznaczają kupionych etykiet; żadnych live/nadań z podjazdem.
+Weryfikacja: 33 testy jednostkowe API/shipping/notifications; osobny izolowany PG dostawy oraz regresja zwrotów. Jedna starsza integracja cen sandbox pominięta w jednostkowym zestawie, bez zmiany oczekiwań. Fmt, zakresowe Clippy `-D warnings` i locked build PASS. Pomiar tokei, 15 zmienionych/nowych źródeł Rust: produkcja 3615 → 5911 (+2296), testy 1161 → 1556 (+395), bez pustych linii/komentarzy; osobny tests.rs i moduły inline policzone jako testy. Cztery nowe moduły Rust i migracja 0016; bez nowych crate’ów. Bez nowych zależności. Potwierdzono etykiety sandbox; bez live i zamawiania podjazdu. W tej aktualizacji zmieniono wyłącznie dowody/docs: Rust LOC delta 0.

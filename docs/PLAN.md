@@ -1,6 +1,6 @@
 # Backend Rust — checkout, dostawa i rozmowy
 
-**S0–S4 — nadawanie przesyłek:** backend wdrożony, sprawdzony lokalnie i częściowo w sandboxie. Pełne nadanie/etykieta/tracking nadal zablokowane wymaganym regulaminem DPD. [Dowody i granice](MILESTONES.md#s0s4--nadawanie-przesyłek).
+**S0–S4 — nadawanie przesyłek:** backend wdrożony i sprawdzony lokalnie oraz w pełnym przepływie sandbox (nadanie, PDF, tracking, SMTP). [Dowody i granice](MILESTONES.md#s0s4--nadawanie-przesyłek).
 
 R1 — zwroty płatności: wdrożone i sprawdzone lokalnie w Stripe test (400 + 600 = 1000 gr, ponowienie i restart bez duplikatu). Pełny lub częściowy zwrot przez API admina, bez frontendu. Rejestr PostgreSQL rezerwuje kwotę przed Stripe; wspólny worker płatności ponawia ten sam klucz i uzgadnia status. Wymagane: admin/passkey/CSRF, potwierdzona płatność, brak nadmiarowego lub podwójnego zwrotu. Zwrot nie zmienia statusu produkcji. Kontrakt i granice: [checkout](checkout.md#zwroty-płatności).
 
@@ -91,7 +91,7 @@ Projekt, granice zaufania i blokery: [chat-email.md](chat-email.md). SMTP/IMAP i
 
 ## S0–S4 — Nadawanie przesyłek
 
-Status: API i worker zaimplementowane, bez frontendu i live. Rzeczywisty sandbox: wycena/walidacja/dodanie paczki PASS; zamawianie zatrzymane na `provider_terms` (409 `terms_and_conditions_not_valid`). Regulaminów nie zaakceptowano automatycznie. Etykieta, symulowany tracking i email po nadaniu czekają na odblokowanie konta; nie są potwierdzonym pełnym przebiegiem.
+Status: PASS lokalnie i w sandboxie, bez frontendu/live. DPD: zamówienie jednej przesyłki z dwoma kartonami i dwoma numerami, prywatny PDF, restart/ponowienie bez duplikatu, przekazanie, jedna wysyłka SMTP do void@sieciowiec.xyz i symulowane doręczenie wszystkich kartonów → completed. Zamówienie opłacone i sesja admina pochodziły z izolowanych fixtures; fizycznego passkey ani nowej płatności Stripe nie powtarzano.
 
 ### Flow
 
@@ -137,4 +137,4 @@ Przekazanie potwierdza admin lub skan przewoźnika. Przy wielu kartonach jednego
 
 [Oficjalna specyfikacja REST](https://furgonetka.pl/js/swagger/api-rest-documentation.4cc02d4621.yaml): POST /packages dodaje, PUT/GET /order-commands/{uuid} zamawia/odczytuje wynik; GET etykiety i trackingu, PUT sandboxowej symulacji. Żaden kod nie akceptuje regulaminów ani nie ustawia zgód marketingowych.
 
-Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu, odnowienie tokena i zamawianie podjazdu pozostają poza wdrożeniem. Sandbox obecnie wymaga krajowego regulaminu DPD: zaznacz właściwą zgodę i Zapisz w [panelu testowym](https://sandbox.furgonetka.pl/konto/regulaminy); API dla przygotowanej paczki zwraca servicesRegulation=[dpd]. Pozostałe regulaminy/marketing nie były wymagane przez tę próbę. Dalsze wymagania konta mogą ujawnić się po odblokowaniu.
+Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu, odnowienie tokena i zamawianie podjazdu pozostają poza wdrożeniem. Właściciel zaakceptował krajowy regulamin DPD i zweryfikował telefon konta w panelu; wcześniejsze 409 terms_and_conditions_not_valid oraz 400 /phone zostały usunięte. Odczyt API potwierdził pustą listę wymaganych regulaminów. Marketingu ani innych przewoźników nie włączano. Nowa/zmieniona konfiguracja konta może wymagać ponownej interwencji właściciela.
