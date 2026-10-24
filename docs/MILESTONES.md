@@ -1,6 +1,8 @@
-# Milestones — stabilny checkout backend
+# Milestones — backend
 
 C1–C6: PASS lokalnie (Stripe test, Furgonetka sandbox). Tylko Rust/PostgreSQL/API; bez strony. Decyzje i kontrakt: [PLAN.md](PLAN.md). B1–B8 pozostają ukończonym lokalnym POC; dowody w [checkpoincie](milestones/backend.md).
+
+Aktywny plan: CH0–CH4 poniżej, jeszcze niewdrożone.
 
 ## C1 — Adres i kontrakt — PASS lokalnie
 
@@ -74,3 +76,15 @@ Dowody i granice: [checkpoint](milestones/backend.md#checkout-c1c6--2026-10-24).
 - PASS: osobna baza PostgreSQL i rzeczywisty sandbox: upload/GLB/slicer → 8 równoczesnych wycen → ten sam zapis/wersja/termin; stare i aktualne wersje retry; starszy endpoint; zmiana magazynu odrzucona. Po restarcie bez Furgonetki ważna oferta działa, obcy właściciel nie ma dostępu. Wygasła oferta i zmieniony adres nie korzystają ze starej ceny.
 - PASS: fmt, zakresowe Clippy/build. Bez migracji, nowych plików i zależności. Cache procesu nie łączy zapytań między oddzielnymi instancjami backendu; snapshoty PostgreSQL pozostają trwałe.
 - LOC (tokei, 3 zmienione pliki Rust): produkcja 1749 → 1926 (+177), testy 204 → 427 (+223), bez pustych linii i komentarzy.
+
+## CH0–CH4 — Rozmowy przez email — TODO
+
+Szczegóły i kryteria: [plan rozmów](chat-email.md#kolejność-i-kryteria).
+
+- CH0 TODO: sprawdź IMAP iCloud oraz prawdziwe „Odpowiedz” z zachowaniem referencji. Brak konfiguracji oznacza NOT RUN.
+- CH1 TODO: wspólne uprawnienia/zapis, paginacja i kursor przeczytania; bez limitu 200 wpisów na całą rozmowę.
+- CH2 TODO: kopia nowej treści, link właściwego panelu, referencja odbiorcy, grupowanie i trwały outbox.
+- CH3 TODO: worker IMAP, bezpieczne przypisanie autora/rozmowy, MIME, limity, deduplikacja i restart.
+- CH4 TODO: dwukierunkowy test API → email → odpowiedź → historia, izolacja uczestników i preferencje. Bez pisania strony ani wysyłania do produkcyjnych klientów.
+
+Samo dodanie planu nie zmienia statusów na PASS. Przed implementacją CH0 wyjaśnij dostęp IMAP i tożsamości pocztowe do testu dwóch stron.

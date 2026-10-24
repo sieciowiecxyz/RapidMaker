@@ -6,6 +6,8 @@ Dowód E2–E4: rzeczywisty kod z iCloud odczytany przez IMAP został zużyty pr
 
 Dowód E1: lokalna komenda Rust wysłała jedną wiadomość do `void@sieciowiec.xyz`; SMTP zaakceptowało ją, IMAP potwierdził odbiorcę/nadawcę, temat i tekst wiadomości. Build, fmt, Clippy oraz 4 testy notifications i 11 API PASS. Rust produkcyjny +249 LoC, testy +101 (tokei, nowe pliki oraz zmienione lib.rs API/main.rs app, bez pustych linii i komentarzy). Jedna nowa bezpośrednia zależność `lettre`; aktualizacja istniejących rustls-webpki/webpki-roots usuwa 2 zgłoszenia TLS. Audyt całego lockfile nadal zgłasza 9 wcześniejszych podatności w lz4_flex, quick-xml, rsa i zip — nie jest czysty.
 
+Dalszy rozwój: [jedna rozmowa przez stronę i email](chat-email.md), CH0–CH4 TODO. Poniższy stan E1–E4 dotyczy istniejącej wysyłki/powiadomień; nie oznacza odbioru odpowiedzi.
+
 ## Cel i stan
 
 `notifications` wysyła przez iCloud SMTP. `auth` dostarcza crypto, `storage` zapisuje sesje, zamówienia, wiadomości i outbox; `api` orkiestruje HTTP i jeden worker. `app` zatrzymuje HTTP/workera po SIGINT/SIGTERM. Bez brokera i dodatkowej usługi. Lokalna komenda `--mail-test` nadal działa bez DB/HTTP.

@@ -1,6 +1,6 @@
 # Dokumentacja Rapidmaker
 
-Aktualny zakres: trwały checkout, adres i dostawa — wyłącznie backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
+Aktualny plan: rozmowy przez stronę i email (CH0–CH4, jeszcze niewdrożone). Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
 - [Plan checkoutu](PLAN.md)
   - przeczytaj gdy: projektujesz adres, dostawę i płatność.
@@ -8,6 +8,9 @@ Aktualny zakres: trwały checkout, adres i dostawa — wyłącznie backend. ARCH
 - [Milestones checkoutu](MILESTONES.md)
   - przeczytaj gdy: wdrażasz kolejny etap backendu.
   - opis: C1–C6 i krótkie kryteria ukończenia.
+- [Rozmowy i email — plan](chat-email.md)
+  - przeczytaj gdy: rozwijasz chat i odpowiadanie z poczty.
+  - opis: jedna historia, SMTP/IMAP i etapy CH0–CH4.
 - [Kontekst](context.md)
   - przeczytaj gdy: zapisujesz decyzję lub wznawiasz pracę.
   - opis: źródła prawdy i krótki zapis dowodów.
