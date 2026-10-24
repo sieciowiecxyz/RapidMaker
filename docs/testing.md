@@ -22,7 +22,7 @@ Nie kasuj działających testów bez powodu. Zmieniony kontrakt wymaga dopasowan
 
 Frontend: `frontend/`, port 18430; preview E2E: 18431. Vite przekazuje `/api` do `backend/` na localhost:18432. API uruchom przed testami integracji. Szczegóły konfiguracji: [README frontendu](../frontend/README.md).
 
-Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Konfigurator/checkout używają slicera i PostgreSQL; integracja wymaga osobnej bazy i jawnych stawek testowych, nie potwierdza rentowności. Materiały/cennik i sesja operatora są rzeczywiste; konta klientów, zamówienia/chat i prośby o ręczną wycenę pozostają prototypami. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
+Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Konfigurator/checkout używają slicera i PostgreSQL; integracja wymaga osobnej bazy i jawnych stawek testowych, nie potwierdza rentowności. Materiały/cennik i sesja operatora są rzeczywiste; konta klientów, zamówienia/chat i powiadomienia korzystają z API. Ręczna zmiana ceny i faktury nie są podłączone. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
 
 W `PLAN.md` zapisz krótko, co sprawdzono i czego nie. Nie wklejaj sekretów, modeli klientów ani dużych logów. Testy bezpieczeństwa kieruj tylko do własnego localhosta; dostawców sprawdzaj zwykłymi wywołaniami sandbox API. Publiczny deployment pozostaje poza zakresem.
 
@@ -33,3 +33,7 @@ Wybrana regresja formularza RGBA: z katalogu `frontend`: `PLAYWRIGHT_CHROMIUM_EX
 Starsze `flows.spec.ts` obejmuje mockowe logowanie admina i nie odpowiada już serwerowej sesji ani nowemu panelowi. Wymaga migracji wraz z resztą B5; nie raportuj całego zestawu E2E jako PASS na podstawie jednej regresji.
 
 Auth: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-auth -p rapidmaker-api -p rapidmaker-storage`. Ignorowane testy PG wymagają osobnej bazy: `AUTH_TEST_DATABASE_URL` oraz `TEST_DATABASE_URL` (prefiks rapidmaker_test); uruchamiaj sekwencyjnie. Dotychczasowe E2E operatora używające tokena wymagają migracji do wspólnej sesji/passkey.
+
+## Integracja istniejących paneli
+
+`live-panels.spec.ts` oraz `operator.spec.ts`: kontrakt HTTP interfejsu (kod email/claim, MFA przed odczytem, zamówienia/pliki/chat, preferencje, RGBA i CSRF, ponowienie zwrotu bez nowego request_id). Odpowiedzi API są podstawiane; nie jest to ponowny test rzeczywistego SMTP, passkey/Stripe/Furgonetki ani autoryzacji PostgreSQL. Starszy `flows.spec.ts` nadal wymaga migracji. Używaj `http://localhost:18430` dla rzeczywistego auth; port testów 18431 nie jest skonfigurowanym origin backendu.

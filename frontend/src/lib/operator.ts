@@ -1,22 +1,7 @@
+import { apiRequest } from './http';
 /** Operator requests use the server's HttpOnly session, never a browser-stored token. */
 export async function operator<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/admin/${path}`, {
-    method: body === undefined ? 'GET' : 'PUT',
-    credentials: 'same-origin',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    if (response.status === 401) window.dispatchEvent(new Event('rapidmaker:session-expired'));
-    const message = typeof data?.message === 'string' ? data.message : '';
-    throw new Error(
-      response.status === 401
-        ? 'Sesja operatora wygasła. Zaloguj się ponownie.'
-        : message.slice(0, 400) || 'Nie udało się zapisać lub pobrać danych. Spróbuj ponownie.',
-    );
-  }
-  return data as T;
+  return apiRequest<T>(`/api/admin/${path}`, body === undefined ? 'GET' : 'PUT', body);
 }
 
 /** Decimal PLN/percent to integer grosze/basis points without float rounding. */

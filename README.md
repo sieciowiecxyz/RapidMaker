@@ -9,15 +9,15 @@ Strona do zamawiania wydruków 3D FDM: dodaj części STL, STEP/STP lub 3MF, sko
 | **Piotr — frontend** | Wygląd, responsywność, konfigurator wielu części, checkout, panel klienta, panel admina, podgląd 3D i obsługa stanów ładowania/błędów. Podłączenie API oraz wizualne sprawdzanie przepływu zakupu w sandboxach. |
 | **Kuba — backend i infrastruktura** | API, baza danych, konta i uprawnienia, pliki i geometria, slicer i wycena, algorytm pakowania, integracje Stripe/Furgonetki, chat i email, powiadomienia, bezpieczeństwo, logi, monitoring, backupy i wdrożenie. |
 
-Wspólnie ustalamy formaty danych API i zachowanie ekranów. Wspólny adapter `frontend/src/lib/api.ts` obsługuje checkout i mocki; `frontend/src/storefront/lib/api.ts` łączy z nim nowy konfigurator Piotra. Brakujące funkcje można rozwijać na mockach. Ceny, płatności, uprawnienia operatora i pakowanie rozstrzyga backend.
+Wspólnie ustalamy formaty danych API i zachowanie ekranów. Wspólny adapter `frontend/src/lib/api.ts` obsługuje checkout, sesję i zamówienia; `frontend/src/storefront/lib/api.ts` łączy z nim nowy konfigurator Piotra. Lokalny szkic koszyka jest oddzielony od trwałych danych serwera. Ceny, płatności, uprawnienia operatora i pakowanie rozstrzyga backend.
 
 Checkout: **konfiguracja druku → dane i dostawa → podsumowanie → płatność**. Dane odbiorcy wpisujemy raz. Klient widzi zamówienia i rozmowę w swoim panelu; admin zarządza realizacją i odpowiada klientowi. Liczbę paczek i ich parametry wylicza system z części, ilości, zabezpieczeń i limitów przewoźnika. Sama objętość nie gwarantuje poprawnego pakowania.
 
 ## Aktualny stan
 
-To POC. Działają frontend, API analizy modeli, szacowanie paczek oraz testowe integracje Stripe i Furgonetki. Konta klientów, chat i panele zamówień używają mocków i `localStorage`. Katalog, konfigurator, cennik i panel operatora korzystają z API/PostgreSQL.
+To POC. Działają frontend, API analizy modeli, szacowanie paczek oraz testowe integracje Stripe i Furgonetki. Logowanie kodem email, passkey admina, zamówienia, chronione pliki, rozmowy i preferencje powiadomień korzystają z API/PostgreSQL. `/admin.html` pokazuje trwałe zamówienia i pozwala zmieniać dozwolone statusy oraz odpowiadać klientom; nie zapisuje danych klientów w localStorage. Katalog, konfigurator, cennik i panel operatora korzystają z API/PostgreSQL.
 
-Konfigurator i checkout liczą cenę z rzeczywistego slicera; przygotowanie naliczane jest raz. Szkice, oferty dostawy, próby Stripe, zamówienia i powiadomienia są w PostgreSQL; webhooki i worker uzgadniają płatności po restarcie. Adres, punkty i pakowanie obsługuje API. Stary `ADMIN_API_TOKEN` nie daje uprawnień: backend używa email + passkey i CSRF; frontend paneli wymaga podłączenia. To localhost i sandboxy, bez Stripe live/nadawania przesyłek. Kontrakt i odzyskiwanie: [checkout](docs/checkout.md), konfiguracja: [backend](backend/README.md). STL ma podgląd WebGL w workerze przeglądarki; backend STL/STEP/3MF generuje prywatny GLB. Wspólny viewer GLB/Three.js pozostaje do podłączenia.
+Konfigurator i checkout liczą cenę z rzeczywistego slicera; przygotowanie naliczane jest raz. Szkice, oferty dostawy, próby Stripe, zamówienia i powiadomienia są w PostgreSQL; webhooki i worker uzgadniają płatności po restarcie. Adres, punkty i pakowanie obsługuje API. Stary `ADMIN_API_TOKEN` nie daje uprawnień: backend używa email + passkey i CSRF; frontend używa sesji HttpOnly i CSRF w pamięci. To localhost i sandboxy, bez Stripe live. Nadawanie ma backend, ale jeszcze nie pełny formularz operatora. Kontrakt i odzyskiwanie: [checkout](docs/checkout.md), konfiguracja: [backend](backend/README.md). STL ma podgląd WebGL w workerze przeglądarki; backend STL/STEP/3MF generuje prywatny GLB. Wspólny viewer GLB/Three.js pozostaje do podłączenia.
 
 Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), logowanie oraz panele klienta i admina zachowują dotychczasową logikę w motywie Piotra. Opcje techniczne druku są pod `/wycena/zaawansowana`; powrót do konfiguratora zachowuje ustawienia koszyka.
 
@@ -25,7 +25,7 @@ Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), l
 
 | Miejsce | Technologia i zastosowanie |
 | --- | --- |
-| `frontend/` | Svelte 5, TypeScript, Vite, Tailwind CSS 4, GSAP i WebGL; motyw Piotra, adaptery API i mocki. |
+| `frontend/` | Svelte 5, TypeScript, Vite, Tailwind CSS 4, GSAP i WebGL; motyw Piotra, adaptery API i lokalny szkic koszyka. |
 | `backend/crates/` | Rust/Axum: `app` startuje serwer, `api` zbiera trasy, `storage` obsługuje PostgreSQL, `slicer` mierzy druk, `pricing` liczy cenę, `packing` paczki. |
 | `backend/crates/geometry/` | Biblioteka Rust do analizy geometrii; worker izolowany przez bubblewrap i prlimit. |
 | `backend/crates/geometry/tests/fixtures/` | Referencyjne modele do sprawdzania parsera. |
@@ -35,7 +35,7 @@ Nowy landing i konfigurator są pod `/` i `/wycena`. Checkout (`/zamowienie`), l
 
 Mapa aktywnych i przyszłych crate’ów: [backend/README.md](backend/README.md).
 
-Docelowa baza: PostgreSQL + SQLx. Płatności: Stripe test; dostawa: Furgonetka sandbox. Email docelowo przez iCloud SMTP/IMAP z hasłem aplikacji. Obecnie pracujemy na localhost.
+Docelowa baza: PostgreSQL + SQLx. Płatności: Stripe test; dostawa: Furgonetka sandbox. Email przez iCloud SMTP/IMAP z hasłem aplikacji. Obecnie pracujemy na localhost.
 
 ## Pierwsze uruchomienie
 
@@ -95,3 +95,9 @@ cargo build --locked --manifest-path backend/Cargo.toml
 Przy zmianie UI obejrzyj zmieniony ekran na komputerze i telefonie. Wybrane testy E2E są w Playwright, testy backendu uruchomisz przez `cargo test --locked --manifest-path backend/Cargo.toml --workspace`. Zakres dobieraj do zmiany; pełny E2E nie jest wymagany przy każdej iteracji POC.
 
 Dokumentacja: [indeks](docs/INDEX.md), [plan i wizja](docs/PLAN.md), [milestones](docs/MILESTONES.md), [architektura](docs/ARCHITECTURE.md), [frontend](frontend/README.md), [walidacja](docs/testing.md). Zasady dla agentów: [AGENTS.md](AGENTS.md).
+
+## Panele
+
+Otwieraj `http://localhost:18430` (zgodnie z `AUTH_ORIGIN`, potrzebne do passkey). Logowanie: `/logowanie`, klient: `/konto/zamowienia`, admin: `/admin.html`, katalog: `/admin/materialy`, cennik: `/admin/ustawienia`. Konto admina i pierwszy klucz przygotuj zgodnie z [auth](docs/auth.md); email sam nie daje uprawnień. Po logowaniu własne zasoby gościa są przypisywane atomowo do konta.
+
+Pełny zwrot pozostałej kwoty jest dostępny w szczegółach `/admin/zamowienia/{id}`; ponowienie zachowuje identyfikator operacji. Faktury, ręczna zmiana ceny/terminu, notatki wewnętrzne i książka adresowa nie są podłączone; interfejs nie udaje ich zapisu. Pierwsza rejestracja passkey pozostaje procedurą operatora, bez nowego formularza.

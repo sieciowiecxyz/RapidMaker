@@ -1,4 +1,4 @@
-// Wspólny adapter: operator ma sesję serwerową; konta klientów nadal są prototypem.
+// Local drafts stay in the cart; accounts and orders use the server.
 export {
   getPrintOptions,
   getDemoModel,
@@ -8,8 +8,20 @@ export {
   removeModel,
   setDelivery,
   getDeliveryOptions,
-  checkout,
   retryPayment,
+  updateMaterial,
+  getSystemSettings,
+  updateSystemSettings,
+  retryJob,
+  getDemoScenario,
+  setDemoScenario,
+  resetDemo,
+} from './mock';
+
+import * as mock from './mock';
+import { apiFetch } from './http';
+export { getSession, requestLogin, confirmLogin, logout, claimGuest } from './session';
+export {
   getOrders,
   getOrder,
   reorder,
@@ -22,20 +34,9 @@ export {
   sendOffer,
   refundOrder,
   createShippingLabel,
-  updateMaterial,
-  getSystemSettings,
-  updateSystemSettings,
-  retryJob,
-  getDemoScenario,
-  setDemoScenario,
-  resetDemo,
-} from './mock';
-
-import * as mock from './mock';
-import { operatorSession, logoutOperator } from './session';
-export { loginOperator } from './session';
+} from './orders';
+import { getOrder } from './orders';
 import type {
-  Session,
   CheckoutQuote,
   Contact,
   Quote,
@@ -46,38 +47,8 @@ import type {
   PrintModel,
   DeliveryMethod,
 } from './types';
-export async function getSession(): Promise<Session | null> {
-  const operator = await operatorSession();
-  if (operator) return operator;
-  const client = await mock.getSession();
-  return client?.role === 'client' ? client : null;
-}
-export async function getDemoAccounts() {
-  return (await mock.getDemoAccounts()).filter((account) => account.role === 'client');
-}
-export async function requestLogin(email: string, register = false) {
-  const account = (await mock.getDemoAccounts()).find(
-    (item) => item.email === email.trim().toLowerCase(),
-  );
-  if (account?.role === 'admin')
-    throw new Error('Administrator loguje się kluczem dostępu poniżej.');
-  return mock.requestLogin(email, register);
-}
-export async function confirmLogin(challengeId: string, expired = false) {
-  const session = await mock.confirmLogin(challengeId, expired);
-  if (session.role === 'admin') {
-    await mock.logout();
-    throw new Error('Administrator wymaga logowania przez serwer.');
-  }
-  return session;
-}
-export async function logout() {
-  await logoutOperator();
-  await mock.logout();
-}
-
 async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
+  const response = await apiFetch(path, {
     signal,
     method: body === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -364,28 +335,22 @@ export async function startOrderCheckout(quote: Quote, contact: Contact, offerId
   return { ...result, order };
 }
 export async function refreshOrderPayment(orderId: string): Promise<Order> {
-  const order = await mock.getOrder(orderId);
-  if (!order.sandboxPayment) throw new Error('To zamówienie nie ma płatności Stripe.');
-  await verifyCheckout(order.sandboxPayment.sessionId);
-  return mock.getOrder(orderId);
+  await request(`/api/account/orders/${encodeURIComponent(orderId)}/payment-status`, {});
+  return getOrder(orderId);
 }
 export async function openOrderPayment(orderId: string): Promise<{ url: string }> {
-  const order = await mock.getOrder(orderId);
-  if (!order.sandboxPayment || order.status === 'cancelled')
-    throw new Error('To zamówienie nie wymaga płatności.');
-  const status = await verifyCheckout(order.sandboxPayment.sessionId);
-  if (status.status === 'paid')
-    throw new Error('Zamówienie jest już opłacone. Odśwież jego status.');
-  if (status.checkout_status !== 'open') throw new Error('Sesja wygasła. Utwórz nową wycenę.');
-  if (order.sandboxPayment.sessionId.startsWith('pi_')) {
-    return {
-      url: '/zamowienie?payment_intent=' + encodeURIComponent(order.sandboxPayment.sessionId),
-    };
-  }
-  const url = new URL(status.url);
-  if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com')
-    throw new Error('Nieprawidłowy adres płatności.');
-  return { url: url.href };
+  const order = await getOrder(orderId);
+  if (['paid', 'refunded'].includes(order.payment))
+    throw new Error('Zamówienie jest już opłacone.');
+  const reference = order.paymentReference;
+  if (!reference || !/^(pi_|cs_)[a-zA-Z0-9_]+$/.test(reference))
+    throw new Error('Brak aktywnej płatności. Skontaktuj się z obsługą.');
+  return {
+    url:
+      '/zamowienie?' +
+      (reference.startsWith('pi_') ? 'payment_intent=' : 'stripe_session=') +
+      encodeURIComponent(reference),
+  };
 }
 
 export function getPickupPoints(search: string) {
@@ -424,7 +389,7 @@ export async function startOrderIntent(quote: Quote, contact: Contact, offerId: 
 }
 
 export async function analyzeModel(file: File) {
-  const response = await fetch('/api/models', {
+  const response = await apiFetch('/api/models', {
     method: 'POST',
     headers: { 'X-Model-Filename': encodeURIComponent(file.name) },
     body: file,

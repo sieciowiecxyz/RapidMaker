@@ -1,5 +1,11 @@
 export type Role = 'client' | 'admin';
-export type Session = { id: string; email: string; name: string; role: Role };
+export type Session = {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  adminVerified?: boolean;
+};
 export type DemoScenario = 'normal' | 'empty' | 'error';
 export type MaterialColor = { code?: string; name: string; hex: string; inStock: boolean };
 export type Material = {

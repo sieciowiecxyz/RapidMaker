@@ -3,13 +3,9 @@
   import {
     getOrder,
     updateOrder,
-    sendOffer,
     refundOrder,
-    createShippingLabel,
-    retryPayment,
     refreshOrderPayment,
     openOrderPayment,
-    reorder,
   } from '../lib/api';
   import {
     money,
@@ -19,41 +15,45 @@
     printConfiguration,
     parcels,
   } from '../lib/format';
-  import type { Order, OrderStatus as Status, PaymentScenario } from '../lib/types';
+  import type { Order, OrderStatus as Status } from '../lib/types';
+  import type { LiveOrder } from '../lib/orders';
+  import { ApiError } from '../lib/http';
   import { navigate } from '../lib/router';
   import Button from './ui/Button.svelte';
   import OrderStatus from './OrderStatus.svelte';
   import OrderChat from './OrderChat.svelte';
   import ParcelPlan from './ParcelPlan.svelte';
   let { id, adminMode = false }: { id: string; adminMode?: boolean } = $props();
-  let order = $state<Order | null>(null);
+  let order = $state<LiveOrder | null>(null);
   let loading = $state(true);
+  let loadGeneration = 0;
   let busy = $state(false);
   let error = $state('');
   let success = $state('');
   let status = $state<Status>('preparing');
   let leadTime = $state('');
   let notes = $state('');
-  let offer = $state(0);
-  let reason = $state('');
-  let scenario = $state<PaymentScenario>('success');
   let showDocument = $state(false);
   function assign(value: Order) {
     order = value;
     status = value.status;
     leadTime = value.leadTime;
     notes = value.notes;
-    offer = value.quote.total;
   }
   async function load() {
+    const generation = ++loadGeneration;
+    order = null;
     loading = true;
     error = '';
     try {
-      assign(await getOrder(id));
+      const value = await getOrder(id);
+      if (generation !== loadGeneration) return;
+      assign(value);
     } catch (e) {
+      if (generation !== loadGeneration) return;
       error = (e as Error).message;
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
     await tick();
     if (order && ['#rozmowa', '#platnosc'].includes(location.hash)) {
@@ -65,6 +65,9 @@
   $effect(() => {
     id;
     void load();
+    return () => {
+      loadGeneration++;
+    };
   });
   async function act(action: () => Promise<Order>, message: string) {
     busy = true;
@@ -74,18 +77,7 @@
       assign(await action());
       success = message;
     } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      busy = false;
-    }
-  }
-  async function again() {
-    busy = true;
-    error = '';
-    try {
-      await reorder(id);
-      navigate('/wycena');
-    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) order = null;
       error = (e as Error).message;
     } finally {
       busy = false;
@@ -103,12 +95,25 @@
       busy = false;
     }
   }
-  const canOffer = $derived(
-    order &&
-      !order.sandboxPayment &&
-      !['paid', 'refunded'].includes(order.payment) &&
-      order.status !== 'cancelled',
+  const nextStatus = $derived(
+    order?.serverStatus === 'paid'
+      ? 'printing'
+      : order?.serverStatus === 'in_production'
+        ? 'ready'
+        : order?.serverStatus === 'ready' && order.delivery === 'pickup'
+          ? 'completed'
+          : null,
   );
+  async function refund() {
+    if (
+      !order ||
+      !confirm(
+        `Zlecić zwrot ${money(order.refundableAmount ?? 0)}? Status produkcji pozostanie bez zmian.`,
+      )
+    )
+      return;
+    await act(() => refundOrder(id), 'Zlecenie zwrotu zapisane. Sprawdź jego status poniżej.');
+  }
   const steps = ['Płatność', 'Przygotowanie', 'Druk', 'Wysyłka / odbiór'];
   let step = $derived(
     !order || order.payment !== 'paid'
@@ -161,35 +166,60 @@
     <div class="grid-2">
       <section class="panel stack">
         <h2>Modele i ustawienia</h2>
-        {#each order.models as model (model.id)}<article class="model">
+        {#each order.models as model, index (index)}<article class="model">
             <div class="preview" aria-label="Miejsce na podgląd 3D">
               ◇<small>Podgląd 3D wkrótce</small>
             </div>
             <div>
               <h3>{model.name}</h3>
-              <p class="muted">{model.dimensions} · {model.parts} część · {model.weight}</p>
+              <p class="muted">{model.dimensions} · {model.weight}</p>
               <p>{model.options.materialId.toUpperCase()} · {model.options.color}</p>
               <p class="muted">{model.options.quantity} szt.</p>
               <details class="configuration">
                 <summary>Parametry wydruku</summary>
                 <ul class="print-settings">
-                  {#each printConfiguration(model) as setting}<li>{setting}</li>{/each}
+                  {#if order.serverStatus}{#if order.files?.filter((f) => f.model_id === model.id).length === 1 && model.advanced.wallCount > 0}<li
+                      >
+                        Jakość: {{ draft: 'robocza', standard: 'standardowa', fine: 'dokładna' }[
+                          model.options.quality
+                        ]}
+                      </li>
+                      <li>
+                        Ściany: {model.advanced.wallCount}; wypełnienie: {model.advanced.infill}%
+                      </li>{:else}<li>
+                        Dokładne ustawienia znajdują się w plikach zamówienia.
+                      </li>{/if}{:else}{#each printConfiguration(model) as setting}<li>
+                        {setting}
+                      </li>{/each}{/if}
                 </ul>
               </details>
               {#if model.notes}<p>Uwagi: {model.notes}</p>{/if}
             </div>
-          </article>{/each}{#if !adminMode}<Button
-            variant="secondary"
-            disabled={busy}
-            onclick={again}>Zamów ponownie ↗</Button
-          ><small class="muted">Przed zakupem ponownie sprawdzimy dostępność i aktualną cenę.</small
-          >{/if}
+          </article>{/each}{#if !adminMode}<Button variant="secondary" disabled
+            >Zamów ponownie ↗</Button
+          ><small class="muted">Ponowne zamawianie nie jest jeszcze dostępne.</small>{/if}
+        {#if order.files?.length}<div class="stack">
+            <h3>Pliki zamówienia</h3>
+            {#each order.files as file}<div>
+                {file.filename}
+                {#if file.available && file.source_url?.startsWith(`/api/${adminMode ? 'admin' : 'account'}/orders/${order.id}/files/`)}<a
+                    href={file.source_url}
+                    download={file.filename}>Pobierz oryginał ↗</a
+                  >{:else}<small class="muted">Plik nie jest już dostępny</small>{/if}
+              </div>{/each}
+          </div>{/if}
       </section>
       <section id="platnosc" class="panel stack">
         <h2>Płatność i dostawa</h2>
         <dl>
           <div>
-            <dt>Wydruki</dt>
+            <dt>
+              {order.serverStatus
+                ? order.deliveryKnown
+                  ? 'Wydruki i opakowania'
+                  : 'Zapisana kwota zamówienia'
+                : 'Wydruki'}
+            </dt>
             <dd>{money(order.quote.subtotal)}</dd>
           </div>
           {#if order.quote.checkout?.packaging_grosze}
@@ -199,8 +229,15 @@
             </div>
           {/if}
           <div>
-            <dt>Dostawa · {parcels(order.quote.packages)}</dt>
-            <dd>{money(order.quote.delivery)}</dd>
+            <dt>
+              Dostawa{#if !order.serverStatus || order.deliveryKnown}
+                · {parcels(order.quote.packages)}{/if}
+            </dt>
+            <dd>
+              {order.serverStatus && !order.deliveryKnown
+                ? 'Brak zapisanych danych'
+                : money(order.quote.delivery)}
+            </dd>
           </div>
           <div class="total">
             <dt>{order.quote.manual ? 'Szacunek do potwierdzenia' : 'Razem'}</dt>
@@ -208,14 +245,14 @@
           </div>
         </dl>
         <p class="badge">{paymentStatus[order.payment]}</p>
-        {#if order.sandboxPayment}
+        {#if order.serverStatus}
           <div class="payment-actions">
-            {#if !adminMode && !['paid', 'refunded'].includes(order.payment) && order.status !== 'cancelled'}
+            {#if !adminMode && order.paymentReference && !['paid', 'refunded'].includes(order.payment) && order.status !== 'cancelled'}
               <Button disabled={busy} onclick={pay}>Przejdź do płatności ↗</Button>
             {/if}
             <Button
               variant="secondary"
-              disabled={busy}
+              disabled={busy || adminMode}
               onclick={() =>
                 act(() => refreshOrderPayment(id), 'Sprawdzono status płatności w Stripe.')}
               >Sprawdź płatność</Button
@@ -236,8 +273,11 @@
               : `${order.contact.street}, ${order.contact.postalCode} ${order.contact.city}`}
         </p>
         {#if order.tracking}<p>Numer śledzenia: <strong>{order.tracking}</strong></p>
-          <small class="muted">Numer demonstracyjny — bez połączenia z przewoźnikiem.</small
-          >{/if}{#if order.label}<p class="badge">{order.label}</p>{/if}
+          <small class="muted">Numer przesyłki przewoźnika.</small>{/if}{#if order.label}<p
+            class="badge"
+          >
+            {order.label}
+          </p>{/if}
         {#if order.document}<Button
             variant="secondary"
             onclick={() => (showDocument = !showDocument)}>Podgląd dokumentu sprzedaży</Button
@@ -255,18 +295,12 @@
             delivery={order.delivery}
           />
         {/if}
-        {#if !order.sandboxPayment && !adminMode && !order.quote.manual && !['paid', 'refunded'].includes(order.payment) && order.status !== 'cancelled'}<label
-            for="payment-scenario">Scenariusz płatności demo</label
-          ><select id="payment-scenario" bind:value={scenario}
-            ><option value="success">Sukces</option><option value="pending">Oczekiwanie</option
-            ><option value="cancelled">Anulowanie</option><option value="error">Błąd</option
-            ></select
-          ><Button
-            disabled={busy}
-            onclick={() =>
-              act(() => retryPayment(id, scenario), 'Zaktualizowano płatność demonstracyjną.')}
-            >Opłać / ponów płatność</Button
-          >{/if}
+        {#if order.serverStatus && !order.paymentReference && order.payment !== 'paid' && order.payment !== 'refunded'}<p
+            class="muted"
+          >
+            Wznowienie płatności w tym widoku nie jest jeszcze dostępne. Status płatności potwierdza
+            serwer.
+          </p>{/if}
         {#if order.quote.manual}<p class="alert">
             Zlecenie wymaga ręcznej wyceny. Ustalimy cenę oraz sposób dostawy w rozmowie.
           </p>{/if}{#if order.offerReason}<p class="alert">
@@ -277,68 +311,45 @@
     {#if adminMode}<div class="grid-2">
         <section class="panel stack">
           <h2>Produkcja</h2>
-          <label for="order-status">Status</label><select id="order-status" bind:value={status}
-            >{#each Object.entries(orderStatus) as [value, label]}<option {value}>{label}</option
-              >{/each}</select
-          ><label for="lead-time">Termin realizacji</label><input
+          <label for="order-status">Status</label><select
+            id="order-status"
+            bind:value={status}
+            disabled={!nextStatus || busy}
+            ><option value={order.status}>{orderStatus[order.status]}</option
+            >{#if nextStatus}<option value={nextStatus}>{orderStatus[nextStatus]}</option
+              >{/if}</select
+          >
+          <label for="lead-time">Termin realizacji</label><input
             id="lead-time"
-            bind:value={leadTime}
+            value={leadTime}
+            disabled
           /><label for="private-notes">Prywatne notatki zespołu</label><textarea
             id="private-notes"
-            bind:value={notes}
-            rows="3"></textarea><Button
-            disabled={busy}
-            onclick={() =>
-              act(
-                () => updateOrder(id, { status, leadTime, notes }),
-                'Zapisano ustalenia produkcji.',
-              )}>Zapisz zmiany</Button
-          ><small class="muted">Notatki widzi tylko administrator demo.</small>
+            value={notes}
+            rows="3"
+            disabled></textarea><Button
+            disabled={busy || !nextStatus || status === order.status}
+            onclick={() => act(() => updateOrder(id, { status }), 'Status realizacji zapisany.')}
+            >Zapisz status</Button
+          ><small class="muted">Terminy i notatki wewnętrzne nie są jeszcze obsługiwane.</small>
         </section>
         <section class="panel stack">
-          <h2>{canOffer ? 'Oferta, płatność i wysyłka' : 'Płatność i kontakt'}</h2>
-          {#if canOffer}<label for="offer-price">Łączna cena oferty (zł)</label><input
-              id="offer-price"
-              type="number"
-              min="0.01"
-              step="0.01"
-              bind:value={offer}
-            /><label for="offer-reason">Powód zmiany ceny</label><textarea
-              id="offer-reason"
-              bind:value={reason}
-              rows="2"
-              placeholder="Np. dodatkowe przygotowanie powierzchni"></textarea><Button
+          <h2>Płatność i kontakt</h2>
+          {#if order.payment === 'paid'}<Button
               variant="secondary"
-              disabled={busy ||
-                !reason.trim() ||
-                ['paid', 'refunded'].includes(order.payment) ||
-                order.status === 'cancelled'}
-              onclick={() =>
-                act(
-                  () => sendOffer(id, offer, reason),
-                  'Oferta demo gotowa. Email nie jest wysyłany.',
-                )}>Zapisz i udostępnij ofertę</Button
-            >{/if}{#if order.sandboxPayment}
-            <p class="muted">
-              Cena zapisanej płatności jest stała. Zwroty wykonaj w panelu Stripe; zakup etykiet nie
-              jest jeszcze dostępny.
-            </p>
-          {:else if order.payment === 'paid'}<Button
-              variant="secondary"
-              disabled={busy}
-              onclick={() => act(() => refundOrder(id), 'Zasymulowano pełny zwrot płatności.')}
-              >Symuluj zwrot {money(order.quote.total)}</Button
-            >{#if order.delivery !== 'pickup'}<Button
-                variant="secondary"
-                disabled={busy}
-                onclick={() =>
-                  act(() => createShippingLabel(id), 'Przygotowano etykietę demonstracyjną.')}
-                >Przygotuj etykietę demo</Button
-              >{/if}{/if}
+              disabled={busy || order.refundPending || !order.refundableAmount}
+              onclick={refund}>Zleć zwrot {money(order.refundableAmount ?? 0)}</Button
+            >{/if}
+          {#if order.refundNotice}<p class="alert" role="status">{order.refundNotice}</p>{/if}
+          {#if order.delivery !== 'pickup'}<Button variant="secondary" disabled
+              >Przygotuj etykietę</Button
+            ><small class="muted"
+              >Nadanie wymaga osobnego potwierdzenia paczek i kosztów; ten widok jeszcze tego nie
+              obsługuje.</small
+            >{/if}
           <p class="muted">
-            {order.sandboxPayment
-              ? 'Status płatności pochodzi ze Stripe. Zmiana statusu produkcji nie zmienia płatności.'
-              : 'Status płatności wynika z symulacji płatności, nie z ręcznego oznaczenia przez admina.'}
+            Cenę i płatność potwierdza serwer. Zwrot nie zmienia statusu produkcji. Ręczna zmiana
+            ceny nie jest dostępna.
           </p>
           <p>{order.contact.email} · {order.contact.phone}</p>
           {#if order.contact.company}<p>{order.contact.company} · NIP {order.contact.nip}</p>{/if}

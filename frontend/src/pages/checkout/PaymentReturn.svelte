@@ -66,7 +66,7 @@
     <a
       class="button secondary"
       href={order.ownerId
-        ? '/konto/zamowienia/' + order.id
+        ? '/konto/zamowienia'
         : '/logowanie?register=1&email=' + encodeURIComponent(order.contact.email)}
       >{order.ownerId ? 'Szczegóły zamówienia →' : 'Utwórz konto i śledź zamówienie →'}</a
     >

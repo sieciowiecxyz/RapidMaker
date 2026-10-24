@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '../../lib/http';
   import { onMount } from 'svelte';
   import {
     loadStripe,
@@ -30,7 +31,7 @@
       try {
         const [config, response] = await Promise.all([
           getStripeConfig(),
-          fetch('/api/checkout/intent/' + encodeURIComponent(intentId) + '/resume'),
+          apiFetch('/api/checkout/intent/' + encodeURIComponent(intentId) + '/resume'),
         ]);
         const saved = await response.json();
         if (!response.ok) throw new Error(saved.message ?? 'Nie udało się wznowić płatności.');

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getOrders, reorder } from '../../lib/api';
+  import { getOrders } from '../../lib/api';
   import type { Order } from '../../lib/types';
   import { money, date } from '../../lib/format';
   import Button from '../../components/ui/Button.svelte';
@@ -21,25 +21,6 @@
       loading = false;
     }
   }
-  async function again(order: Order) {
-    busy = order.id;
-    error = '';
-    try {
-      await reorder(order.id);
-      navigate('/wycena');
-    } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      busy = '';
-    }
-  }
-  function canPay(order: Order) {
-    return (
-      !order.quote.manual &&
-      order.status !== 'cancelled' &&
-      ['unpaid', 'pending', 'cancelled', 'error'].includes(order.payment)
-    );
-  }
   onMount(load);
 </script>
 
@@ -59,7 +40,7 @@
     </div>
   {:else if !orders.length}<div class="panel empty-state">
       <h2>Twój pierwszy projekt czeka</h2>
-      <p>Dodaj model i sprawdź przykładową wycenę wydruku.</p>
+      <p>Dodaj model i sprawdź wycenę wydruku.</p>
       <Button onclick={() => navigate('/wycena')}>Dodaj model</Button>
     </div>
   {:else}
@@ -100,10 +81,6 @@
               <a class="button ghost messages" href={`${detail}#rozmowa`}
                 >Wiadomości{#if unread}<span class="unread">{unread}</span>{/if}</a
               >
-              {#if canPay(order)}<a class="button primary" href={`${detail}#platnosc`}>Opłać →</a>
-              {:else}<Button variant="ghost" disabled={!!busy} onclick={() => again(order)}
-                  >{busy === order.id ? 'Przygotowujemy…' : 'Zamów ponownie'}</Button
-                >{/if}
             </div>
           </div>
         </li>

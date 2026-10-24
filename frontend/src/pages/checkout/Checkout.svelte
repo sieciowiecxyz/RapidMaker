@@ -163,8 +163,13 @@
     cart?.models.some((model) => {
       const dimensions = model.analysis?.dimensions_mm;
       const weight = model.analysis?.weight_g;
-      return !dimensions || dimensions.some(value => !Number.isFinite(value) || value <= 0) ||
-        weight == null || !Number.isFinite(weight) || weight <= 0;
+      return (
+        !dimensions ||
+        dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
+        weight == null ||
+        !Number.isFinite(weight) ||
+        weight <= 0
+      );
     }) ?? false,
   );
   const fieldErrors: Partial<Record<keyof Contact, string>> = $derived({
@@ -320,15 +325,9 @@
         throw new Error('Wycena wygasła lub dane się zmieniły. Przejdź ponownie do podsumowania.');
       }
       if (cart.quote.manual) {
-        const result = await api.checkout({
-          quoteId: cart.quote.id,
-          version: cart.quote.version,
-          contact: normalizedContact(),
-          scenario: 'pending',
-          requestOnly: true,
-        });
-        order = result.order;
-        return;
+        throw new Error(
+          'Ręczna wycena nie jest jeszcze obsługiwana online. Skontaktuj się z zespołem.',
+        );
       }
       if (!selectedOffer) {
         throw new Error('Dane lub wycena zmieniły się. Przejdź ponownie do podsumowania.');
@@ -345,7 +344,11 @@
         };
         sessionStorage.setItem(receiptKey, JSON.stringify(saved));
         // Keep the receipt address after an inline payment, including a later reload.
-        history.replaceState({}, '', '/zamowienie?payment_intent=' + encodeURIComponent(intent.payment_intent_id));
+        history.replaceState(
+          {},
+          '',
+          '/zamowienie?payment_intent=' + encodeURIComponent(intent.payment_intent_id),
+        );
         await stripeForm.confirm(intent.client_secret, contact.email, intent.payment_intent_id);
         stripePayment = await api.verifyCheckout(intent.payment_intent_id);
         order = api.getCheckoutOrder(intent.payment_intent_id);
@@ -930,6 +933,7 @@
               disabled={busy ||
                 quoteBusy ||
                 (stage === 4 && !(stripeForm && cart.delivery === 'courier')) ||
+                (stage === 3 && cart.quote.manual) ||
                 (stage === 3 &&
                   !cart.quote.manual &&
                   (!quoteFresh || !selectedOffer || !cart.quote.checkout?.stripe_configured))}
@@ -939,7 +943,7 @@
                 : stage === 2
                   ? 'Podsumowanie →'
                   : cart.quote.manual
-                    ? 'Poproś o ręczną wycenę →'
+                    ? 'Skontaktuj się w sprawie wyceny'
                     : stage === 4 && stripeForm && cart.delivery === 'courier'
                       ? `Zapłać ${money(cart.quote.total)} →`
                       : 'Przejdź do płatności →'}

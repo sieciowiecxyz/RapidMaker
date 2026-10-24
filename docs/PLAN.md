@@ -175,3 +175,7 @@ Aktualizacja parserów i wyłączenie nieużywanych features usuwa 8 zgłoszeń 
 ## L7 — Domknięcie zależności i granic uprawnień
 
 SQLx 0.9 usuwa RSA z lockfile; Truck/cgmath/proc-macro-error zastąpione systemowym OCCT 7.9 i małym mostem CXX, bez zmiany API i bez nowej migracji SQL. Audyt Cargo: 0 podatności/ostrzeżeń, bez wyjątków. Test dwóch klientów/gościa/admina wykrył brak MFA na części ścieżek klienta dla admina; wspólna kontrola obejmuje teraz także claim. Zakres, wymagania natywne i dowody: [security.md](security.md).
+
+## Integracja istniejących paneli — 2026-10-25
+
+Podłączyć istniejące widoki bez redesignu i nowego backendu: wspólny email/passkey, CSRF, własność gościa, zamówienia/pliki/chat/preferencje, statusy produkcji i pełny zwrot pozostałej kwoty. Kwoty oraz uprawnienia wyłącznie z API; bez lokalnych fikcyjnych zapisów. Faktury, ręczna wycena/cena/termin, notatki wewnętrzne i pełne nadanie pozostają niedostępne. Krótki build i regresje kontraktu HTTP; bez nowych wywołań dostawców.

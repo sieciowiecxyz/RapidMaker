@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getProfile, updateProfile, deleteAccount } from '../../lib/api';
+  import { getProfile, updateProfile } from '../../lib/api';
   import type { Profile } from '../../lib/types';
-  import { navigate } from '../../lib/router';
   import Button from '../../components/ui/Button.svelte';
   let { onSession = () => {} }: { onSession?: () => void } = $props();
   let profile = $state<Profile | null>(null);
@@ -10,7 +9,6 @@
   let busy = $state(false);
   let error = $state('');
   let success = $state('');
-  let confirmDelete = $state(false);
   async function load() {
     loading = true;
     error = '';
@@ -31,21 +29,8 @@
     success = '';
     try {
       profile = await updateProfile(profile);
-      success = 'Zapisano ustawienia lokalnie w tej przeglądarce.';
+      success = 'Zapisano preferencje powiadomień na koncie.';
       onSession();
-    } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      busy = false;
-    }
-  }
-  async function remove() {
-    busy = true;
-    error = '';
-    try {
-      await deleteAccount();
-      onSession();
-      navigate('/');
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -71,9 +56,14 @@
     <form onsubmit={save} class="stack">
       <section class="panel stack">
         <h2>Dane kontaktowe</h2>
+        <p class="muted">
+          Email jest powiązany z kontem. Pozostałe dane podajesz przy zamówieniu; książka adresowa
+          nie jest jeszcze dostępna.
+        </p>
         <div class="form-grid">
           <label
             >Imię i nazwisko<input
+              disabled
               bind:value={profile.contact.name}
               autocomplete="name"
               required
@@ -84,6 +74,7 @@
             ></label
           ><label
             >Telefon<input
+              disabled
               bind:value={profile.contact.phone}
               autocomplete="tel"
               type="tel"
@@ -96,11 +87,13 @@
         <div class="form-grid">
           <label
             >Ulica i numer<input
+              disabled
               bind:value={profile.contact.street}
               autocomplete="street-address"
             /></label
           ><label
             >Kod pocztowy<input
+              disabled
               bind:value={profile.contact.postalCode}
               autocomplete="postal-code"
               placeholder="00-000"
@@ -108,11 +101,13 @@
             /></label
           ><label
             >Miejscowość<input
+              disabled
               bind:value={profile.contact.city}
               autocomplete="address-level2"
             /></label
           ><label
             >Ulubiony punkt odbioru<input
+              disabled
               bind:value={profile.contact.pickupPoint}
               placeholder="Nazwa lub kod punktu"
             /></label
@@ -124,11 +119,13 @@
         <div class="form-grid">
           <label
             >Nazwa firmy<input
+              disabled
               bind:value={profile.contact.company}
               autocomplete="organization"
             /></label
           ><label
             >NIP<input
+              disabled
               bind:value={profile.contact.nip}
               inputmode="numeric"
               placeholder="10 cyfr"
@@ -139,23 +136,18 @@
       </section>
       <section class="panel stack">
         <h2>Powiadomienia email</h2>
-        <p class="muted">Na makiecie zapisujemy wybór, bez wysyłania emaili.</p>
+        <p class="muted">
+          Wybierz wiadomości wysyłane na email konta. Potwierdzenia zakupu i płatności wysyłamy
+          niezależnie od tych ustawień.
+        </p>
         <div class="notification-grid">
           <label
             ><input type="checkbox" bind:checked={profile.notifications.message} /><span
-              >Nowa wiadomość od obsługi</span
+              >Nowe wiadomości od obsługi</span
             ></label
           ><label
             ><input type="checkbox" bind:checked={profile.notifications.status} /><span
-              >Zmiana statusu zamówienia</span
-            ></label
-          ><label
-            ><input type="checkbox" bind:checked={profile.notifications.shipped} /><span
-              >Przekazanie paczki do wysyłki</span
-            ></label
-          ><label
-            ><input type="checkbox" bind:checked={profile.notifications.pickup} /><span
-              >Gotowość do odbioru osobistego</span
+              >Zmiany statusu, wysyłka i gotowość do odbioru</span
             ></label
           >
         </div>
@@ -172,19 +164,8 @@
     </form>
     <section class="panel stack">
       <h2>Usunięcie konta</h2>
-      <p class="muted">
-        Usuniesz profil i ustawienia konta. Historia zamówień pozostanie dostępna dla obsługi.
-      </p>
-      {#if confirmDelete}<p class="alert">Czy na pewno chcesz usunąć konto? Nastąpi wylogowanie.</p>
-        <div class="toolbar">
-          <Button variant="secondary" disabled={busy} onclick={() => (confirmDelete = false)}
-            >Zachowaj konto</Button
-          ><Button variant="secondary" disabled={busy} onclick={remove}
-            >Potwierdzam usunięcie konta</Button
-          >
-        </div>{:else}<div>
-          <Button variant="ghost" onclick={() => (confirmDelete = true)}>Usuń konto</Button>
-        </div>{/if}
+      <p class="muted">Usuwanie konta nie jest jeszcze dostępne w aplikacji.</p>
+      <div><Button variant="ghost" disabled>Usuń konto</Button></div>
     </section>
   {/if}
 </div>

@@ -10,8 +10,8 @@
   let busy = $state('');
   const stages: { id: Status; label: string; next: Status }[] = [
     { id: 'preparing', label: 'Przygotowanie', next: 'printing' },
-    { id: 'printing', label: 'W druku', next: 'shipped' },
-    { id: 'ready', label: 'Do odbioru', next: 'completed' },
+    { id: 'printing', label: 'W druku', next: 'ready' },
+    { id: 'ready', label: 'Gotowe', next: 'completed' },
   ];
   async function load() {
     loading = true;
@@ -46,7 +46,7 @@
     <div>
       <p class="eyebrow">Panel zespołu</p>
       <h1>Produkcja</h1>
-      <p class="muted">Kolejka wydruków, terminy i notatki zespołu.</p>
+      <p class="muted">Kolejka wydruków i status realizacji.</p>
     </div>
   </div>
   {#if error}<p class="alert error" role="alert">{error}</p>{/if}{#if loading}<div
@@ -77,8 +77,11 @@
               <p>Termin: {order.leadTime}</p>
               {#if order.notes}<p class="note">{order.notes}</p>{/if}<a
                 class="job-link"
-                href={'/admin/zamowienia/' + order.id}>Szczegóły i notatki →</a
-              ><Button disabled={busy === order.id} onclick={() => advance(order, stage.next)}
+                href={'/admin/zamowienia/' + order.id}>Szczegóły →</a
+              ><Button
+                disabled={busy === order.id ||
+                  (stage.next === 'completed' && order.delivery !== 'pickup')}
+                onclick={() => advance(order, stage.next)}
                 >{stage.next === 'printing'
                   ? 'Rozpocznij druk'
                   : stage.next === 'completed'

@@ -4,17 +4,12 @@ test('operator color form submits valid RGBA instead of blocking native validati
   page,
 }) => {
   // UI contract only: real server authorization is verified separately against PostgreSQL.
-  await page.route('**/api/admin/session', (route) =>
+  await page.route('**/api/auth/me', (route) =>
     route.fulfill({
       json: {
-        configured: true,
-        authenticated: true,
-        session: {
-          id: 'test-operator',
-          email: 'operator@example.test',
-          name: 'Operator',
-          role: 'admin',
-        },
+        user: { id: 'operator-1', email: 'operator@example.invalid', role: 'admin' },
+        admin_verified: true,
+        csrf_token: 'csrf-color',
       },
     }),
   );
@@ -47,6 +42,7 @@ test('operator color form submits valid RGBA instead of blocking native validati
     (request) => request.method() === 'PUT' && request.url().endsWith('/colors/10501'),
   );
   await color.getByRole('button', { name: 'Zapisz kolor', exact: true }).click();
+  expect((await sent).headers()['x-csrf-token']).toBe('csrf-color');
   expect((await sent).postDataJSON()).toMatchObject({
     code: '10501',
     rgba: ['#00AE42FF'],

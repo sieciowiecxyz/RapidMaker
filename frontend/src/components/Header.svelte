@@ -21,7 +21,9 @@
           ? 'Moje konto'
           : 'Zaloguj się'}
       href={session?.role === 'admin'
-        ? '/admin/materialy'
+        ? session.adminVerified
+          ? '/admin.html'
+          : '/logowanie?operator=1'
         : session
           ? '/konto/zamowienia'
           : '/logowanie'}
