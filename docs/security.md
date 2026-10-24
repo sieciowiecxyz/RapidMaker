@@ -4,6 +4,7 @@ Aktualny Cargo audit: **0 podatności, 0 ostrzeżeń RustSec**, bez ignorowania 
 
 ## Zależności i poprawki
 
+- WebAuthn 0.5.3→0.5.5: poprawiona walidacja domen według [GHSA-22w3-693w-x895](https://github.com/advisories/GHSA-22w3-693w-x895). Jawnie wyłączono subdomeny. Poprzednia konfiguracja też ich nie włączała; nie używano podatnego wariantu. To zgłoszenie GitHuba nie pojawiało się w raporcie RustSec.
 - SQLx 0.8→0.9 z PostgreSQL/Tokio/rustls-ring; zachowane migracje w binarce. Nowy podział features usuwa opcjonalne RSA z lockfile. W testach rollbacku używamy literalnego SQL zamiast interpolowanego DDL; nie obchodzimy nowej kontroli `SqlSafeStr`.
 - Truck, ruststep, `cgmath` i `proc-macro-error` usunięte. STEP obsługuje systemowy Open CASCADE 7.9 przez mały most CXX; OBJ parser `tobj` bez odczytu zewnętrznych materiałów. STL/3MF zachowują dotychczasowe parsery, w tym zaktualizowany `lib3mf` i bezpieczne wersje XML/ZIP.
 - Native STEP: wejście ze strumienia pamięci, wyłącznie pojedyncza bryła i jawne mm; limity ekstrakcji trójkątów/wierzchołków, tłumaczenie wyjątków, poprawne transformacje i kierunek ścian. Konwersja nadal działa w osobnym procesie bubblewrap/prlimit bez sieci/sekretów/zapisu plików. OCCT nie zapisuje diagnostyki do protokołu JSON.
@@ -38,8 +39,9 @@ Test sprawdza nazwę bazy/katalogu i konfigurację przed utworzeniem fixtures. P
 
 ## Dowody i ograniczenia
 
-- PASS: 17 testów geometrii, 22 jednostkowe API/storage, macierz uprawnień HTTP na izolowanej bazie oraz 2 testy PostgreSQL (kody logowania, atomowy rollback statusu/outboxa). Pozostałych ignorowanych testów PG nie uruchamiano.
+- PASS: 17 testów geometrii, 24 jednostkowe API/storage/auth, macierz uprawnień HTTP na izolowanej bazie oraz 2 testy PostgreSQL (kody logowania, atomowy rollback statusu/outboxa). Pozostałych ignorowanych testów PG nie uruchamiano.
 - PASS: fmt, Clippy zmienionych pakietów/all-targets `-D warnings`, locked build. GCC emituje `maybe-uninitialized` w wygenerowanym konstruktorze wektora CXX; ostrzeżenie pozostaje widoczne, nie jest tłumione.
 - PASS: rzeczywisty worker w read-only sandboxie dla STL/STEP/3MF, kanoniczny STL/GLB i JSON; działający API po migracji SQLx: OpenAPI/STL/STEP 200, admin bez sesji 401, 3MF path traversal 422.
-- Lokalne raporty: `/tmp/rapidmaker-access-{before-fix,tests}.log`, `/tmp/rapidmaker-security2-{audit.json,clippy.log,unit.log,pg.log,build.log,smoke.json}` i `/tmp/rapidmaker-geometry-occt*.log`. Baza testowa i pliki fixtures zostały usunięte po testach.
+- Lokalne raporty: `/tmp/rapidmaker-access-{before-fix,tests}.log`, `/tmp/rapidmaker-security2-{audit-final.json,clippy.log,unit.log,pg.log,build.log,smoke.json}` oraz `/tmp/rapidmaker-{geometry-occt,webauthn}*.log`. Baza testowa i pliki fixtures zostały usunięte po testach.
+- Status GitHuba przy pierwszym pushu L7 wciąż pokazywał wcześniejsze alerty lz4_flex/WebAuthn; kod/lockfile usuwa lub aktualizuje wskazane wersje. Nie zamykano alertów ręcznym wyjątkiem ani nie zakładano odświeżenia indeksu.
 - Nadal potrzebne przed produkcją: wdrożenie HTTPS/proxy, podłączenie autoryzacji frontendu i utrzymanie aktualnych bibliotek systemowych OCCT. To ograniczony przegląd, bez pełnego pentestu i testów atakujących zewnętrzne usługi.

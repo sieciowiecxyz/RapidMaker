@@ -117,6 +117,7 @@ impl Auth {
             Some(
                 WebauthnBuilder::new(url.domain().ok_or("invalid RP domain")?, &url)?
                     .rp_name("Rapidmaker")
+                    .allow_subdomains(false)
                     .build()?,
             )
         } else {
