@@ -163,3 +163,7 @@ Wdrożony wspólny `tracing`/JSON stderr, identyfikator HTTP, kontekst workerów
 Kurierzy DPD, DHL, InPost, GLS, UPS i FedEx; automaty InPost, ORLEN Paczka, DPD i DHL. Zgody tylko dla tych usług, bez marketingu i automatycznej akceptacji w kodzie. Punkt klienta jest sprawdzany w swojej sieci; ORLEN wymaga osobnego punktu nadawcy w `FURGONETKA_SENDER_POINTS_JSON`.
 
 Checkout i przygotowanie nadania stosują te same limity kartonów w zleceniu oraz sumują pełny koszt. Powtarzalne zlecenia wyceniamy raz; niepełna oferta nie trafia do klienta. Cache i limity wywołań pozostają. [Weryfikacja i granice](MILESTONES.md#l4--wielu-przewoźników--pass-sandbox-2026-10-24).
+
+## L5 — Prywatne metryki HTTP dla Prometheusa/Grafany
+
+Osobny loopback:18435, dedykowany token z SOPS, brak publicznej trasy/CORS, limit eksportu. Biblioteka `prometheus-client` koduje OpenMetrics; etykiety tylko z szablonów tras i zamkniętych list metod/klas statusu. Liczniki odpowiedzi, histogram czasu przygotowania, in-flight i uptime; anulowanie żądania zwalnia in-flight. Bez zapytań do DB, danych klienta, nowych kolejek i zmian płatności. Prometheus zapisuje historię; jego instalacja, Grafana, metryki workerów/DB/hosta i health/readiness poza etapem. [Kontrakt i konfiguracja](metrics.md).

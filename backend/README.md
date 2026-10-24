@@ -165,3 +165,7 @@ Backend Rust emituje JSON na stderr, domyślnie `LOG_LEVEL=info`. Udane odczyty 
 - Zgody usług zostały zaakceptowane w sandboxie za zgodą właściciela, bez marketingu. Kod nie akceptuje regulaminów. Produkcja wymaga osobnej konfiguracji i zgód; ceny sandboxa nie są cennikiem produkcyjnym.
 
 Sprawdzono rzeczywisty adapter Rust: sześciu kurierów i cztery sieci automatów, po jednym i dwóch kartonach 1 kg; wycena, walidacja i zgodność sum checkoutu z przygotowaniem nadania. Nowych nadań ani podjazdów dla tych sieci nie wykonano. [Dowody](../docs/MILESTONES.md#l4--wielu-przewoźników--pass-sandbox-2026-10-24).
+
+### Metryki
+
+`METRICS_TOKEN` w `.env`/SOPS włącza prywatne `127.0.0.1:18435/metrics` z Bearer auth; brak zmiennej wyłącza zbieranie. HTTP: liczniki/klasy statusu, histogram opóźnienia, in-flight i uptime; bez danych klienta i surowych URL. Osobny listener, bez trasy w publicznym API. [Konfiguracja Prometheusa/Grafany i granice](../docs/metrics.md).

@@ -9,6 +9,8 @@ mod email;
 mod files;
 mod logging;
 mod mail_inbound;
+mod metrics;
+mod metrics_server;
 mod models;
 pub use mail_inbound::receive_once as mail_receive_once;
 mod orders;
@@ -27,6 +29,7 @@ pub use models::worker;
 
 pub use slice_worker::SliceWorker;
 pub struct Workers {
+    metrics: Option<metrics_server::MetricsServer>,
     mail: Option<email::MailWorker>,
     inbound: Option<mail_inbound::InboundWorker>,
     slicer: Option<SliceWorker>,
@@ -36,6 +39,11 @@ pub struct Workers {
 impl Workers {
     pub async fn shutdown(self) {
         tokio::join!(
+            async {
+                if let Some(server) = self.metrics {
+                    server.shutdown().await;
+                }
+            },
             async {
                 if let Some(worker) = self.shipping {
                     worker.shutdown().await;
@@ -92,11 +100,18 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let (router, mut document) = api.split_for_parts();
     let (webhook, webhook_document) = webhook.split_for_parts();
     document.merge(webhook_document);
-    let router = checkout::protect(router.merge(docs::router(document)), auth.clone())
+    let metrics = metrics_server::MetricsServer::from_env().await?;
+    let mut router = checkout::protect(router.merge(docs::router(document)), auth.clone())
         .merge(webhook)
         .layer(axum::Extension(mailer.clone()))
         .layer(axum::Extension(auth))
         .layer(axum::middleware::from_fn(logging::request));
+    if let Some(server) = &metrics {
+        router = router.layer(axum::middleware::from_fn_with_state(
+            server.metrics.clone(),
+            metrics::request,
+        ));
+    }
     let worker = storage
         .as_ref()
         .filter(|_| mailer.enabled())
@@ -120,6 +135,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     Ok((
         router,
         Workers {
+            metrics,
             mail: worker,
             inbound,
             slicer,

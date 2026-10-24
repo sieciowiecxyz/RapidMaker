@@ -28,6 +28,7 @@ percent-encoding = "2"
 utoipa.workspace = true
 utoipa-axum.workspace = true
 utoipa-swagger-ui = { version = "10", default-features = false, features = ["axum", "vendored"] }
+prometheus-client = { version = "0.25.1", default-features = false }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

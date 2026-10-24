@@ -23,4 +23,4 @@ Nie uruchamiaj drugiej instancji na zajętym porcie. Backend nie utrzymuje włas
 
 Nie logujemy nagłówków, URL-i z parametrami, body, danych adresowych, emaili, wiadomości, kodów, sesji, kluczy, hashy właściciela, nazw modeli, ścieżek klientów ani surowych błędów/odpowiedzi dostawców. Kategorie błędów są jawne i ograniczone. Hook paniki zapisuje lokalizację **w kodzie źródłowym**, bez jej payloadu. Logi zależności są wyłączone nawet przy `trace`, aby ich SQL lub diagnostyka protokołów nie omijały tej zasady.
 
-JSON można zbierać w Loki i oglądać w Grafanie; kolektor, dashboardy, metryki i nowe endpointy health/readiness nie są częścią tej zmiany.
+JSON można zbierać w Loki i oglądać w Grafanie; kolektor i dashboardy pozostają do uruchomienia. Osobny prywatny eksport HTTP dla Prometheusa opisuje [metrics.md](metrics.md); health/readiness pozostają poza tym etapem.
