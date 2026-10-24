@@ -1,54 +1,65 @@
-# Rapidmaker — backend i automatyczna wycena
+# Checkout, adres i dostawa — backend Rust
 
-Mode: goal
-Status: backend B1–B8 wdrożony jako lokalny POC; panele frontendu do podłączenia
-Active: brak — backend email/auth i B1–B8 ukończone lokalnie
+Status: plan, implementacja C1–C6 jeszcze nie rozpoczęta. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
 
-## Email i backend klienta
+## Cel i punkt wyjścia
 
-[Email i powiadomienia](email.md): E1–E4 PASS w lokalnym backendzie. Kod logowania przez iCloud, sesje PostgreSQL, trwałe zamówienia/rozmowy, outbox i preferencje mają API. Dowody i ograniczenia w jednym dokumencie. UI nie jest jeszcze podłączone; auth/passkey są zaimplementowane, produkcyjne webhooki pozostają planem.
+Jedno API prowadzi od własnych wycen slicera i danych odbiorcy przez ofertę dostawy do potwierdzonego zamówienia. Restart, timeout lub ponowione żądanie nie mogą zgubić płatności ani utworzyć drugiej należności.
 
-## Cel
+Działają już: auth klient/gość/admin, katalog i slicer, pakowanie, wyceny Furgonetki sandbox, Stripe test, zamówienia i outbox PostgreSQL, ochrona plików oraz Swagger. Oferty checkoutu i część stanu płatności są w RAM; brak webhooków. Obecna walidacja kontaktu jest podstawowa. B1–B8 i wcześniejsze dowody zostają w [checkpoincie](milestones/backend.md), [architekturze](ARCHITECTURE.md) i historii Git.
 
-Klient dodaje STL, STEP lub 3MF, wybiera materiał, kolor, jakość i ilość. Serwer wylicza cenę z wyniku rzeczywistego slicera. Prosty frontend korzysta z jednego API; kwota i dostępność zawsze należą do backendu.
+## Minimalna konstrukcja
 
-## Decyzje
+- Jeden proces Axum/Tokio i PostgreSQL/SQLx. Bez Redis, RabbitMQ, mikroserwisów ani nowego frameworka zadań.
+- `api`: HTTP, uprawnienia i koordynacja. `storage`: migracje, jawne SQL i transakcje. `pricing`/`packing` nadal liczą cenę i paczki.
+- Wypełnij istniejące `payments` i `shipping` tylko konkretnymi adapterami Stripe/Furgonetki wyjętymi z checkout.rs, gdy są potrzebne w etapach C3/C4. Bez dodatkowych crate’ów, generycznych repozytoriów i warstwy usług dla każdej funkcji.
+- Typowane request/response i błędy w OpenAPI; kwoty całkowite w groszach, waluta PLN. Dozwolone pola i rozmiary jawne; nie przenoś dowolnego JSON klienta do dostawców.
+- Docelowo jeden nowy flow: Stripe Hosted Checkout. Istniejące PaymentIntent/Checkout zachowują zgodność przez cienkie adaptery do wspólnej kontroli płatności; nie rozwijamy osobnego silnika dla każdego. Usunięcie starych tras dopiero po migracji ich klientów.
 
-- Rust: `app → api → moduły`. `app` uruchamia serwer; `api` zbiera trasy, walidację i uprawnienia. Obliczenia pozostają w `geometry`, `slicer`, `pricing`, `packing`; SQL w `storage`. Bez mikroserwisów, Redis i brokera.
-- PostgreSQL + SQLx: materiały, kolory, konfiguracja cen i niezmienne wyniki wycen; trwała kolejka slicera z lease/retry i atomowym wynikiem. Prywatne modele/presety na dysku; w bazie identyfikatory i wersje. Nie odtwarzamy stanu z przeglądarki.
-- Źródło katalogu: lokalne Bambu Studio, snapshot w `backend/data/bambu/`. 49 materiałów i 314 kolorów. Import zachowuje własne ceny, magazyn i dopuszczenia; nie uznaje kosztu slicera za cenę netto PLN.
-- Sprzęt: Bambu Lab P1P, dysza hardened steel 0,4 mm. Profile deklarujące zgodność wymagają zatwierdzenia dla faktycznego ekstrudera/obudowy. Materiały podporowe nie są osobnym produktem.
-- Slicer: kontrolowany proces Bambu Studio, nasze profile po rozwiązaniu dziedziczenia i dołączeń; bez sieci i sekretów, z limitami czasu/pamięci/plików oraz ograniczoną równoległością. Ustawienia klienta i G-code nie sterują procesem.
-- Cena: przygotowanie + filament (także podpory/purge/odpady) + czas maszyny + energia + praca + straty, następnie dodatnia marża i podatki. Kwoty w groszach, jawne zaokrąglanie; dostawa/opakowania oddzielnie, bez podwójnego naliczania. Parametry testowe nie dowodzą rentowności.
-- Ilość: rzeczywiste rozmieszczenie na płytach i kolejne partie; nie mnożymy całej opłaty przygotowania przez sztuki. Do potwierdzenia partii dopuszczalny jest jawnie ostrożny wariant, bez udawania optymalizacji.
-- Brak profilu, ceny zakupu, zgodności lub wyniku slicera oznacza ręczną ocenę, nigdy wymyśloną cenę. Wersja modelu, profili i kosztów należy do zapisanego wyniku.
+## Dane odbiorcy i dostawa
 
-## Kolejność
+Jeden zapisany obiekt: imię i nazwisko, email, telefon, kraj PL, ulica z numerem, opcjonalny lokal, kod pocztowy i miasto. Opcjonalnie osobne dane firmy do faktury; samo zapisanie NIP nie wystawia faktury. Początkowo tylko dostawy krajowe, kurier/punkt odbioru/odbiór osobisty.
 
-[B1–B5 i kryteria](MILESTONES.md). Najpierw działający backend i jeden rzeczywisty przebieg PLA, potem kolejne zatwierdzone materiały, admin i checkout. Nie przepisujemy teraz frontendu.
+Normalizuj odstępy, kod `NN-NNN` i telefon do jednoznacznego formatu. Waliduj długości, znaki sterujące i wymagane pola zależnie od metody. Odbiór osobisty nie wymaga adresu; punkt odbioru wymaga kontaktu i zweryfikowanego ID punktu, a kod miejscowości służy do wyszukania. Adres punktu pobiera backend. Brak Google/geokodera i książki adresowej na tym etapie; poprawny format nie dowodzi, że adres fizycznie istnieje.
 
-Dalszy zakres: podłączenie UI do backendu kont/zamówień/rozmów, publiczne wdrożenie auth i produkcyjne webhooki Stripe, logi/metryki Grafany i publiczne wdrożenie. Istniejące sandboxy Stripe/Furgonetki zachowujemy; nie są gotową sprzedażą produkcyjną.
+Wyszukiwanie punktów i wycena używają danych zapisanego szkicu. Ten sam adres trafia do Furgonetki i snapshotu zamówienia; Stripe nie zbiera ponownie ani nie zmienia adresu dostawy. Zmiana części, ilości, adresu lub punktu unieważnia dotychczasową ofertę. Po rozpoczęciu płatności szkic jest zamrożony.
 
-## Sposób pracy
+Pakowanie korzysta z istniejącego algorytmu oraz serwerowych wymiarów/masy; klient nie podaje liczby paczek ani ich parametrów. Oferty mają pełny koszt wszystkich paczek i opakowań, bez podwójnego naliczenia. Najtańsza poprawna oferta może być oznaczona jako rekomendowana. Przekroczenie limitów lub brak danych → ręczna wycena; bez fikcyjnej ceny palety. Limity przewoźnika potwierdza adapter Furgonetki.
 
-KISS, minimum kodu i zależności. Workerzy implementują niezależne moduły; główny agent integruje. Krótki build i sprawdzenie zmienionej funkcji, bez Astry i szerokich testów przy każdej zmianie. Nie omijamy izolacji, autoryzacji ani kontroli kwot. Stan i dowody: [checkpoint](milestones/backend.md).
+Błędy: `422` + `field_errors` dla konkretnych pól; poprawne dane bez dostępnej usługi → `manual_required` z krótką przyczyną; timeout/awaria dostawcy → `503` i możliwość ponowienia. Nie zamieniaj awarii na „błędny adres”, brak ofert ani darmową dostawę.
 
-## Potwierdzenie POC
+## Proponowany kontrakt HTTP
 
-W poprzednim przebiegu potwierdzono katalog/panel operatora, prywatne modele, slicer, koszt wielu części z jednym przygotowaniem oraz konfigurator → adres Stripe → podsumowanie → Stripe Checkout test. Furgonetka zwróciła trzy oferty; testowa płatność miała kwotę serwera. Build, wybrane testy i desktop/mobile PASS. Bez realnej opłaty/nadania. Po zmianie auth panel wymaga podłączenia nowego logowania. Nie potwierdzono kalibracji, produkcyjnych zamówień/webhooków ani publicznego bezpieczeństwa. Dowody i ograniczenia: [checkpoint](milestones/backend.md).
+| Operacja | Zachowanie |
+| --- | --- |
+| `POST /api/checkout/drafts` | Tworzy własny szkic z ID snapshotów części, odbiorcą, opcjonalnymi danymi faktury i metodą dostawy. Zwraca ID, wersję i braki wymagające uzupełnienia. |
+| `GET /api/checkout/drafts/{id}` | Odczyt własnego szkicu, ofert i stanu płatności po restarcie. |
+| `PATCH /api/checkout/drafts/{id}` | Aktualizuje dane z oczekiwaną wersją; konflikt → 409. Po rozpoczęciu płatności edycja zablokowana. |
+| `GET /api/checkout/drafts/{id}/points` | Ograniczona lista punktów dla zapisanego kodu/miejscowości; nie obiecujemy sortowania po odległości bez danych geograficznych. |
+| `POST /api/checkout/drafts/{id}/quote` | Ponownie sprawdza snapshoty/stan materiałów; zapisuje paczki, oferty, kwoty i termin ważności. |
+| `POST /api/checkout/drafts/{id}/payment` | Wymaga wersji, ID oferty i `Idempotency-Key`; zwraca URL Stripe albo stan oczekiwania na rozstrzygnięcie. |
+| `POST /api/webhooks/stripe` | Odbiera podpisane zdarzenia Stripe bez sesji użytkownika. |
 
-## Auth — 2026-10-23
+To kontrakt planowany; C1 doprecyzuje DTO i mapowanie obecnych tras. Nie dodawaj osobnego CRUD adresów. Szkic nie jest jeszcze zamówieniem. Link powrotu ze Stripe pokazuje status; nie potwierdza zapłaty.
 
-Klient: email; admin: email + passkey. Sesje PostgreSQL, CSRF/Origin, cookie HTTPS, lokalny bootstrap/recovery i własność konta działają. Stary Bearer/operator-cookie usunięte. Dowody: [auth](auth.md). Frontend wymaga podłączenia; fizyczny klucz i publiczny TLS nie były testowane.
+## PostgreSQL i płatność
 
-## Kolejka slicera — 2026-10-23
+Minimalnie trzy nowe tabele: `checkout_drafts` (właściciel, wersja, dane/snapshot oferty i ważność), `payment_attempts` (powiązania, kwota, stan, stały klucz Stripe, ID sesji, retry/lease) i `stripe_events` (unikalne ID zdarzenia, potrzebne dane, stan przetworzenia/retry). Rozszerz istniejące `orders` o powiązanie próby i stany przed uzyskaniem ID Stripe; nie twórz drugiej tabeli zamówień. Pola używane do blokad, wyszukiwania i ograniczeń mają własne kolumny; ograniczone JSONB tylko dla snapshotów. Unikalność w bazie: jedna aktywna próba na szkic i jedno zamówienie na próbę. Rozdziel stan płatności od statusu produkcji.
 
-Lokalne pliki + trwała kolejka PostgreSQL, HTTP 202/polling, osobny worker opcjonalny, ochrona modeli przed sprzątaniem. Restart i prawdziwy slicer/checkout sprawdzone na osobnej bazie. Kontrakt i limity: [kolejka](slicer-queue.md).
+Przed siecią, w krótkiej transakcji: sprawdź właściciela/wersję/ofertę, zamroź kwotę i dane, utwórz oczekujące zamówienie, próbę oraz ochronę plików. Następnie wywołaj Stripe poza transakcją/blokadą, zawsze z zapisanym kluczem i identycznymi parametrami. Zapisz wynik. Równoległe żądania i retry muszą wskazać tę samą próbę. Ten sam klucz klienta z inną treścią → 409. Zakres klucza obejmuje właściciela i operację.
 
-## Podglądy modeli — 2026-10-23
+Timeout oznacza `unknown`, nie odmowę zapłaty. Nie twórz wtedy nowej próby. Krótki worker Tokio z retry/lease PostgreSQL uzgadnia nierozstrzygnięte próby i zdarzenia. Po przekroczeniu okna idempotencji Stripe nie powtarzaj w ciemno tworzenia sesji: odczyt znanego obiektu, korelacja webhooka lub ręczne rozstrzygnięcie. Zmiana sposobu dostawy wymaga najpierw potwierdzonego zamknięcia poprzedniej płatności.
 
-Backend generuje i prywatnie udostępnia GLB dla STL/STEP/3MF, uwzględnia rozmiar w limitach. Upload/odczyt/restart oraz kontrola błędów sprawdzone w izolowanym środowisku. Viewer na froncie do podłączenia; kontrakt w [README backendu](../backend/README.md#podgląd-glb).
+Webhook: limit body, oryginalne bajty, podpis Stripe i tolerancja czasu przez sprawdzoną bibliotekę; sekret w SOPS. Tylko ta trasa jest wyłączona z cookie/CSRF/Origin, pozostałe zachowują ochronę. `2xx` dopiero po trwałym przyjęciu; duplikat jest bezpieczny, błąd DB daje retry. Worker sprawdza tryb test/live, powiązanie obiektu i zamówienia, kwotę, walutę oraz faktyczny status płatności. Nie polega na kolejności zdarzeń ani samym `checkout.session.completed`. Obsługuje także płatności opóźnione, wygaśnięcie i niepowodzenie. `paid` i outbox emaila zapisuje raz, w jednej transakcji; starsze zdarzenie nie cofa zapłaty.
 
-## Retencja zamówień — 2026-10-23
+Nie zwalniaj plików tylko dlatego, że minął TTL oferty. Próba niepewna lub płatność w przetwarzaniu nadal chronią pliki. Zwolnienie po potwierdzonym zamknięciu możliwości zapłaty i sprawdzeniu innych zamówień; opłacone zachowują obecną retencję. Szkice bez prób wygasają po 24 h; ważność oferty nie przekracza ważności snapshotów slicera. Rekordy deduplikacji i zdarzenia mają osobną, jawną retencję, dłuższą od okna powtórzeń dostawcy.
 
-Ochrona plików przed Stripe, podczas niepewnej płatności/realizacji i 90 dni po completed. Trwałe powiązania snapshotów, pobieranie klienta/admina niezależne od roboczego TTL. Sprawdzone: PostgreSQL i rzeczywiste HTTP/cleanup/restart. Następnie trwały checkout i webhooki, które rozstrzygną też porzucone próby płatności. [Kontrakt](../backend/README.md#pliki-zamówień).
+## Granice i weryfikacja
+
+Używaj obecnych kont/gości, kontroli własności, CSRF/Origin i limitów. Dodaj limity liczby szkiców, prób, punktów i wywołań dostawców; ograniczony czas/rozmiar odpowiedzi HTTP. URL powrotu z konfiguracji serwera. Loguj ID i rezultat, bez adresów, tokenów, podpisów ani sekretów Stripe. Nie przechowuj danych kart.
+
+Krótkie testy istotnych awarii w każdym etapie; na końcu jeden przebieg sandbox przez HTTP/CLI, bez implementacji frontendu. Stripe Hosted Checkout można wykorzystać do ręcznego zakończenia płatności testowej. Bez produkcyjnych obciążeń, nadawania paczek, refundacji, IMAP, panelu admina i wdrożenia publicznego. Brak nowej integracji Grafany w tym feature.
+
+Potrzebne: lokalny PostgreSQL, istniejące testowe Stripe/Furgonetka, poprawne dane nadawcy, jawne ceny i aktywny materiał. Nowy sekret webhooka oraz Stripe CLI do przekazywania zdarzeń na localhost; brak dostępu może wymagać logowania właściciela. Wpisy `.env` synchronizuje SOPS przed commitem. Produkcyjne HTTPS, konto Stripe/live, zasady retencji i kalibracja pakowania wymagają osobnego etapu.
+
+Źródła kontraktu: [webhooki Stripe](https://docs.stripe.com/webhooks), [idempotencja](https://docs.stripe.com/api/idempotent_requests), [potwierdzanie Checkout](https://docs.stripe.com/payments/checkout/fulfill-orders). Szczegóły zdarzeń i okna retry potwierdź przy implementacji dla przypiętej wersji API.

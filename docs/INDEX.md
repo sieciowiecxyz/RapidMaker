@@ -1,7 +1,13 @@
 # Dokumentacja Rapidmaker
 
-W tym katalogu: [PLAN.md — Cel i decyzje](PLAN.md), zakres i stan; MILESTONES.md — kryteria etapów; ARCHITECTURE.md — stack i granice. Czytaj tylko potrzebne pliki. Dawne briefy, w tym GOALS.md, są w historii Git; ich skrót jest w PLAN.md. Stare statusy nie są dowodami działania.
+Aktualny zakres: trwały checkout, adres i dostawa — wyłącznie backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
+- [Plan checkoutu](PLAN.md)
+  - przeczytaj gdy: projektujesz adres, dostawę i płatność.
+  - opis: minimalny backend, dane i bezpieczeństwo.
+- [Milestones checkoutu](MILESTONES.md)
+  - przeczytaj gdy: wdrażasz kolejny etap backendu.
+  - opis: C1–C6 i krótkie kryteria ukończenia.
 - [Kontekst](context.md)
   - przeczytaj gdy: zapisujesz decyzję lub wznawiasz pracę.
   - opis: źródła prawdy i krótki zapis dowodów.

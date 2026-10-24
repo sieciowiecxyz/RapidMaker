@@ -1,68 +1,51 @@
-# Milestones — backend Rapidmaker
+# Milestones — stabilny checkout backend
 
-Stan 2026-10-23: B1–B5 PASS jako lokalny POC; dowody i ograniczenia w [checkpoincie](milestones/backend.md). Kalibracja przed sprzedażą pozostaje wymagana.
+C1–C6: TODO. Tylko Rust/PostgreSQL/API; bez strony. Decyzje i kontrakt: [PLAN.md](PLAN.md). B1–B8 pozostają ukończonym lokalnym POC; dowody w [checkpoincie](milestones/backend.md).
 
-Kolejność B1 → B2 → B3 → B4 → B5. Każdy etap kończy krótki check działania, bez dodatkowego review/testujących agentów. Niepotwierdzone kryterium pozostaje otwarte.
+## C1 — Adres i kontrakt
 
-## B1 — Osobny crate API
+- Typowane DTO szkicu, odbiorcy, opcjonalnej faktury, dostawy i błędów; jeden obiekt odbiorcy dla dalszego procesu.
+- Walidacja PL, normalizacja i wymagania zależne od kuriera/punktu/odbioru. Pusty formularz może być szkicem, ale nie płatnym checkoutem.
+- Ustal zgodność istniejących tras, mapowanie stanów oraz wersję Stripe API. Aktualizuj OpenAPI wraz z implementacją; nie publikuj niezaimplementowanych tras.
+- Gotowe gdy: krótki test poprawnych danych i błędów pól, odbioru bez adresu oraz odrzucenia nadmiarowych/za dużych danych. Nie uznaj składni za potwierdzenie istnienia adresu.
 
-- Wydziel `app/src/api` do `crates/api`; `app` tylko konfiguracja i start serwera/workera.
-- Zachowaj endpointy, walidację i izolację analiz. Moduły nie zależą od API.
-- Gotowe gdy: build i obecne testy zmienionego API przechodzą; nie znikają zabezpieczenia.
+## C2 — Trwały szkic i snapshot
 
-## B2 — PostgreSQL i katalog Bambu
+- Migracje `checkout_drafts`, `payment_attempts`, `stripe_events` i potrzebne rozszerzenie `orders`; bez drugiego modelu zamówień.
+- Zapis/odczyt/zmiana własnego szkicu, kontrola wersji, limity i TTL. Claim gość → konto przenosi także szkice bez utraty powiązań. Nigdy nie uprawnia cudzy identyfikator.
+- Zmiana danych unieważnia ofertę; brak ważnej własnej wyceny lub dostępnego materiału blokuje płatność. Uwzględnij dotychczasowe zamówienia i holdy w migracji.
+- Gotowe gdy: dane przetrwają restart; obcy dostęp jest odrzucony; dwie równoczesne zmiany nie nadpisują się; migracja działa na pustej bazie i istniejącym schemacie.
 
-- SQLx i migracje: materiały, kolory, zapis wycen. Import lokalnego snapshotu z wersją źródła.
-- Cena zakupu netto PLN/kg, dostępność kolorów i dopuszczenie produkcyjne są danymi operatora; ponowny import ich nie nadpisuje.
-- Publiczny odczyt katalogu bez danych prywatnych; zapis admina dopiero z autoryzacją backendu.
-- Gotowe gdy: migracja od zera i powtórny import działają; katalog ma 49 materiałów/314 kolorów, dane przetrwają nowe połączenie.
+## C3 — Dostawa z zapisanego adresu
 
-## B3 — Rzeczywisty slicer
+- Podłącz punkty i oferty Furgonetki do szkicu; adres punktu weryfikuje dostawca. Odbiór osobisty działa bez Furgonetki.
+- Użyj istniejącego pakowania, danych serwera oraz kosztu całej przesyłki wielopaczkowej. Oferta zawiera metodę, zweryfikowany punkt, paczki, koszt i ważność.
+- Rozdziel błędne pola, brak usługi i niedostępność dostawcy. Za duże/niewycenialne zamówienie kieruj do ręcznej wyceny bez uruchamiania płatności.
+- Gotowe gdy: sandbox zwraca ofertę i punkty dla zapisanych danych; wybrany punkt odpowiada usłudze; przypadki 1/1000 sztuk nie korzystają ze stałej ceny jednej paczki; timeout nie daje pustej ani darmowej oferty. Wystarczy jeden rzeczywisty przebieg dostawcy i kilka lokalnych regresji.
 
-- P1P hardened steel 0,4 mm, zatwierdzony profil materiału i druku; najpierw PLA Basic/standard.
-- Rozwiąż `inherits`/`include`; kontrolowany proces bez sekretów i sieci, z timeoutem i ograniczeniami. Odrzuć obce profile/G-code.
-- Odczytaj czas i masę z rzeczywistego wyniku. Błąd oznacza brak automatycznej ceny. Przeanalizowany model pozostaje prywatny.
-- Gotowe gdy: prawdziwy model daje dodatni czas i gramy; uszkodzony plik i niedozwolony profil nie dają ceny.
+## C4 — Jedna trwała próba Stripe
 
-## B4 — Automatyczna wycena
+- Przed siecią zapisz oczekujące zamówienie, snapshot kwoty/dostawy, próbę, idempotency key i hold plików. Stripe Hosted Checkout otrzymuje wyłącznie dane serwera.
+- Bez globalnego mutexa ani transakcji DB obejmującej HTTP. Unikalność/lease w PostgreSQL; ponowienie wraca do tej samej próby. Obecne wejścia PaymentIntent/Checkout respektują tę samą blokadę.
+- Powrót, anulowanie i status nie ustawiają samodzielnie `paid`. Timeout tworzenia zachowuje stan niepewny i ochronę plików.
+- Gotowe gdy: sandbox tworzy sesję z dokładną kwotą/PLN; równoległe żądania, restart i utrata odpowiedzi nie tworzą drugiej płatności; zmieniony payload z tym samym kluczem daje 409. Zły właściciel, cena klienta i wygasła oferta są odrzucane.
 
-- Czysty `pricing` liczy koszty z pomiarów slicera i jawnego cennika; wynik API ma rozbicie netto/VAT/brutto i wersje danych.
-- Zweryfikowane ustawienia jakości/wytrzymałości wpływają na slicer. Nie oferuj opcji, których silnik nie stosuje.
-- Uwzględnij ilość, przygotowanie i partie. Cache po modelu/ustawieniach/profilach; ograniczony rozmiar i czas życia. Zapisz niezmienny wynik w PostgreSQL.
-- Gotowe gdy: API wycenia prawdziwy model; większe zużycie podnosi koszt; brak ceny/profilu wymusza ocenę ręczną. Sprawdź 1/2/10/100 sztuk i pokaż ograniczenia szacowania partii.
-- Przed sprzedażą Kuba zatwierdza rzeczywiste ceny zakupu, koszty pracy/energii/maszyny, marżę i porównanie z pomiarami wydruków.
+## C5 — Webhook i rozstrzyganie awarii
 
-## B5 — Admin, frontend i checkout
+- Weryfikuj podpis na surowym body; zapisuj zdarzenie przed `2xx`. Wąski wyjątek od ochrony browserowej wyłącznie dla webhooka.
+- Worker z ograniczonym retry/lease przetwarza zdarzenia i uzgadnia niepewne próby. Waliduje powiązanie, tryb, kwotę/walutę i zapłatę; deduplikacja po ID zdarzenia oraz przejściu próby.
+- `paid` + email atomowo; duplikat/zmieniona kolejność nie cofają stanu i nie dodają maila. Obsłuż płatność opóźnioną, wygaśnięcie, błąd oraz webhook przychodzący przed zapisem odpowiedzi Stripe.
+- Nie ponawiaj tworzenia po wygaśnięciu okna idempotencji bez rozstrzygnięcia. Hold zwalniaj tylko dla potwierdzonego zakończenia płatności; `unknown` pozostaje chronione i widoczne operatorowi przez API/CLI.
+- Gotowe gdy: zły/stary podpis odrzucony; ponowienie i kolejność zdarzeń bez podwójnych skutków; awaria DB nie potwierdza przyjęcia; restart workera wznawia pracę. Test granicy dotyczy też holdów i braku fałszywego `paid`.
 
-- Admin dodaje/edytuje materiały, kolory, koszty i dopuszczenia przez autoryzowane API. Import nie niszczy zmian operatora.
-- Prywatne oryginały/siatki i własność są zapisane; nowa wycena używa ID modelu. Konfigurator pobiera rzeczywisty katalog i wynik wyceny; pokazuje loading, błąd i ręczną ocenę. Zachowaj minimalistyczny wygląd.
-- Pakowanie/Furgonetka korzystają z właściwej masy/wymiarów; Stripe otrzymuje wyłącznie ważną kwotę serwerową. Zmiana koszyka unieważnia ofertę.
-- Gotowe gdy: jeden przebieg konfiguracja → wycena → sandbox checkout działa, a obcy zapis admina jest odrzucony. Krótki przegląd zmienionych ekranów na desktop/mobile.
+## C6 — Jeden pełny przebieg i zamknięcie
 
-## Później
+- HTTP/CLI: własny model i wycena → szkic/adres → dostawa → Stripe test → webhook → trwałe `paid` i pojedynczy wpis outbox. Email testowy wyłącznie do void@sieciowiec.xyz.
+- Sprawdź odczyt po restarcie i jedną próbę obcego dostępu. Swagger opisuje rzeczywiste DTO/błędy; krótka instrukcja uruchamiania i odzyskiwania niepewnej płatności.
+- Gotowe gdy: zakresowe fmt/Clippy/build/testy PASS i dowód sandboxa. Brak klucza/webhooka oznacz NOT RUN, nie PASS. Istniejące podatności zależności raportuj oddzielnie; lokalny sukces nie oznacza gotowości produkcyjnej.
 
-[Email E1–E4](email.md): PASS jako backend lokalny — SMTP, kody i sesje klienta, outbox, preferencje, trwałe zamówienia i rozmowy. Kryteria, dowody oraz granice przejścia do produkcji w podlinkowanym planie. UI pozostaje do podłączenia.
+## Sposób pracy i blokery
 
-Podłączenie paneli do nowych API, publiczne wdrożenie auth i produkcyjne webhooki płatności, IMAP/email → chat oraz logi/metryki Grafany. Publiczne uruchomienie wymaga osobnego przygotowania; obecne środowisko pozostaje lokalnym POC.
+Małe commity po etapie; krótki test rzeczywistego ryzyka, bez Astry i testujących subagentów. Rust LOC mierz przed/po z podaniem zakresu. Nie zmieniaj frontendu; migracja jego adapterów jest osobną pracą. Nie nadawaj przesyłek ani nie uruchamiaj Stripe live.
 
-Auth backend PASS: klient email, admin passkey, trwałe sesje, HTTPS cookie i własność modeli/wycen/zamówień. Weryfikacja: Rust, PostgreSQL, Chromium z wirtualnym kluczem. [Kontrakt i bootstrap](auth.md).
-
-## B6 — Trwała kolejka slicera: PASS lokalnie
-
-- POST zapisuje zadanie; właściciel pobiera status/wynik, frontend odpytuje API.
-- Lease/CAS, retry do 3 prób, deduplikacja i limity PostgreSQL; wynik i snapshot atomowe.
-- Model aktywnego zadania chroniony przed sprzątaniem; claim przenosi zadanie.
-- Potwierdzone: restart API i zabicie/wznowienie workera z rzeczywistym Bambu oraz checkout z jedną wyceną. [Kontrakt i granice](slicer-queue.md).
-
-## B7 — Backend podglądów GLB: PASS lokalnie
-
-- Jeden odczyt STL/STEP/3MF w sandboxie daje siatkę produkcyjną i samodzielny GLB w metrach/Y-up.
-- Chroniony endpoint, preview_url w metadanych, limit 25 MiB i rozliczanie miejsca.
-- Sprawdzone: trzy formaty, restart, obca własność/wygaśnięcie, uszkodzenie/symlink i błędny upload. Frontend GLB do podłączenia.
-
-## B8 — Retencja plików zamówień: PASS lokalnie
-
-- Trwała ochrona własnych snapshotów przed wywołaniem Stripe; brak hold blokuje utworzenie zamówienia.
-- Niepewna płatność/realizacja chronią oryginał/STL/GLB; completed ustawia 90 dni. Inne zamówienie może nadal chronić model.
-- Autoryzowane pobranie klienta/admina po roboczych 24 h; snapshot/nazwa zostają po fizycznym sprzątaniu.
-- PostgreSQL i HTTP: współdzielenie modelu, granice dostępu, restart, zakończenie/retencja/cleanup PASS. Nie wykonywano płatności ani nadania. Webhooki i rozstrzyganie porzuconych płatności pozostają następnym etapem.
+Sekret webhooka/Stripe CLI mogą wymagać autoryzacji właściciela. Brak danych nadawcy, aktywnych usług sandbox, cen lub materiałów blokuje odpowiedni test integracyjny, ale nie kontrakt, migracje i lokalne testy awarii. Obsługa zwrotów, etykiety i publiczne wdrożenie pozostają poza C1–C6.
