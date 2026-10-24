@@ -107,7 +107,7 @@ impl App {
     }
 }
 #[derive(Serialize, utoipa::ToSchema)]
-struct Problem {
+pub(super) struct Problem {
     code: String,
     message: String,
     field_errors: BTreeMap<String, String>,
@@ -793,6 +793,7 @@ pub fn router(
         .routes(routes!(quote))
         .routes(routes!(payment))
         .merge(super::checkout_legacy::router())
+        .merge(super::refunds::router())
         .with_state(app.clone());
     let webhook = OpenApiRouter::new()
         .routes(routes!(super::checkout_worker::webhook))

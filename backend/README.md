@@ -91,6 +91,8 @@ Checkout ma trwały szkic, ofertę i próbę płatności w PostgreSQL. Przed Str
 
 ## Spis API
 
+Zwroty Stripe test: `POST /api/admin/orders/{id}/refunds` z `request_id` UUID i `amount_grosze`; `GET` pod tym samym adresem zwraca statusy. Admin/passkey/CSRF, pełne lub częściowe kwoty, trwała idempotencja i uzgadnianie w tle. `202` oznacza zapis zlecenia. [Kontrakt](../docs/checkout.md#zwroty-płatności).
+
 Otwórz [Swagger UI](http://localhost:18430/api). Specyfikacja OpenAPI: `/api/openapi.json`. UI i zasoby są serwowane lokalnie przez Rust, bez CDN. `utoipa` generuje schematy z typów, a `utoipa-axum` rejestruje jednocześnie trasę i jej dokumentację przez `routes!`; nie utrzymujemy osobnego spisu endpointów.
 
 Rozwiń endpoint, aby zobaczyć parametry, body i odpowiedzi. `Try it out` wykonuje rzeczywiste żądanie. Logowanie ustawia cookie HttpOnly; dla operacji sesyjnych wymagających CSRF podaj token z `/api/auth/me` w `Authorize`. Admin wymaga również passkey. Używaj hosta `localhost` zgodnego z `AUTH_ORIGIN`. Jawne DTO mają wygenerowane schematy; odpowiedzi zwracane jako dynamiczny JSON pozostają ogólne.

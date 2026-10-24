@@ -49,4 +49,4 @@ Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checko
 
 - [Checkout — kontrakt](checkout.md)
   - przeczytaj gdy: używasz adresów, dostawy lub płatności.
-  - opis: trwały flow, webhooki i odzyskiwanie prób.
+  - opis: trwały checkout, webhooki, odzyskiwanie prób i zwroty płatności.

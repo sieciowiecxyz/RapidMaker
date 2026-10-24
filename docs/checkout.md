@@ -1,5 +1,16 @@
 # Checkout — kontrakt backendu
 
+## Zwroty płatności
+
+- `POST /api/admin/orders/{id}/refunds`: `{"request_id":"UUID","amount_grosze":500}`. Kwota brutto w groszach, np. 500 = 5 zł; pełny zwrot to pozostała opłacona kwota. Wymaga sesji admina po passkey oraz CSRF/Origin. `202` potwierdza zapis zlecenia, nie zwrot pieniędzy.
+- `GET /api/admin/orders/{id}/refunds`: lista i aktualne statusy, bez kluczy wewnętrznych. Powtarzaj ten sam `request_id` i kwotę przy utracie odpowiedzi. Nowy UUID oznacza kolejny zwrot; inna kwota dla użytego UUID daje `409`.
+- PostgreSQL blokuje zamówienie i sumuje zwroty wykonane oraz zarezerwowane. Nie można zwrócić więcej niż zapłacono. Limit: 100 zleceń/zamówienie i 30 nowych/admina/dobę. `paid_at` i powiązanie płatności są sprawdzane lokalnie, a worker przed mutacją ponownie weryfikuje opłaconą sesję/PaymentIntent w Stripe: ID, metadata, PLN, kwotę i tryb testowy.
+- Rejestr `payment_refunds` zachowuje autora, kwotę, powiązanie płatności i stały klucz Stripe. Lease 120 s; wspólny worker checkoutu odpytuje oczekujące zwroty co najmniej po 60 s. Nowe zlecenia podejmuje w kolejnych cyklach workera, bez HTTP do Stripe pod blokadą SQL.
+- `queued` — zapisany; `unknown` — niepewny wynik, kwota nadal zarezerwowana; `pending`/`requires_action` — status Stripe; `succeeded` — zwrot potwierdzony; `failed`/`canceled` — środki dostępne do ponownego zlecenia. `manual_review` wymaga sprawdzenia w Stripe i nadal rezerwuje kwotę. Ponowienia nie generują nowego klucza. Bez znanego ID zwrotu najwyżej 10 prób i tylko przed upływem 23 h; potem bez kolejnego POST. Znany zwrot ma do 1000 odczytów.
+- Zwrot jest niezależny od statusu produkcji: nie anuluje druku ani wysyłki, nie usuwa plików i nie zmienia opłaconej kwoty historycznej. Na razie bez formularza, emaila o zwrocie i automatycznego importu zwrotów zlecanych ręcznie w Dashboard Stripe. Stripe dodatkowo egzekwuje faktycznie dostępną kwotę. Obsługiwane wyłącznie klucze testowe; `requires_action` wymaga interwencji w Stripe.
+
+## Checkout i dostawa
+
 Rust/Axum + PostgreSQL; wyłącznie Stripe test i Furgonetka sandbox. Bez nowego frontendu. [Swagger](http://localhost:18430/api) pokazuje aktualne DTO i błędy.
 
 ## Przebieg

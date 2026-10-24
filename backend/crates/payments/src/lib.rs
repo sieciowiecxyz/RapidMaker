@@ -7,6 +7,9 @@ use serde_json::Value;
 use sha2::Sha256;
 use std::{fmt, time::Duration};
 
+mod refunds;
+pub use refunds::{ExpectedRefund, Refund};
+
 pub const API_VERSION: &str = "2026-09-30.endive";
 const API: &str = "https://api.stripe.com/v1";
 const MAX_RESPONSE: usize = 512 * 1024;

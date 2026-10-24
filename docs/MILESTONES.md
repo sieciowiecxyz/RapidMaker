@@ -89,3 +89,12 @@ Szczegóły i kryteria: [plan rozmów](chat-email.md).
 
 Dowody: 19 testów jednostkowych PASS; osobny test PostgreSQL (205 wpisów, własność, grupowanie, deduplikacja i rollback) oraz migracja starej historii PASS. Rzeczywisty SMTP/IMAP round-trip w obie strony, restart/replay i cofnięcie uprawnienia PASS, wyłącznie void@sieciowiec.xyz. Dwie role w jednej skrzynce; różne konta sprawdzone w DB. Fmt/Clippy/build PASS. Cargo audit: 9 wcześniejszych zgłoszeń, żadne nie dotyczy nowych pakietów IMAP/MIME. Szczegóły i granice: chat-email.md.
 - Pomiar tokei (zmienione i nowe źródła Rust): produkcja 1692 → 3034 (+1342), testy 510 → 931 (+421), bez pustych linii/komentarzy. 4 nowe moduły Rust i migracja 0014; nowe biblioteki transportu IMAP/MIME oraz istniejące zależności TLS/HMAC. Bez nowego crate’a aplikacji.
+
+
+## R1 — Zwroty Stripe — PASS lokalnie, 2026-10-24
+
+- Pełne/częściowe kwoty przez POST/GET `/api/admin/orders/{id}/refunds`; admin/passkey/CSRF, typy w OpenAPI. PostgreSQL: rezerwacja kwoty, UUID ponowienia, autor i trwałe lease/retry; wspólny worker checkoutu, bez nowej kolejki/crate’a.
+- PASS: 13 testów jednostkowych API/payments; osobny test PostgreSQL obejmuje współbieżność, idempotencję, sumę, restart/lease, niepewny wynik, błędne mapowanie i limit 23 h. Fmt, zakresowe Clippy `-D warnings`, locked build PASS.
+- PASS: świeża rzeczywista płatność Stripe test 1000 gr, zwrot 400 gr i pozostałych 600 gr; Stripe potwierdził pełne 1000 gr. Ponowienie i restart bez duplikatu, nadmiarowa kwota odrzucona, brak dostępu klienta/bez sesji/CSRF, prywatne pola poza JSON/OpenAPI. Sesja admina z fixture; fizycznego passkey nie testowano ponownie. Realny zwrot sprawdzono dla PaymentIntent; gałąź Hosted Checkout nie miała osobnego pełnego przebiegu.
+- Granice: tylko Stripe test, bez frontendu/emaili, automatycznego anulowania realizacji oraz importu ręcznych zwrotów Dashboard. Niepewne/wyczerpane operacje trafiają do `manual_review` z rezerwacją kwoty; wymagają uzgodnienia w Stripe. Bez nowych zależności.
+- LOC tokei, 8 zmienionych/nowych źródeł Rust: produkcja 2072 → 2652 (+580), testy 326 → 651 (+325); bez pustych linii i komentarzy. Trzy nowe moduły `refunds.rs` i migracja 0015. Kontrakt: [checkout](checkout.md#zwroty-płatności).

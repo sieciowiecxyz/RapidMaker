@@ -1,5 +1,7 @@
 # Backend Rust — checkout, dostawa i rozmowy
 
+R1 — zwroty płatności: wdrożone i sprawdzone lokalnie w Stripe test (400 + 600 = 1000 gr, ponowienie i restart bez duplikatu). Pełny lub częściowy zwrot przez API admina, bez frontendu. Rejestr PostgreSQL rezerwuje kwotę przed Stripe; wspólny worker płatności ponawia ten sam klucz i uzgadnia status. Wymagane: admin/passkey/CSRF, potwierdzona płatność, brak nadmiarowego lub podwójnego zwrotu. Zwrot nie zmienia statusu produkcji. Kontrakt i granice: [checkout](checkout.md#zwroty-płatności).
+
 Status: P1 (warianty pakowania i ceny dostawy) oraz C1–C6 wdrożone i sprawdzone lokalnie w sandboxach; bez Stripe live/publicznego wdrożenia. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
 
 Rozmowy przez stronę i email: [CH0–CH4 PASS lokalnie](chat-email.md). Poniższy checkout oraz P1/P2 są wdrożone.

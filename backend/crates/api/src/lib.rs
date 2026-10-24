@@ -14,6 +14,7 @@ mod orders;
 mod packing;
 mod passkeys;
 mod quotes;
+mod refunds;
 mod slice_worker;
 
 pub use checkout_worker::operator_status as checkout_operator;

@@ -34,6 +34,7 @@ impl CheckoutWorker {
                         Err(_) => eprintln!("event=payment_claim_failed"),
                         _ => {}
                     }
+                    super::refunds::process_next(&app).await;
                 }
                 tokio::select! {_=tokio::time::sleep(Duration::from_secs(3))=>{},_=receiver.changed()=>break}
             }
