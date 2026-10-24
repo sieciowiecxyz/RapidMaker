@@ -155,3 +155,13 @@ Godziny kopiuj z dostępnej propozycji wspólnej dla wszystkich wybranych przesy
 ### Logi
 
 Backend Rust emituje JSON na stderr, domyślnie `LOG_LEVEL=info`. Udane odczyty i szczegóły dostawców: `debug`; błędy pozostają widoczne na poziomie domyślnym. Każda odpowiedź HTTP ma serwerowy `x-request-id`; logi mają szablon trasy i kontekst zadania/zamówienia. Bez sekretów, body, adresów, treści wiadomości i surowych błędów. Stdout CLI/workera pozostaje bez zmian. [Konfiguracja i granice](../docs/logging.md).
+
+### Wielu przewoźników — sandbox
+
+- Kurier: DPD, DHL, InPost, GLS, UPS i FedEx.
+- Automaty: Paczkomaty InPost, ORLEN Paczka, DPD i DHL BOX. API zwraca identyfikator punktu ze wskazaniem sieci; przekaż go bez zmian jako `delivery.point_id`. Stare kody InPost nadal działają.
+- Dla ORLEN ustaw w lokalnym `.env` `FURGONETKA_SENDER_POINTS_JSON='{"orlen":"KOD_PUNKTU_NADANIA"}'`. To punkt nadawcy z mapy Furgonetki, oddzielny od punktu klienta. Launcher przekazuje go do Rust. ORLEN może zwrócić pusty kod pocztowy punktu; identyfikację potwierdza API po jego ID.
+- Cena sumuje wszystkie zlecenia: automaty i kurier UPS/InPost po jednym kartonie, DPD/DHL/GLS/FedEx do 15; ograniczenia sprawdza Furgonetka. Powtarzalne paczki nie mnożą identycznych wywołań API. Limit 20 obliczeń ceny/30 walidacji/30 s; przekroczenie daje ręczną wycenę.
+- Zgody usług zostały zaakceptowane w sandboxie za zgodą właściciela, bez marketingu. Kod nie akceptuje regulaminów. Produkcja wymaga osobnej konfiguracji i zgód; ceny sandboxa nie są cennikiem produkcyjnym.
+
+Sprawdzono rzeczywisty adapter Rust: sześciu kurierów i cztery sieci automatów, po jednym i dwóch kartonach 1 kg; wycena, walidacja i zgodność sum checkoutu z przygotowaniem nadania. Nowych nadań ani podjazdów dla tych sieci nie wykonano. [Dowody](../docs/MILESTONES.md#l4--wielu-przewoźników--pass-sandbox-2026-10-24).

@@ -43,10 +43,16 @@ impl App {
             std::env::var("FURGONETKA_SANDBOX_TOKEN").ok(),
             std::env::var("FURGONETKA_SENDER_JSON").ok(),
         ) {
-            (Some(token), Some(sender)) if !token.is_empty() => Some(
-                Sandbox::new(token, serde_json::from_str(&sender)?)
-                    .map_err(|_| "Invalid shipping configuration")?,
-            ),
+            (Some(token), Some(sender)) if !token.is_empty() => {
+                let points =
+                    std::env::var("FURGONETKA_SENDER_POINTS_JSON").unwrap_or_else(|_| "{}".into());
+                let points = serde_json::from_str(&points)?;
+                Some(
+                    Sandbox::new(token, serde_json::from_str(&sender)?)
+                        .and_then(|api| api.with_sender_points(points))
+                        .map_err(|_| "Invalid shipping configuration")?,
+                )
+            }
             _ => None,
         };
         let origin =

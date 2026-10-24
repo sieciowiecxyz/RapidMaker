@@ -147,6 +147,7 @@ pub struct PointAddress {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Point {
+    /// Opaque selection ID; InPost keeps its legacy code, other networks use `carrier:code`.
     pub code: String,
     pub name: String,
     pub address: PointAddress,
@@ -196,6 +197,7 @@ pub struct Sandbox {
     client: Client,
     token: String,
     sender: Value,
+    sender_points: Value,
     services: Arc<ServicesCache>,
     quotes: Arc<QuoteCache>,
     quote_slots: Arc<Semaphore>,
@@ -220,10 +222,42 @@ impl Sandbox {
             client,
             token,
             sender,
+            sender_points: json!({}),
             services: Arc::default(),
             quotes: Arc::default(),
             quote_slots: Arc::new(Semaphore::new(4)),
         })
+    }
+    /// Optional sender drop-off points, keyed by carrier; never use customer point IDs here.
+    pub fn with_sender_points(mut self, points: Value) -> Result<Self, Error> {
+        let entries = points.as_object().ok_or_else(unavailable)?;
+        if entries.len() > address::POINT_CARRIERS.len()
+            || entries.iter().any(|(carrier, value)| {
+                !address::POINT_CARRIERS.contains(&carrier.as_str())
+                    || !value.as_str().is_some_and(address::raw_point_id)
+            })
+        {
+            return Err(unavailable());
+        }
+        self.sender_points = points;
+        self.quotes = Arc::default();
+        Ok(self)
+    }
+    fn pickup_for(&self, carrier: &str) -> Result<Value, Error> {
+        let mut pickup = self.sender.clone();
+        // A legacy shared point must never leak into another carrier's request.
+        pickup
+            .as_object_mut()
+            .ok_or_else(unavailable)?
+            .remove("point");
+        if let Some(point) = self.sender_points.get(carrier) {
+            pickup["point"] = point.clone();
+        } else if carrier == "orlen" {
+            return Err(Error::Unavailable(
+                "Operator musi skonfigurować punkt nadania ORLEN Paczka.".into(),
+            ));
+        }
+        Ok(pickup)
     }
     fn build_request(
         &self,
@@ -308,7 +342,7 @@ impl Sandbox {
         self.find_points(id, true)
             .await?
             .into_iter()
-            .find(|p| p.code == id)
+            .find(|p| address::point_parts(&p.code) == address::point_parts(id))
             .ok_or_else(|| {
                 Error::Validation(Validation::field(
                     "delivery.point_id",
@@ -317,15 +351,28 @@ impl Sandbox {
             })
     }
     async fn find_points(&self, query: &str, exact: bool) -> Result<Vec<Point>, Error> {
-        if !(2..=100).contains(&query.len()) || query.chars().any(char::is_control) {
+        if !((if exact { 1 } else { 2 })..=100).contains(&query.len())
+            || query.chars().any(char::is_control)
+        {
             return Err(Error::Validation(Validation::field(
                 "postal_code",
                 "Podaj kod pocztowy lub miejscowość do wyszukania punktów.",
             )));
         }
-        let mut filters = json!({"services":["inpost"],"point_types":["delivery_points"],"type":"parcel_machine","country_codes":["PL"],"limit":12});
+        let selected = if exact {
+            address::point_parts(query)
+        } else {
+            None
+        };
+        if exact && selected.is_none() {
+            return Err(unavailable());
+        }
+        let services = selected
+            .map(|(carrier, _)| vec![carrier])
+            .unwrap_or_else(|| address::POINT_CARRIERS.to_vec());
+        let mut filters = json!({"services":services,"point_types":["delivery_points"],"type":"parcel_machine","country_codes":["PL"],"limit":12});
         if exact {
-            filters["point_id"] = json!(query);
+            filters["point_id"] = json!(selected.ok_or_else(unavailable)?.1);
         }
         let postcode = query.len() == 6
             && query.as_bytes()[2] == b'-'
@@ -336,7 +383,7 @@ impl Sandbox {
         let location = if !exact && postcode {
             json!({"address":{"postcode":query,"country_code":"PL"},"points_max_distance":10})
         } else {
-            json!({"search_phrase":query})
+            json!({"search_phrase":selected.map_or(query, |(_, raw)| raw)})
         };
         let data = provider_json(
             self.request(
@@ -353,23 +400,34 @@ impl Sandbox {
         for point in points.iter().take(100) {
             if point["active"] != true
                 || point["is_delivery_point"] != true
-                || point["service"] != "inpost"
+                || !point["service"]
+                    .as_str()
+                    .is_some_and(|s| services.contains(&s))
+                || point
+                    .get("service_type")
+                    .is_some_and(|kind| !kind.is_null() && kind != "parcel_machine")
             {
                 continue;
             }
             let Some(code) = point["code"]
                 .as_str()
-                .filter(|id| address::valid_point_id(id))
+                .filter(|id| address::raw_point_id(id))
             else {
                 return Err(unavailable());
             };
-            if exact && code != query {
+            let carrier = point["service"].as_str().ok_or_else(unavailable)?;
+            if exact && selected != Some((carrier, code)) {
                 continue;
             }
             let field = |key: &str| {
+                // ORLEN's map omits postcodes; its verified point ID identifies the destination.
                 point["address"][key]
                     .as_str()
-                    .filter(|v| !v.is_empty() && v.len() <= 254 && !v.chars().any(char::is_control))
+                    .filter(|v| {
+                        (!v.is_empty() || (carrier == "orlen" && key == "postcode"))
+                            && v.len() <= 254
+                            && !v.chars().any(char::is_control)
+                    })
                     .map(str::to_owned)
                     .ok_or_else(unavailable)
             };
@@ -378,12 +436,19 @@ impl Sandbox {
                 continue;
             }
             result.push(Point {
-                code: code.into(),
-                name: point["name"]
-                    .as_str()
-                    .filter(|v| v.len() <= 254)
-                    .unwrap_or(code)
-                    .into(),
+                code: if carrier == "inpost" {
+                    code.into()
+                } else {
+                    format!("{carrier}:{code}")
+                },
+                name: format!(
+                    "{} · {}",
+                    carrier.to_uppercase(),
+                    point["name"]
+                        .as_str()
+                        .filter(|v| v.len() <= 254 && !v.chars().any(char::is_control))
+                        .unwrap_or(code)
+                ),
                 address: PointAddress {
                     street: field("street")?,
                     postcode: field("postcode")?,
@@ -439,6 +504,23 @@ impl Sandbox {
         recipient: &Recipient,
         choice: &DeliveryChoice,
     ) -> Result<(usize, Quote), Error> {
+        let selected_point = if choice.method == Method::Locker {
+            Some(
+                self.verify_point(choice.point_id.as_deref().ok_or_else(|| {
+                    Error::Validation(Validation::field(
+                        "delivery.point_id",
+                        "Wybierz punkt odbioru.",
+                    ))
+                })?)
+                .await?,
+            )
+        } else {
+            None
+        };
+        let point_carrier = selected_point
+            .as_ref()
+            .and_then(|p| address::point_parts(&p.code))
+            .map(|(carrier, _)| carrier);
         let data = self
             .services
             .get(async {
@@ -456,9 +538,9 @@ impl Sandbox {
             .filter_map(|service| {
                 let name = service["service"].as_str()?;
                 if if choice.method == Method::Locker {
-                    name != "inpost"
+                    Some(name) != point_carrier
                 } else {
-                    !["dpd", "dhl", "ups", "gls", "fedex"].contains(&name)
+                    !["dpd", "dhl", "ups", "gls", "fedex", "inpost"].contains(&name)
                 } {
                     return None;
                 }
@@ -477,26 +559,41 @@ impl Sandbox {
             format!("{} / {}", recipient.street, recipient.apartment)
         };
         let mut receiver = json!({"name":recipient.name,"email":recipient.email,"phone":recipient.phone,"street":street,"city":recipient.city,"country_code":"PL","postcode":recipient.postal_code});
-        let point = if choice.method == Method::Locker {
-            let point = self
-                .verify_point(choice.point_id.as_deref().ok_or_else(|| {
-                    Error::Validation(Validation::field(
-                        "delivery.point_id",
-                        "Wybierz punkt odbioru.",
-                    ))
-                })?)
-                .await?;
-            receiver["point"] = json!(point.code);
+        let point = selected_point;
+        if let Some(point) = &point {
+            receiver["point"] = json!(address::point_parts(&point.code).ok_or_else(unavailable)?.1);
             receiver["street"] = json!(point.address.street);
             receiver["city"] = json!(point.address.city);
             receiver["postcode"] = json!(point.address.postcode);
-            Some(point)
-        } else {
-            None
-        };
-        let mut packages = Vec::new();
+        }
+        // Share requests only across carriers with identical sender and consignment limits.
+        struct ServiceGroup {
+            pickup: Value,
+            size: usize,
+            services: Vec<(String, String)>,
+        }
+        let mut groups: Vec<ServiceGroup> = vec![];
+        for service in &services {
+            let pickup = self.pickup_for(&service.1)?;
+            let size = consignment_size(&service.1, choice.method);
+            if let Some(group) = groups
+                .iter_mut()
+                .find(|g| g.pickup == pickup && g.size == size)
+            {
+                group.services.push(service.clone());
+            } else {
+                groups.push(ServiceGroup {
+                    pickup,
+                    size,
+                    services: vec![service.clone()],
+                });
+            }
+        }
+        let mut packages = HashMap::new();
         let mut rates = Vec::new();
         let mut rejection = None;
+        let mut calculated: HashMap<String, Result<Value, Error>> = HashMap::new();
+        let mut calculations = 0;
         for (plan, packing) in plans.iter().enumerate() {
             let parcels = packing
                 .parcels
@@ -509,85 +606,163 @@ impl Sandbox {
                     })
                 })
                 .collect::<Vec<_>>();
-            let package = json!({"pickup":self.sender,"receiver":receiver,"service_id":provider_id(&services[0].0),"parcels":parcels});
-            let response = provider_json(self.request(reqwest::Method::POST,
-                "/packages/calculate-price", 2, Some(&json!({"package":package,
-                "services":{"service_id":services.iter().map(|(id,_)|provider_id(id)).collect::<Vec<_>>()}}))).await?).await;
-            packages.push(package);
-            let response = match response {
-                Ok(value) => value,
-                Err(Error::Validation(v)) => {
-                    rejection = Some(Error::Validation(v));
-                    continue;
-                }
-                Err(Error::NoService(_)) => continue,
-                Err(e) => return Err(e),
-            };
-            for row in response["services_prices"]
-                .as_array()
-                .ok_or_else(unavailable)?
+            for ServiceGroup {
+                pickup,
+                size,
+                services,
+            } in &groups
             {
-                if row["available"] != true {
-                    if let Some(error) = classify_rejection(row) {
-                        match error {
-                            Error::Unavailable(_) => return Err(error),
-                            _ => rejection = Some(error),
+                let chunks = unique_chunks(&parcels, *size);
+                let mut chunk_prices = vec![];
+                let mut bodies = vec![];
+                for (parcels, _) in &chunks {
+                    let package = json!({"pickup":pickup,"receiver":receiver,"service_id":provider_id(&services[0].0),"parcels":parcels});
+                    let body = json!({"package":package,"services":{"service_id":services.iter().map(|(id,_)|provider_id(id)).collect::<Vec<_>>()}});
+                    let key = serde_json::to_string(&body).map_err(|_| unavailable())?;
+                    let response = if let Some(value) = calculated.get(&key) {
+                        value.clone()
+                    } else {
+                        if calculations == 20 {
+                            return Ok((
+                                0,
+                                Quote::manual("Zestaw paczek wymaga indywidualnej wyceny."),
+                            ));
                         }
+                        calculations += 1;
+                        let result = provider_json(
+                            self.request(
+                                reqwest::Method::POST,
+                                "/packages/calculate-price",
+                                2,
+                                Some(&body),
+                            )
+                            .await?,
+                        )
+                        .await;
+                        calculated.insert(key, result.clone());
+                        result
+                    };
+                    let mut prices = HashMap::new();
+                    match response {
+                        Ok(response) => {
+                            for row in response["services_prices"]
+                                .as_array()
+                                .ok_or_else(unavailable)?
+                            {
+                                let service_id = id(&row["service_id"]).ok_or_else(unavailable)?;
+                                if !services.iter().any(|(id, _)| id == &service_id)
+                                    || prices.contains_key(&service_id)
+                                {
+                                    return Err(unavailable());
+                                }
+                                let price = if row["available"] == true {
+                                    Some(
+                                        money(&row["pricing"]["price_gross"])
+                                            .ok_or_else(unavailable)?,
+                                    )
+                                } else {
+                                    if let Some(error) = classify_rejection(row) {
+                                        match error {
+                                            Error::Unavailable(_) => return Err(error),
+                                            _ => rejection = Some(error),
+                                        }
+                                    }
+                                    None
+                                };
+                                prices.insert(service_id, price);
+                            }
+                        }
+                        Err(Error::Validation(v)) => rejection = Some(Error::Validation(v)),
+                        Err(Error::NoService(_)) => (),
+                        Err(e) => return Err(e),
                     }
-                    continue;
+                    bodies.push(package);
+                    chunk_prices.push(prices);
                 }
-                let service_id = id(&row["service_id"]).ok_or_else(unavailable)?;
-                let Some((_, name)) = services.iter().find(|(id, _)| id == &service_id) else {
-                    return Err(unavailable());
-                };
-                if rates
-                    .iter()
-                    .any(|(p, o): &(usize, Offer)| *p == plan && o.id == service_id)
-                {
-                    return Err(unavailable());
+                for (id, name) in services {
+                    let entries = chunks
+                        .iter()
+                        .zip(&chunk_prices)
+                        .map(|((_, count), prices)| (*count, prices.get(id).copied().flatten()))
+                        .collect::<Vec<_>>();
+                    let Some(price) = complete_price(&entries) else {
+                        continue;
+                    };
+                    let bodies = bodies
+                        .iter()
+                        .map(|body| {
+                            let mut body = body.clone();
+                            body["service_id"] = provider_id(id);
+                            body
+                        })
+                        .collect::<Vec<_>>();
+                    packages.insert((plan, id.clone()), bodies);
+                    rates.push((
+                        plan,
+                        Offer {
+                            id: id.clone(),
+                            name: name.to_uppercase(),
+                            price_grosze: price,
+                        },
+                    ));
                 }
-                rates.push((
-                    plan,
-                    Offer {
-                        id: service_id,
-                        name: name.to_uppercase(),
-                        price_grosze: money(&row["pricing"]["price_gross"])
-                            .ok_or_else(unavailable)?,
-                    },
-                ));
             }
         }
         let ranked = rank_offers(plans, rates)?;
         let mut selected = None;
         let mut valid = vec![];
+        let mut validated = HashMap::new();
         let mut validations = 0;
         for (plan, offer) in ranked {
             if selected.is_some_and(|selected| selected != plan) {
                 continue;
             }
-            if validations == 10 {
-                break;
+            let bodies = packages
+                .get(&(plan, offer.id.clone()))
+                .ok_or_else(unavailable)?;
+            let mut all_valid = true;
+            for package in bodies {
+                let key = serde_json::to_string(package).map_err(|_| unavailable())?;
+                let accepted = if let Some(accepted) = validated.get(&key) {
+                    *accepted
+                } else {
+                    if validations == 30 {
+                        return Ok((
+                            0,
+                            Quote::manual("Zestaw paczek wymaga indywidualnej wyceny."),
+                        ));
+                    }
+                    validations += 1;
+                    let response = self
+                        .request(
+                            reqwest::Method::POST,
+                            "/packages/validate",
+                            2,
+                            Some(package),
+                        )
+                        .await?;
+                    let accepted = if response.status() == StatusCode::NO_CONTENT {
+                        true
+                    } else {
+                        match provider_json(response).await {
+                            Err(Error::Validation(v)) => rejection = Some(Error::Validation(v)),
+                            Err(Error::NoService(_)) => (),
+                            Err(e) => return Err(e),
+                            Ok(_) => return Err(unavailable()),
+                        }
+                        false
+                    };
+                    validated.insert(key, accepted);
+                    accepted
+                };
+                if !accepted {
+                    all_valid = false;
+                    break;
+                }
             }
-            validations += 1;
-            packages[plan]["service_id"] = provider_id(&offer.id);
-            let response = self
-                .request(
-                    reqwest::Method::POST,
-                    "/packages/validate",
-                    2,
-                    Some(&packages[plan]),
-                )
-                .await?;
-            if response.status() == StatusCode::NO_CONTENT {
+            if all_valid {
                 selected = Some(plan);
                 valid.push(offer);
-            } else {
-                match provider_json(response).await {
-                    Err(Error::Validation(v)) => rejection = Some(Error::Validation(v)),
-                    Err(Error::NoService(_)) => (),
-                    Err(e) => return Err(e),
-                    Ok(_) => return Err(unavailable()),
-                }
             }
             if valid.len() == 3 {
                 break;
@@ -615,6 +790,32 @@ impl Sandbox {
             ),
         ))
     }
+}
+fn consignment_size(carrier: &str, method: Method) -> usize {
+    if method == Method::Courier && ["dpd", "dhl", "gls", "fedex"].contains(&carrier) {
+        15
+    } else {
+        1
+    }
+}
+fn unique_chunks(parcels: &[Value], size: usize) -> Vec<(Vec<Value>, u32)> {
+    let mut unique: Vec<(Vec<Value>, u32)> = vec![];
+    for chunk in parcels.chunks(size) {
+        if let Some((_, count)) = unique.iter_mut().find(|(rows, _)| rows == chunk) {
+            *count += 1;
+        } else {
+            unique.push((chunk.to_vec(), 1));
+        }
+    }
+    unique
+}
+fn complete_price(entries: &[(u32, Option<u32>)]) -> Option<u32> {
+    if entries.is_empty() {
+        return None;
+    }
+    entries.iter().try_fold(0u32, |sum, (count, price)| {
+        sum.checked_add((*price)?.checked_mul(*count)?)
+    })
 }
 fn rank_offers(
     plans: &[Estimate],
@@ -782,6 +983,67 @@ async fn provider_json(mut response: Response) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn multiparcel_quotes_count_every_consignment_and_reject_partial_prices() {
+        let carton = json!({"width":20,"depth":15,"height":10,"weight":1.0});
+        let cartons = vec![carton.clone(); 16];
+        for carrier in ["ups", "inpost", "dpd", "dhl", "gls", "fedex"] {
+            assert_eq!(consignment_size(carrier, Method::Locker), 1);
+        }
+        for carrier in ["ups", "inpost"] {
+            let chunks = unique_chunks(&cartons, consignment_size(carrier, Method::Courier));
+            assert_eq!(chunks, vec![(vec![carton.clone()], 16)]);
+            assert_eq!(complete_price(&[(chunks[0].1, Some(1234))]), Some(19744));
+        }
+        let chunks = unique_chunks(&cartons, consignment_size("dpd", Method::Courier));
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|(rows, count)| (rows.len(), *count))
+                .collect::<Vec<_>>(),
+            vec![(15, 1), (1, 1)]
+        );
+        assert_eq!(
+            complete_price(&[(1, Some(2000)), (1, Some(1000))]),
+            Some(3000)
+        );
+        assert_eq!(complete_price(&[(2, Some(1234)), (1, None)]), None);
+        assert_eq!(complete_price(&[]), None);
+        assert_eq!(complete_price(&[(2, Some(u32::MAX))]), None);
+        assert_eq!(complete_price(&[(1, Some(u32::MAX)), (1, Some(1))]), None);
+        let different = json!({"width":30,"depth":15,"height":10,"weight":1.0});
+        assert_eq!(
+            unique_chunks(&[carton.clone(), different.clone(), carton.clone()], 1),
+            vec![(vec![carton], 2), (vec![different], 1)]
+        );
+    }
+    #[test]
+    fn sender_points_are_carrier_specific_and_reset_quote_cache() {
+        let base = Sandbox::new("test".into(), json!({"name":"sender", "point":"OLD"})).unwrap();
+        let configured = base
+            .clone()
+            .with_sender_points(json!({"orlen":"12345", "dpd":"ABC"}))
+            .unwrap();
+        assert_eq!(configured.pickup_for("orlen").unwrap()["point"], "12345");
+        assert_eq!(configured.pickup_for("dpd").unwrap()["point"], "ABC");
+        assert!(
+            configured
+                .pickup_for("inpost")
+                .unwrap()
+                .get("point")
+                .is_none()
+        );
+        assert!(base.pickup_for("orlen").is_err());
+        assert!(!Arc::ptr_eq(&base.quotes, &configured.quotes));
+        for invalid in [
+            json!({"unknown":"ABC"}),
+            json!({"orlen":"orlen:ABC"}),
+            json!({"orlen":null}),
+            json!([]),
+        ] {
+            assert!(base.clone().with_sender_points(invalid).is_err());
+        }
+    }
     #[test]
     fn quote_key_uses_delivery_inputs_and_ignores_model_placements() {
         let mut plans = rapidmaker_packing::candidates(rapidmaker_packing::EstimateRequest {

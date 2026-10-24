@@ -74,7 +74,7 @@ Dowody, aktualne ograniczenia i pomiar LOC: [checkpoint C1–C6](milestones/back
 
 ## P1 — Warianty pakowania i najtańsza dostawa — wdrożone
 
-Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; najpierw najmniejsza liczba paczek w znalezionych planach, potem ceny Furgonetki + opakowania i walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 5 wycen zbiorczych/10 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
+Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; najpierw najmniejsza liczba paczek w znalezionych planach, potem ceny Furgonetki + opakowania i walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 20 obliczeń ceny/30 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
 
 Sprawdzone: regresje pakowania/rankingu, rzeczywiste ceny i walidacja kilku planów w sandboxie; szczegóły w milestone P1. Rezerwy i katalog kartonów wymagają kalibracji przed użyciem produkcyjnym.
 
@@ -137,7 +137,7 @@ Przekazanie potwierdza admin lub skan przewoźnika. Przy wielu kartonach jednego
 
 [Oficjalna specyfikacja REST](https://furgonetka.pl/js/swagger/api-rest-documentation.4cc02d4621.yaml): POST /packages dodaje, PUT/GET /order-commands/{uuid} zamawia/odczytuje wynik; GET etykiety i trackingu, PUT sandboxowej symulacji. Żaden kod nie akceptuje regulaminów ani nie ustawia zgód marketingowych.
 
-Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu i odnowienie tokena pozostają poza wdrożeniem. Właściciel zaakceptował krajowy regulamin DPD i zweryfikował telefon konta w panelu; wcześniejsze 409 terms_and_conditions_not_valid oraz 400 /phone zostały usunięte. Odczyt API potwierdził pustą listę wymaganych regulaminów. Marketingu ani innych przewoźników nie włączano. Nowa/zmieniona konfiguracja konta może wymagać ponownej interwencji właściciela.
+Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych sekretów. SMTP test tylko void@sieciowiec.xyz. Live, publiczne webhooki trackingu i odnowienie tokena pozostają poza wdrożeniem. Właściciel zaakceptował krajowy regulamin DPD i zweryfikował telefon konta w panelu; wcześniejsze 409 terms_and_conditions_not_valid oraz 400 /phone zostały usunięte. Odczyt API potwierdził pustą listę wymaganych regulaminów. W etapie S0–S4 nie włączano marketingu ani innych przewoźników; rozszerzenie usług opisuje L4. Nowa/zmieniona konfiguracja konta może wymagać ponownej interwencji właściciela.
 
 
 ## L1–L2 — Podjazdy i anulowanie
@@ -157,3 +157,9 @@ Stan `submitting` zapisujemy przed jedynym PUT. Po utracie odpowiedzi/restartcie
 ## L3 — Spójne logi Rust
 
 Wdrożony wspólny `tracing`/JSON stderr, identyfikator HTTP, kontekst workerów i bezpieczne kategorie błędów. Zastępuje ręczne logi tekstowe; nie zmienia płatności, uprawnień, retry ani protokołu stdout. Zakres i poziomy: [logging.md](logging.md). Metryki, health/readiness, Loki/Grafana i retencja kolektora pozostają osobnym etapem.
+
+## L4 — Wielu przewoźników — wdrożone w sandboxie
+
+Kurierzy DPD, DHL, InPost, GLS, UPS i FedEx; automaty InPost, ORLEN Paczka, DPD i DHL. Zgody tylko dla tych usług, bez marketingu i automatycznej akceptacji w kodzie. Punkt klienta jest sprawdzany w swojej sieci; ORLEN wymaga osobnego punktu nadawcy w `FURGONETKA_SENDER_POINTS_JSON`.
+
+Checkout i przygotowanie nadania stosują te same limity kartonów w zleceniu oraz sumują pełny koszt. Powtarzalne zlecenia wyceniamy raz; niepełna oferta nie trafia do klienta. Cache i limity wywołań pozostają. [Weryfikacja i granice](MILESTONES.md#l4--wielu-przewoźników--pass-sandbox-2026-10-24).

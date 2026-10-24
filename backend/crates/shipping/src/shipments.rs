@@ -244,10 +244,7 @@ impl Sandbox {
         let carrier = service["service"]
             .as_str()
             .ok_or(ShipmentError::Unavailable)?;
-        if (choice.method == Method::Locker && carrier != "inpost")
-            || (choice.method == Method::Courier
-                && !["dpd", "dhl", "ups", "gls", "fedex"].contains(&carrier))
-        {
+        if !crate::address::service_matches(choice, carrier) {
             return Err(invalid());
         }
         let street = if recipient.apartment.is_empty() {
@@ -261,16 +258,17 @@ impl Sandbox {
                 .verify_point(choice.point_id.as_deref().ok_or_else(invalid)?)
                 .await
                 .map_err(map_error)?;
-            receiver["point"] = json!(point.code);
+            receiver["point"] = json!(
+                crate::address::point_parts(&point.code)
+                    .ok_or_else(invalid)?
+                    .1
+            );
             receiver["street"] = json!(point.address.street);
             receiver["city"] = json!(point.address.city);
             receiver["postcode"] = json!(point.address.postcode);
         }
-        let group_size = if ["dpd", "dhl", "gls", "fedex"].contains(&carrier) {
-            15
-        } else {
-            1
-        };
+        let pickup = self.pickup_for(carrier).map_err(map_error)?;
+        let group_size = crate::consignment_size(carrier, choice.method);
         let mut result = ShipQuote {
             price_grosze: 0,
             packages: vec![],
@@ -287,7 +285,7 @@ impl Sandbox {
                 rows.push(json!({"width":parcel.outer_mm[0].div_ceil(10),"depth":parcel.outer_mm[1].div_ceil(10),"height":parcel.outer_mm[2].div_ceil(10),"weight":f64::from(parcel.weight_g)/1000.,"quantity":1,"type":"package"}));
             }
             let reference = format!("{reference}-{:02}", index + 1);
-            let body = json!({"pickup":self.sender,"receiver":receiver,"service_id":provider_id(service_id),"parcels":rows,"user_reference_number":reference});
+            let body = json!({"pickup":pickup,"receiver":receiver,"service_id":provider_id(service_id),"parcels":rows,"user_reference_number":reference});
             self.shipment_request(
                 reqwest::Method::POST,
                 "/packages/validate",

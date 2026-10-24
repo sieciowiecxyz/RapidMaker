@@ -4,7 +4,7 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 
 - [Plan checkoutu](PLAN.md)
   - przeczytaj gdy: projektujesz checkout lub nadawanie przesyłek.
-  - opis: checkout, nadawanie S0–S4, podjazdy i anulowanie L1–L2.
+  - opis: checkout, nadawanie S0–S4, podjazdy/anulowanie L1–L2 i przewoźnicy L4.
 - [Milestones checkoutu](MILESTONES.md)
   - przeczytaj gdy: wdrażasz kolejny etap backendu.
   - opis: dowody i blokery checkoutu oraz logistyki.

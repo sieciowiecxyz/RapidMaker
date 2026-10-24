@@ -42,6 +42,7 @@ pub enum Method {
 #[serde(default, deny_unknown_fields)]
 pub struct DeliveryChoice {
     pub method: Method,
+    /// Pass the selected Point.code unchanged; the backend verifies its network and address.
     pub point_id: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
@@ -87,12 +88,31 @@ fn postcode(
         errors.insert(field.into(), "Podaj kod pocztowy w formacie 00-000.".into());
     }
 }
-pub fn valid_point_id(id: &str) -> bool {
+pub(crate) const POINT_CARRIERS: &[&str] = &["inpost", "orlen", "dpd", "dhl"];
+pub(crate) fn raw_point_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
         && id
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+}
+pub(crate) fn point_parts(id: &str) -> Option<(&str, &str)> {
+    let (carrier, raw) = id.split_once(':').unwrap_or(("inpost", id));
+    (POINT_CARRIERS.contains(&carrier) && raw_point_id(raw)).then_some((carrier, raw))
+}
+pub fn valid_point_id(id: &str) -> bool {
+    point_parts(id).is_some()
+}
+pub(crate) fn service_matches(choice: &DeliveryChoice, carrier: &str) -> bool {
+    match choice.method {
+        Method::Locker => choice
+            .point_id
+            .as_deref()
+            .and_then(point_parts)
+            .is_some_and(|(network, _)| network == carrier),
+        Method::Courier => ["dpd", "dhl", "ups", "gls", "fedex", "inpost"].contains(&carrier),
+        Method::Pickup => false,
+    }
 }
 impl Recipient {
     /// Drafts may omit required values; malformed supplied values are still errors.
@@ -284,6 +304,35 @@ impl Recipient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn point_ids_preserve_inpost_and_reject_cross_network_services() {
+        assert_eq!(point_parts("PIA01M"), Some(("inpost", "PIA01M")));
+        assert_eq!(point_parts("inpost:PIA01M"), point_parts("PIA01M"));
+        for network in POINT_CARRIERS {
+            let id = format!("{network}:ABC-1_2");
+            assert!(valid_point_id(&id));
+            let choice = DeliveryChoice {
+                method: Method::Locker,
+                point_id: Some(id),
+            };
+            for candidate in POINT_CARRIERS {
+                assert_eq!(service_matches(&choice, candidate), candidate == network);
+            }
+        }
+        for id in [
+            "",
+            "unknown:ABC",
+            "dpd:",
+            "dpd:inpost:ABC",
+            "dpd:../ABC",
+            "orlen:ABC/DEF",
+        ] {
+            assert!(!valid_point_id(id));
+        }
+        assert!(!valid_point_id(&format!("dpd:{}", "A".repeat(65))));
+        assert!(service_matches(&DeliveryChoice::default(), "inpost"));
+        assert!(!service_matches(&DeliveryChoice::default(), "orlen"));
+    }
     fn recipient() -> Recipient {
         Recipient {
             name: " Jan   Kowalski ".into(),
