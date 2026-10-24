@@ -70,6 +70,7 @@ impl Rates {
 
 /// Inputs are measured totals across all plates, not per-copy guesses.
 /// Setup is charged once and plate handling follows the actual batch plan.
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn calculate(
     seconds: u64,
     filament_milligrams: u64,
@@ -99,12 +100,15 @@ pub fn calculate(
         3_600_000,
     );
     let handling = u128::from(plates) * u128::from(rates.handling_per_plate_grosze);
-    finish(filament, machine, energy, handling, rates)
+    let result = finish(filament, machine, energy, handling, rates);
+    tracing::debug!(event = "price_calculated", success = result.is_ok());
+    result
 }
 
 /// Combine measured costs; per-model setup, minimum and markup are discarded.
 /// The gross total is apportioned by cumulative cost weights so rounding cannot
 /// create or lose money. A minimum with no cost base goes to the first line.
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn combine(parts: &[OrderPart<'_>], rates: &Rates) -> Result<OrderPrice, &'static str> {
     rates.validate()?;
     if parts.is_empty()

@@ -140,6 +140,7 @@ async fn register_finish(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(denied)?;
+    tracing::info!(event = "passkey_registered");
     finish(&auth, &new_token, session)
 }
 #[utoipa::path(
@@ -212,6 +213,7 @@ async fn login_finish(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(denied)?;
+    tracing::info!(event = "passkey_verified");
     finish(&auth, &new_token, session)
 }
 fn finish(

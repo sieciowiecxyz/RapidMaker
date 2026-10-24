@@ -123,6 +123,9 @@ impl Storage {
         let mut tx = self.pool.begin().await?;
         let paid = mark_paid(&mut tx, id, provider, amount, now).await?;
         tx.commit().await?;
+        if paid {
+            tracing::info!(event = "order_paid", order_id = id);
+        }
         Ok(paid)
     }
 
@@ -186,6 +189,7 @@ impl Storage {
         )
         .await?;
         tx.commit().await?;
+        tracing::info!(event="order_status_changed", order_id=id, from=%old, to=status);
         Ok(true)
     }
     pub async fn order_messages(

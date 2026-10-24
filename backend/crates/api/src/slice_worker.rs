@@ -5,6 +5,7 @@ use rapidmaker_storage::{SlicerJob, Storage};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::{sync::watch, task::JoinHandle};
+use tracing::Instrument;
 
 pub struct SliceWorker {
     stop: watch::Sender<bool>,
@@ -21,7 +22,7 @@ impl SliceWorker {
                 }
                 if cleanup.elapsed() >= Duration::from_secs(60) {
                     if super::files::cleanup_models(&db).await.is_err() {
-                        eprintln!("event=model_cleanup_failed");
+                        tracing::error!(event = "model_cleanup_failed", reason = "database");
                     }
                     cleanup = tokio::time::Instant::now();
                 }
@@ -31,7 +32,7 @@ impl SliceWorker {
                         continue;
                     }
                     Ok(None) => {}
-                    Err(_) => eprintln!("event=slicer_claim_failed"),
+                    Err(_) => tracing::error!(event = "slicer_claim_failed", reason = "database"),
                 }
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_secs(1)) => {},
@@ -46,44 +47,60 @@ impl SliceWorker {
         let mut task = self.task;
         match tokio::time::timeout(Duration::from_secs(155), &mut task).await {
             Ok(Ok(())) => {}
-            Ok(Err(_)) => eprintln!("event=slicer_worker_stopped reason=task_failure"),
+            Ok(Err(_)) => tracing::error!(event = "slicer_worker_stopped", reason = "task_failure"),
             Err(_) => {
                 task.abort();
-                eprintln!("event=slicer_worker_stopped reason=shutdown_timeout");
+                tracing::error!(event = "slicer_worker_stopped", reason = "shutdown_timeout");
             }
         }
     }
 }
 async fn process(db: &Storage, job: SlicerJob) {
-    let Some(token) = job.lease_token.as_deref() else {
-        eprintln!("event=slicer_invalid_lease");
-        return;
-    };
-    eprintln!(
-        "event=slicer_started job={} attempt={}",
-        job.id, job.attempts
-    );
-    let outcome = tokio::time::timeout(Duration::from_secs(150), measure(db, &job))
-        .await
-        .unwrap_or(Err((
-            true,
-            "Przekroczono czas wyceny. Spróbuj ponownie lub poproś o wycenę indywidualną.",
-        )));
-    let result = match outcome {
-        Ok((request, result)) => {
-            db.finish_slice(&job.id, token, &request, &result, super::cart::now())
-                .await
+    async {
+        let Some(token) = job.lease_token.as_deref() else {
+            tracing::error!(event = "slicer_invalid_lease", reason = "missing_lease");
+            return;
+        };
+        tracing::info!(event = "slicer_started");
+        let started = std::time::Instant::now();
+        let outcome = tokio::time::timeout(Duration::from_secs(150), measure(db, &job))
+            .await
+            .unwrap_or(Err((
+                true,
+                "Przekroczono czas wyceny. Spróbuj ponownie lub poproś o wycenę indywidualną.",
+            )));
+        let state = match &outcome {
+            Ok(_) => "completed",
+            Err((true, _)) => "retry",
+            Err((false, _)) => "rejected",
+        };
+        let result = match outcome {
+            Ok((request, result)) => {
+                db.finish_slice(&job.id, token, &request, &result, super::cart::now())
+                    .await
+            }
+            Err((retry, message)) => {
+                db.fail_slice(&job.id, token, retry, message, super::cart::now())
+                    .await
+            }
+        };
+        match result {
+            Ok(true) if state == "completed" => tracing::info!(
+                event = "slicer_recorded",
+                outcome = state,
+                elapsed_ms = started.elapsed().as_millis() as u64
+            ),
+            Ok(true) => tracing::warn!(
+                event = "slicer_recorded",
+                outcome = state,
+                elapsed_ms = started.elapsed().as_millis() as u64
+            ),
+            Ok(false) => tracing::warn!(event = "slicer_lease_lost", reason = "lease_lost"),
+            Err(_) => tracing::error!(event = "slicer_persist_failed", reason = "database"),
         }
-        Err((retry, message)) => {
-            db.fail_slice(&job.id, token, retry, message, super::cart::now())
-                .await
-        }
-    };
-    match result {
-        Ok(true) => eprintln!("event=slicer_recorded job={}", job.id),
-        Ok(false) => eprintln!("event=slicer_lease_lost job={}", job.id),
-        Err(_) => eprintln!("event=slicer_persist_failed job={}", job.id),
     }
+    .instrument(tracing::info_span!("slicer_job", job_id = %job.id, attempt = job.attempts))
+    .await
 }
 type Failure = (bool, &'static str);
 async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failure> {

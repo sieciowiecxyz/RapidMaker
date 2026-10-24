@@ -244,6 +244,7 @@ impl Sandbox {
         }
         request.build().map_err(|_| unavailable())
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn request(
         &self,
         method: reqwest::Method,
@@ -251,17 +252,52 @@ impl Sandbox {
         version: u8,
         body: Option<&Value>,
     ) -> Result<Response, Error> {
-        self.client
-            .execute(self.build_request(method, path, version, body)?)
-            .await
-            .map_err(|_| unavailable())
+        let operation = request_operation(path);
+        let started = std::time::Instant::now();
+        let result = async {
+            self.client
+                .execute(self.build_request(method, path, version, body)?)
+                .await
+                .map_err(|_| unavailable())
+        }
+        .await;
+        match &result {
+            Ok(response) if response.status().is_success() => tracing::debug!(
+                event = "provider_response",
+                provider = "furgonetka",
+                operation = operation,
+                status = response.status().as_u16(),
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "Provider responded"
+            ),
+            Ok(response) => tracing::warn!(
+                event = "provider_rejected",
+                provider = "furgonetka",
+                operation = operation,
+                status = response.status().as_u16(),
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason = "http_status",
+                "Provider rejected request"
+            ),
+            Err(_) => tracing::warn!(
+                event = "provider_request_failed",
+                provider = "furgonetka",
+                operation = operation,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason = "transport_or_configuration",
+                "Provider request failed"
+            ),
+        }
+        result
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn points(&self, query: &str) -> Result<Vec<Point>, Error> {
         match self.find_points(query, false).await {
             Err(Error::NoService(_)) => Err(unavailable()),
             result => result,
         }
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn verify_point(&self, id: &str) -> Result<Point, Error> {
         if !address::valid_point_id(id) {
             return Err(Error::Validation(Validation::field(
@@ -363,6 +399,7 @@ impl Sandbox {
     }
     /// Compare all bounded plans using provider prices, then validate cheapest first.
     /// All returned offers use the selected plan, preserving the checkout snapshot contract.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn quote_best(
         &self,
         plans: &[Estimate],
@@ -687,6 +724,33 @@ fn rejection(body: &Value) -> Error {
         unavailable()
     }
 }
+// Only trusted endpoint templates enter logs; IDs, queries and addresses never do.
+fn request_operation(path: &str) -> &'static str {
+    if path.starts_with("/pickup-commands/") {
+        "pickup_command"
+    } else if path.starts_with("/cancel-command/") {
+        "cancel_command"
+    } else if path.starts_with("/order-commands/") {
+        "order_command"
+    } else if path.starts_with("/points") {
+        "pickup_points"
+    } else if path.starts_with("/services") {
+        "services"
+    } else if path.starts_with("/packages/pickup-date-proposals") {
+        "pickup_proposals"
+    } else if path.starts_with("/packages/validate") {
+        "validate_packages"
+    } else if path.starts_with("/packages/calculate-price") {
+        "quote_packages"
+    } else if path.contains("/label") {
+        "shipment_label"
+    } else if path.contains("/tracking") {
+        "shipment_tracking"
+    } else {
+        "packages"
+    }
+}
+
 async fn provider_json(mut response: Response) -> Result<Value, Error> {
     let status = response.status();
     if status == StatusCode::UNAUTHORIZED

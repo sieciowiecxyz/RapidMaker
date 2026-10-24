@@ -324,6 +324,7 @@ async fn book(
         .await
         .map_err(|_| unavailable())?
         .map_err(domain)?;
+    tracing::info!(event="shipment_requested", shipment_id=%result.id, order_id=%result.order_id);
     Ok((StatusCode::ACCEPTED, Json(result)))
 }
 #[utoipa::path(get,path="/api/admin/orders/{id}/shipment/labels/{package_id}",operation_id="shipment_label",tag="Admin",

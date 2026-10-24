@@ -10,6 +10,7 @@ use rapidmaker_storage::{PaymentAttempt, Storage, StripeEvent};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::watch, task::JoinHandle};
+use tracing::Instrument;
 
 pub struct CheckoutWorker {
     stop: watch::Sender<bool>,
@@ -26,12 +27,17 @@ impl CheckoutWorker {
                 if let Some(db) = &app.db {
                     match db.stripe_event_lease(now()).await {
                         Ok(Some(event)) => process_event(&app, event).await,
-                        Err(_) => eprintln!("event=stripe_event_claim_failed"),
+                        Err(_) => tracing::error!(
+                            event = "stripe_event_claim_failed",
+                            reason = "database"
+                        ),
                         _ => {}
                     }
                     match db.checkout_lease(None, now()).await {
                         Ok(Some(attempt)) => reconcile(&app, attempt).await,
-                        Err(_) => eprintln!("event=payment_claim_failed"),
+                        Err(_) => {
+                            tracing::error!(event = "payment_claim_failed", reason = "database")
+                        }
                         _ => {}
                     }
                     super::refunds::process_next(&app).await;
@@ -46,10 +52,15 @@ impl CheckoutWorker {
         let mut task = self.task;
         match tokio::time::timeout(Duration::from_secs(25), &mut task).await {
             Ok(Ok(())) => {}
-            Ok(Err(_)) => eprintln!("event=checkout_worker_failed"),
+            Ok(Err(_)) => {
+                tracing::error!(event = "checkout_worker_failed", reason = "task_failure")
+            }
             Err(_) => {
                 task.abort();
-                eprintln!("event=checkout_worker_shutdown_timeout");
+                tracing::error!(
+                    event = "checkout_worker_shutdown_timeout",
+                    reason = "shutdown_timeout"
+                );
             }
         }
     }
@@ -58,7 +69,7 @@ pub(super) async fn process_attempt(app: &Arc<App>, id: &str) {
     if let Some(db) = &app.db {
         match db.checkout_lease(Some(id), now()).await {
             Ok(Some(attempt)) => reconcile(app, attempt).await,
-            Err(_) => eprintln!("event=payment_claim_failed"),
+            Err(_) => tracing::error!(event = "payment_claim_failed", reason = "database"),
             _ => {}
         }
     }
@@ -84,58 +95,74 @@ pub(super) async fn retrieve(
     }
 }
 async fn reconcile(app: &App, attempt: PaymentAttempt) {
-    let Some(db) = &app.db else { return };
-    let Some(lease) = attempt.lease_token.as_deref() else {
-        return;
-    };
-    let result = if attempt.provider_id.is_some() {
-        retrieve(app, &attempt).await
-    } else {
-        async {
-            let stripe = app.stripe.as_ref().ok_or(PaymentError::InvalidInput)?;
-            let form: Vec<(String, String)> =
-                serde_json::from_value(attempt.provider_request.clone())
-                    .map_err(|_| PaymentError::InvalidInput)?;
-            let expected = ExpectedPayment {
-                correlation_id: attempt.id.clone(),
-                amount_grosze: attempt.amount_grosze,
-            };
-            let _permit = app.permit().map_err(|_| PaymentError::Unknown)?;
-            if attempt.provider_kind == "session" {
-                Ok(stripe
-                    .create_checkout(&form, &attempt.idempotency_key, &expected)
-                    .await?
-                    .object)
-            } else {
-                Ok(stripe
-                    .create_intent(&form, &attempt.idempotency_key, &expected)
-                    .await?
-                    .object)
+    let span = tracing::info_span!("payment_reconcile", attempt_id = %attempt.id, attempt = attempt.attempts);
+    async {
+        let started = std::time::Instant::now();
+        let Some(db) = &app.db else { return };
+        let Some(lease) = attempt.lease_token.as_deref() else {
+            return;
+        };
+        let result = if attempt.provider_id.is_some() {
+            retrieve(app, &attempt).await
+        } else {
+            async {
+                let stripe = app.stripe.as_ref().ok_or(PaymentError::InvalidInput)?;
+                let form: Vec<(String, String)> =
+                    serde_json::from_value(attempt.provider_request.clone())
+                        .map_err(|_| PaymentError::InvalidInput)?;
+                let expected = ExpectedPayment {
+                    correlation_id: attempt.id.clone(),
+                    amount_grosze: attempt.amount_grosze,
+                };
+                let _permit = app.permit().map_err(|_| PaymentError::Unknown)?;
+                if attempt.provider_kind == "session" {
+                    Ok(stripe
+                        .create_checkout(&form, &attempt.idempotency_key, &expected)
+                        .await?
+                        .object)
+                } else {
+                    Ok(stripe
+                        .create_intent(&form, &attempt.idempotency_key, &expected)
+                        .await?
+                        .object)
+                }
             }
+            .await
+        };
+        let saved = match result {
+            Ok(object) => {
+                db.checkout_resolve(&attempt.id, &attempt.provider_kind, &object, now())
+                    .await
+            }
+            Err(e) => {
+                // Only a definite first creation rejection can release the protected files.
+                let rejected = matches!(
+                    e,
+                    PaymentError::Rejected { .. } | PaymentError::InvalidInput
+                );
+                let reason = match e {
+                    PaymentError::Rejected { .. } => "provider_rejected",
+                    PaymentError::InvalidInput => "invalid_input",
+                    _ => "provider_unavailable",
+                };
+                tracing::warn!(event = "payment_reconcile_retry", rejected, reason);
+                db.checkout_retry(&attempt.id, lease, rejected, now()).await
+            }
+        };
+        match saved {
+            Ok(true) => tracing::debug!(
+                event = "payment_reconcile_saved",
+                elapsed_ms = started.elapsed().as_millis() as u64
+            ),
+            Ok(false) => tracing::warn!(
+                event = "payment_reconcile_not_saved",
+                reason = "lease_or_evidence_mismatch"
+            ),
+            Err(_) => tracing::error!(event = "payment_reconcile_not_saved", reason = "database"),
         }
-        .await
-    };
-    let saved = match result {
-        Ok(object) => {
-            db.checkout_resolve(&attempt.id, &attempt.provider_kind, &object, now())
-                .await
-        }
-        Err(e) => {
-            // Only a definite first creation rejection can release the protected files.
-            let rejected = matches!(
-                e,
-                PaymentError::Rejected { .. } | PaymentError::InvalidInput
-            );
-            eprintln!(
-                "event=payment_reconcile_retry attempt={} rejected={rejected} reason={e:?}",
-                attempt.id
-            );
-            db.checkout_retry(&attempt.id, lease, rejected, now()).await
-        }
-    };
-    if !matches!(saved, Ok(true)) {
-        eprintln!("event=payment_reconcile_not_saved attempt={}", attempt.id);
     }
+    .instrument(span)
+    .await
 }
 fn event_kind(event_type: &str) -> Option<&'static str> {
     match event_type {
@@ -206,83 +233,96 @@ pub(super) async fn webhook(
     Ok(StatusCode::NO_CONTENT)
 }
 async fn process_event(app: &App, event: StripeEvent) {
-    let Some(db) = &app.db else { return };
-    let result: std::result::Result<bool, Box<dyn std::error::Error + Send + Sync>> = async {
-        let mut attempt = db
-            .checkout_attempt_provider(&event.provider_kind, &event.object_id)
-            .await?;
-        if attempt.is_none()
-            && let Some(id) = event.payload["data"]["object"]["metadata"]["quote_id"].as_str()
-        {
-            attempt = db.checkout_attempt_id(id).await?;
-        }
-        let Some(mut attempt) = attempt else {
-            if let Some(order) = db
-                .checkout_legacy_order(&event.provider_kind, &event.object_id)
-                .await?
-            {
-                let id = order["id"].as_str().ok_or("invalid legacy order")?;
-                let expected = ExpectedPayment {
-                    correlation_id: id.into(),
-                    amount_grosze: order["amount_grosze"]
-                        .as_i64()
-                        .ok_or("invalid legacy amount")?,
-                };
-                let stripe = app.stripe.as_ref().ok_or("Stripe unavailable")?;
-                let _permit = app.permit().map_err(|_| "provider busy")?;
-                let paid = if event.provider_kind == "session" {
-                    stripe
-                        .retrieve_checkout(&event.object_id, &expected)
-                        .await?
-                        .paid()
-                } else {
-                    stripe
-                        .retrieve_intent(&event.object_id, &expected)
-                        .await?
-                        .paid()
-                };
-                if paid {
-                    db.order_paid(id, &event.object_id, expected.amount_grosze, now())
-                        .await?;
-                }
-            }
-            return Ok(true);
-        };
-        if attempt.provider_kind != event.provider_kind
-            || attempt
-                .provider_id
-                .as_deref()
-                .is_some_and(|id| id != event.object_id)
-        {
-            return Ok(false);
-        }
-        attempt.provider_id = Some(event.object_id.clone());
-        let object = retrieve(app, &attempt).await?;
-        let resolved = db
-            .checkout_resolve(&attempt.id, &attempt.provider_kind, &object, now())
-            .await?;
-        if resolved
-            && event.event_type == "checkout.session.async_payment_failed"
-            && object["status"] == "complete"
-            && object["payment_status"] != "paid"
-        {
-            db.checkout_async_failed(&attempt.id, &event.object_id, now())
+    async {
+        let started = std::time::Instant::now();
+        let Some(db) = &app.db else { return };
+        let result: std::result::Result<bool, Box<dyn std::error::Error + Send + Sync>> = async {
+            let mut attempt = db
+                .checkout_attempt_provider(&event.provider_kind, &event.object_id)
                 .await?;
+            if attempt.is_none()
+                && let Some(id) = event.payload["data"]["object"]["metadata"]["quote_id"].as_str()
+            {
+                attempt = db.checkout_attempt_id(id).await?;
+            }
+            let Some(mut attempt) = attempt else {
+                if let Some(order) = db
+                    .checkout_legacy_order(&event.provider_kind, &event.object_id)
+                    .await?
+                {
+                    let id = order["id"].as_str().ok_or("invalid legacy order")?;
+                    let expected = ExpectedPayment {
+                        correlation_id: id.into(),
+                        amount_grosze: order["amount_grosze"]
+                            .as_i64()
+                            .ok_or("invalid legacy amount")?,
+                    };
+                    let stripe = app.stripe.as_ref().ok_or("Stripe unavailable")?;
+                    let _permit = app.permit().map_err(|_| "provider busy")?;
+                    let paid = if event.provider_kind == "session" {
+                        stripe
+                            .retrieve_checkout(&event.object_id, &expected)
+                            .await?
+                            .paid()
+                    } else {
+                        stripe
+                            .retrieve_intent(&event.object_id, &expected)
+                            .await?
+                            .paid()
+                    };
+                    if paid {
+                        db.order_paid(id, &event.object_id, expected.amount_grosze, now())
+                            .await?;
+                    }
+                }
+                return Ok(true);
+            };
+            if attempt.provider_kind != event.provider_kind
+                || attempt
+                    .provider_id
+                    .as_deref()
+                    .is_some_and(|id| id != event.object_id)
+            {
+                return Ok(false);
+            }
+            attempt.provider_id = Some(event.object_id.clone());
+            let object = retrieve(app, &attempt).await?;
+            let resolved = db
+                .checkout_resolve(&attempt.id, &attempt.provider_kind, &object, now())
+                .await?;
+            if resolved
+                && event.event_type == "checkout.session.async_payment_failed"
+                && object["status"] == "complete"
+                && object["payment_status"] != "paid"
+            {
+                db.checkout_async_failed(&attempt.id, &event.object_id, now())
+                    .await?;
+            }
+            Ok(resolved)
         }
-        Ok(resolved)
+        .await;
+        let success = matches!(result, Ok(true));
+        if !success {
+            tracing::warn!(
+                event = "stripe_event_retry",
+                reason = "provider_or_evidence_unavailable"
+            );
+        } else {
+            tracing::info!(
+                event = "stripe_event_reconciled",
+                elapsed_ms = started.elapsed().as_millis() as u64
+            );
+        }
+        if db
+            .stripe_event_finish(&event.id, &event.lease_token, success, now())
+            .await
+            .is_err()
+        {
+            tracing::error!(event = "stripe_event_finish_failed", reason = "database");
+        }
     }
-    .await;
-    let success = matches!(result, Ok(true));
-    if !success {
-        eprintln!("event=stripe_event_retry id={}", event.id);
-    }
-    if db
-        .stripe_event_finish(&event.id, &event.lease_token, success, now())
-        .await
-        .is_err()
-    {
-        eprintln!("event=stripe_event_finish_failed");
-    }
+    .instrument(tracing::info_span!("stripe_event", event_id = %event.id))
+    .await
 }
 pub(super) async fn refresh_order(
     db: &Storage,

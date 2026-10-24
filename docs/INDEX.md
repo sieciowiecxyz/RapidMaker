@@ -20,6 +20,9 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 - [Walidacja](testing.md)
   - przeczytaj gdy: sprawdzasz zmianę.
   - opis: komendy i wymagane dowody działania.
+- [Logi](logging.md)
+  - przeczytaj gdy: diagnozujesz backend lub zbierasz logi.
+  - opis: JSON, poziomy, korelacja i ochrona danych.
 - [Brief frontendu](rapidmaker-frontend-brief.md)
   - przeczytaj gdy: rozwijasz samodzielny prototyp Svelte.
   - opis: widoki, konfigurator FDM, mocki i granice lokalnego checkout API.

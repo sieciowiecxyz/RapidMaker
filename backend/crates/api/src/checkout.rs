@@ -741,6 +741,7 @@ pub(super) async fn start_payment(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(conflict)?;
+    tracing::info!(event="payment_requested", attempt_id=%attempt.id, draft_id=id);
     super::checkout_worker::process_attempt(app, &attempt.id).await;
     app.db()?
         .checkout_attempt(&attempt.id, &owner)

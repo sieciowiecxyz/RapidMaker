@@ -68,6 +68,7 @@ async fn create(
         .await
         .map_err(|_| unavailable())?
         .map_err(prepare_error)?;
+    tracing::info!(event="refund_requested", refund_id=%refund.id, order_id=%refund.order_id);
     Ok((StatusCode::ACCEPTED, Json(refund)))
 }
 fn prepare_error(reason: RefundPrepareError) -> super::checkout::Error {
@@ -132,12 +133,13 @@ pub(super) async fn process_next(app: &App) {
     let Some(db) = &app.db else { return };
     match db.refund_lease(None, now()).await {
         Ok(Some(refund)) if reconcile(app, &refund).await.is_err() => {
-            eprintln!("event=refund_reconcile_failed");
+            tracing::error!(event = "refund_reconcile_failed", refund_id=%refund.id, order_id=%refund.order_id);
         }
-        Err(_) => eprintln!("event=refund_claim_failed"),
+        Err(_) => tracing::error!(event = "refund_claim_failed"),
         _ => {}
     }
 }
+#[tracing::instrument(skip_all, fields(refund_id=%refund.id, order_id=%refund.order_id))]
 async fn reconcile(
     app: &App,
     refund: &Refund,
@@ -154,15 +156,32 @@ async fn reconcile(
                 .refund_resolve(&refund.id, lease, &value.id, &value.status, now())
                 .await?
             {
+                tracing::warn!(event = "refund_lease_lost");
                 return Err("refund lease lost before save".into());
             }
+            let state = match value.status.as_str() {
+                "succeeded" => "succeeded",
+                "pending" => "pending",
+                "failed" => "failed",
+                "canceled" => "canceled",
+                _ => "other",
+            };
+            tracing::info!(event = "refund_resolved", state);
         }
         Ok(None) => {} // Lease was lost before the external mutation; the next owner resumes.
         Err(PaymentError::Mismatch | PaymentError::InvalidInput) => {
             db.refund_review(&refund.id, lease, now()).await?;
+            tracing::warn!(
+                event = "refund_review_required",
+                reason = "invalid_or_mismatched_payment"
+            );
         }
         Err(PaymentError::Rejected { .. }) if refund.provider_id.is_some() => {
             db.refund_review(&refund.id, lease, now()).await?;
+            tracing::warn!(
+                event = "refund_review_required",
+                reason = "provider_rejected"
+            );
         }
         Err(error) => {
             // A later rejection cannot disprove a prior timed-out creation.
@@ -173,6 +192,10 @@ async fn reconcile(
                 now(),
             )
             .await?;
+            tracing::warn!(
+                event = "refund_retry_scheduled",
+                reason = "provider_failure_or_uncertain_result"
+            );
         }
     }
     Ok(())

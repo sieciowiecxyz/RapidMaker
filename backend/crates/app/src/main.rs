@@ -1,9 +1,19 @@
 use rapidmaker_api as api;
 
 fn main() {
+    if rapidmaker_observability::init().is_err() {
+        eprintln!(
+            r#"{{"level":"ERROR","fields":{{"event":"logging_init_failed","reason":"check_LOG_LEVEL_or_subscriber"}}}}"#
+        );
+        std::process::exit(1);
+    }
     if api::worker() {
         return;
     }
+    tracing::info!(
+        event = "application_starting",
+        version = env!("CARGO_PKG_VERSION")
+    );
     tokio::runtime::Runtime::new()
         .expect("runtime")
         .block_on(serve());
@@ -14,7 +24,10 @@ async fn serve() {
         match api::mail_receive_once().await {
             Ok(value) => println!("{value}"),
             Err(_) => {
-                eprintln!("Mail receive failed; check IMAP, reply key and database configuration.");
+                tracing::error!(
+                    event = "mail_receive_failed",
+                    reason = "configuration_or_transport"
+                );
                 std::process::exit(1);
             }
         }
@@ -42,7 +55,10 @@ async fn serve() {
         match result {
             Ok(()) => println!("Operator email reply permission updated."),
             Err(_) => {
-                eprintln!("Operator permission refused; provide existing admin email and on/off.");
+                tracing::error!(
+                    event = "operator_permission_refused",
+                    reason = "arguments_or_eligibility"
+                );
                 std::process::exit(1);
             }
         }
@@ -54,7 +70,7 @@ async fn serve() {
     {
         let args: Vec<String> = std::env::args().skip(2).collect();
         if args.is_empty() || args.len() > 2 {
-            eprintln!("Provide attempt UUID and optional original Stripe reference");
+            tracing::error!(event = "checkout_cli_refused", reason = "arguments");
             std::process::exit(1);
         }
         match api::checkout_operator(
@@ -66,8 +82,9 @@ async fn serve() {
         {
             Ok(value) => println!("{value}"),
             Err(_) => {
-                eprintln!(
-                    "Checkout recovery refused; check stored attempt and original Stripe reference. No new payment was created."
+                tracing::error!(
+                    event = "checkout_recovery_refused",
+                    reason = "stored_attempt_or_provider_reference"
                 );
                 std::process::exit(1);
             }
@@ -77,7 +94,10 @@ async fn serve() {
 
     if std::env::args().nth(1).as_deref() == Some("--slicer-worker") {
         let worker = api::slicer_worker().await.unwrap_or_else(|_| {
-            eprintln!("Cannot initialize slicer worker; check database configuration.");
+            tracing::error!(
+                event = "slicer_worker_init_failed",
+                reason = "configuration_or_database"
+            );
             std::process::exit(1);
         });
         shutdown().await;
@@ -92,8 +112,9 @@ async fn serve() {
         match result {
             Ok(secret) => println!("{secret}"),
             Err(_) => {
-                eprintln!(
-                    "Local admin grant refused; verify email login/session and database configuration."
+                tracing::error!(
+                    event = "admin_grant_refused",
+                    reason = "eligibility_or_configuration"
                 );
                 std::process::exit(1);
             }
@@ -110,7 +131,7 @@ async fn serve() {
                 println!("SMTP accepted the test message; check the inbox to confirm delivery.")
             }
             Err(error) => {
-                eprintln!("{error}");
+                tracing::error!(event="mail_test_failed", reason=%error);
                 std::process::exit(1);
             }
         }
@@ -118,13 +139,18 @@ async fn serve() {
     }
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18432")
         .await
-        .expect("bind localhost");
+        .unwrap_or_else(|_| {
+            tracing::error!(event = "server_bind_failed", reason = "localhost_listener");
+            std::process::exit(1);
+        });
     let (router, worker) = api::router().await.unwrap_or_else(|_| {
-        eprintln!(
-            "Cannot initialize database, pricing or mail configuration; check local configuration."
+        tracing::error!(
+            event = "server_init_failed",
+            reason = "database_pricing_or_mail_configuration"
         );
         std::process::exit(1);
     });
+    tracing::info!(event = "server_listening", address = "127.0.0.1:18432");
     let result = axum::serve(
         listener,
         router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -132,7 +158,11 @@ async fn serve() {
     .with_graceful_shutdown(shutdown())
     .await;
     worker.shutdown().await;
-    result.expect("serve");
+    if result.is_err() {
+        tracing::error!(event = "server_stopped", reason = "serve_failed");
+        std::process::exit(1);
+    }
+    tracing::info!(event = "server_stopped", reason = "shutdown");
 }
 
 async fn admin_grant(mode: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -161,4 +191,5 @@ async fn shutdown() {
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("signal handler");
     tokio::select! {_=tokio::signal::ctrl_c()=>{},_=term.recv()=>{}}
+    tracing::info!(event = "shutdown_requested");
 }

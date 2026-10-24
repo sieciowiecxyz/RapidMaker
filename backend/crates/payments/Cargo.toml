@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+tracing.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

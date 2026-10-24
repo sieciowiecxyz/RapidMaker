@@ -147,6 +147,7 @@ impl std::fmt::Display for PreviewError {
 
 impl std::error::Error for PreviewError {}
 
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn source_to_preview_glb(
     source_filename: &str,
     input: &[u8],
@@ -164,6 +165,7 @@ pub fn source_to_preview_glb(
 
 /// Canonical millimetre geometry only: no project settings, G-code or attachments.
 /// STL is limited to 50 MiB; its accompanying preview uses the GLB byte budget.
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn source_to_stl(
     filename: &str,
     input: &[u8],
@@ -180,77 +182,99 @@ pub struct ProductionOutput {
 }
 
 /// Return metadata from this same parse, so callers never reparse untrusted geometry.
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn source_to_production(
     filename: &str,
     input: &[u8],
     limits: &ConversionLimits,
     three_mf_limits: &ThreeMfLimits,
 ) -> Result<ProductionOutput, PreviewError> {
-    let started = Instant::now();
-    if input.len() > limits.max_input_bytes {
-        return Err(PreviewError::InputTooLarge);
-    }
-    let format = gate_source_format(filename, input, three_mf_limits)?.source_format;
-    if !matches!(
-        format,
-        SourceFormat::StlBinary
-            | SourceFormat::StlAscii
-            | SourceFormat::Step
-            | SourceFormat::ThreeMf
-    ) {
-        return Err(PreviewError::UnsupportedFormat);
-    }
-    let (scene, format) = scene_from_source(format, input, limits, started)?;
-    let analysis = analyze_scene(&scene, format, limits)?;
-    if analysis
-        .dimensions_mm
-        .iter()
-        .any(|dimension| *dimension <= 0.0)
-    {
-        return Err(PreviewError::MalformedInput);
-    }
-    let output_len = analysis
-        .triangle_count
-        .checked_mul(50)
-        .and_then(|n| n.checked_add(84))
-        .filter(|n| *n <= 50 * 1024 * 1024)
-        .ok_or(PreviewError::OutputTooLarge)?;
-    let count =
-        u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
-    let mut output = Vec::with_capacity(output_len);
-    output.resize(80, 0);
-    output.extend_from_slice(&count.to_le_bytes());
-    for triangle in scene.indices.chunks_exact(3) {
-        check_timeout(started, limits)?;
-        // STL normals may be zero: geometry and winding define the surface.
-        output.extend_from_slice(&[0; 12]);
-        for index in triangle {
-            let position = scene
-                .positions_mm
-                .get(*index as usize)
-                .ok_or(PreviewError::MalformedInput)?;
-            for coordinate in position {
-                output.extend_from_slice(&coordinate.to_le_bytes());
-            }
+    let started = std::time::Instant::now();
+    let result = (|| {
+        let started = Instant::now();
+        if input.len() > limits.max_input_bytes {
+            return Err(PreviewError::InputTooLarge);
         }
-        output.extend_from_slice(&[0; 2]);
+        let format = gate_source_format(filename, input, three_mf_limits)?.source_format;
+        if !matches!(
+            format,
+            SourceFormat::StlBinary
+                | SourceFormat::StlAscii
+                | SourceFormat::Step
+                | SourceFormat::ThreeMf
+        ) {
+            return Err(PreviewError::UnsupportedFormat);
+        }
+        let (scene, format) = scene_from_source(format, input, limits, started)?;
+        let analysis = analyze_scene(&scene, format, limits)?;
+        if analysis
+            .dimensions_mm
+            .iter()
+            .any(|dimension| *dimension <= 0.0)
+        {
+            return Err(PreviewError::MalformedInput);
+        }
+        let output_len = analysis
+            .triangle_count
+            .checked_mul(50)
+            .and_then(|n| n.checked_add(84))
+            .filter(|n| *n <= 50 * 1024 * 1024)
+            .ok_or(PreviewError::OutputTooLarge)?;
+        let count =
+            u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
+        let mut output = Vec::with_capacity(output_len);
+        output.resize(80, 0);
+        output.extend_from_slice(&count.to_le_bytes());
+        for triangle in scene.indices.chunks_exact(3) {
+            check_timeout(started, limits)?;
+            // STL normals may be zero: geometry and winding define the surface.
+            output.extend_from_slice(&[0; 12]);
+            for index in triangle {
+                let position = scene
+                    .positions_mm
+                    .get(*index as usize)
+                    .ok_or(PreviewError::MalformedInput)?;
+                for coordinate in position {
+                    output.extend_from_slice(&coordinate.to_le_bytes());
+                }
+            }
+            output.extend_from_slice(&[0; 2]);
+        }
+        // Convert CAD millimetres/Z-up into glTF metres/Y-up at the node, without
+        // changing the canonical millimetre mesh used by the slicer.
+        let glb = write_glb_bounded(
+            &scene,
+            &analysis,
+            limits.max_output_glb_bytes.min(25 * 1024 * 1024),
+            r#","scale":[0.001,0.001,0.001],"rotation":[-0.70710678,0,0,0.70710678]"#,
+        )?;
+        check_timeout(started, limits)?;
+        Ok(ProductionOutput {
+            stl: output,
+            glb,
+            dimensions_mm: analysis.dimensions_mm.map(f64::from),
+        })
+    })();
+    if let Err(reason) = &result {
+        tracing::warn!(
+            event = "operation_failed",
+            provider = "local",
+            operation = "geometry_conversion",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            reason = %reason
+        );
+    } else {
+        tracing::debug!(
+            event = "operation_completed",
+            provider = "local",
+            operation = "geometry_conversion",
+            elapsed_ms = started.elapsed().as_millis() as u64
+        );
     }
-    // Convert CAD millimetres/Z-up into glTF metres/Y-up at the node, without
-    // changing the canonical millimetre mesh used by the slicer.
-    let glb = write_glb_bounded(
-        &scene,
-        &analysis,
-        limits.max_output_glb_bytes.min(25 * 1024 * 1024),
-        r#","scale":[0.001,0.001,0.001],"rotation":[-0.70710678,0,0,0.70710678]"#,
-    )?;
-    check_timeout(started, limits)?;
-    Ok(ProductionOutput {
-        stl: output,
-        glb,
-        dimensions_mm: analysis.dimensions_mm.map(f64::from),
-    })
+    result
 }
 
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn stl_to_preview_glb(
     input: &[u8],
     limits: &ConversionLimits,

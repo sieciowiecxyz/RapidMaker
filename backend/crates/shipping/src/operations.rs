@@ -79,6 +79,7 @@ fn command_path(kind: &str, uuid: &str) -> Result<String, ShipmentError> {
     Ok(format!("/{prefix}/{uuid}"))
 }
 impl Sandbox {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn pickup_proposals(
         &self,
         ids: &[String],
@@ -98,6 +99,7 @@ impl Sandbox {
         )
         .await
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn request_pickup(
         &self,
         uuid: &str,
@@ -114,6 +116,7 @@ impl Sandbox {
         let body = json!({"uuid":uuid,"packages":packages(ids)?,"pickup_date":date});
         self.submit_logistics("pickup", uuid, &body).await
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn cancel_shipments(&self, uuid: &str, ids: &[String]) -> Result<(), ShipmentError> {
         let body = json!({"uuid":uuid,"packages":packages(ids)?});
         self.submit_logistics("cancel", uuid, &body).await
@@ -134,6 +137,7 @@ impl Sandbox {
         Ok(())
     }
     /// Return raw per-package details: acceptance alone is not completed pickup/cancellation.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn logistics_command(&self, kind: &str, uuid: &str) -> Result<Value, ShipmentError> {
         let path = command_path(kind, uuid)?;
         self.shipment_request(reqwest::Method::GET, &path, 1, None, false)

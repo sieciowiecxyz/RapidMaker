@@ -152,3 +152,8 @@ Bez frontendu. Istniejące crate’y, worker i lease nadania; jedna tabela `ship
 Stan `submitting` zapisujemy przed jedynym PUT. Po utracie odpowiedzi/restartcie sprawdzamy GET tej samej komendy UUID; nie wysyłamy ponownie PUT. Nieznany lub niespójny wynik → `manual_review`; POST `/api/admin/orders/{id}/shipment/actions/{action_id}/reconcile` z `{version}` wznawia wyłącznie odczyt. Nie usuwa niepewnego zlecenia i nie upoważnia do kolejnej mutacji. Wyniki częściowe zachowują potwierdzone grupy. Anulowanie odroczone odpytujemy co 15 min; inne oczekujące operacje zwykle co minutę. Brak nowych sekretów i zależności.
 
 Źródło: [Furgonetka — podjazdy i anulowanie](https://furgonetka.pl/api/rest/packages-instruction). Dowody i ograniczenia: MILESTONES.md, L1–L2.
+
+
+## L3 — Spójne logi Rust
+
+Wdrożony wspólny `tracing`/JSON stderr, identyfikator HTTP, kontekst workerów i bezpieczne kategorie błędów. Zastępuje ręczne logi tekstowe; nie zmienia płatności, uprawnień, retry ani protokołu stdout. Zakres i poziomy: [logging.md](logging.md). Metryki, health/readiness, Loki/Grafana i retencja kolektora pozostają osobnym etapem.

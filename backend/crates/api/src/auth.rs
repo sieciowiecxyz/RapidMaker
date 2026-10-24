@@ -358,7 +358,7 @@ async fn start(
         .send(&email, Notification::LoginCode(&code))
         .await
     {
-        eprintln!("event=auth_mail_failed reason={reason}");
+        tracing::error!(event="auth_mail_failed", reason=%reason);
         db.auth_invalidate(&id).await.map_err(|_| unavailable())?;
         return Err(unavailable());
     }
@@ -367,6 +367,7 @@ async fn start(
         &[set_cookie(attempt_name(), &browser, 600)],
     )?;
     *r.status_mut() = StatusCode::ACCEPTED;
+    tracing::info!(event = "auth_code_sent");
     Ok(r)
 }
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -421,11 +422,16 @@ async fn verify(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(|| {
+            tracing::warn!(
+                event = "auth_verify_rejected",
+                reason = "invalid_or_expired_code"
+            );
             error(
                 StatusCode::UNAUTHORIZED,
                 "Kod jest nieprawidłowy lub wygasł.",
             )
         })?;
+    tracing::info!(event="auth_verified", role=%session.user.role);
     response(
         json!({"user":session.user,"csrf_token":auth.key()?.csrf(&token),"admin_verified":session.admin_verified_at.is_some()}),
         &[
@@ -473,6 +479,7 @@ async fn logout(
         .auth_logout(session_cookie(&headers)?.ok_or_else(unavailable)?)
         .await
         .map_err(|_| unavailable())?;
+    tracing::info!(event = "auth_logout", scope = "session");
     response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
 #[utoipa::path(
@@ -495,6 +502,7 @@ async fn logout_all(
         .auth_logout_all(&s.user.id)
         .await
         .map_err(|_| unavailable())?;
+    tracing::info!(event = "auth_logout", scope = "all_sessions");
     response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }
 #[utoipa::path(

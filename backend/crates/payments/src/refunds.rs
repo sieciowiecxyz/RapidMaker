@@ -19,6 +19,7 @@ pub struct Refund {
 
 impl Stripe {
     /// Persist the request/key and verify the original paid PaymentIntent before calling.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn create_refund(
         &self,
         expected: &ExpectedRefund,
@@ -38,6 +39,7 @@ impl Stripe {
         refund(value, expected, None)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn retrieve_refund(
         &self,
         provider_id: &str,

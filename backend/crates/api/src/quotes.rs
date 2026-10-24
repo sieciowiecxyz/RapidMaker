@@ -182,6 +182,7 @@ async fn estimate(
                 "Kolejka wycen jest pełna lub model wygasł. Spróbuj później.",
             )
         })?;
+    tracing::info!(event="slicer_queued", job_id=%job.id, model_id=%model.record.id);
     Ok((StatusCode::ACCEPTED, Json(public_job(job))))
 }
 #[utoipa::path(operation_id = "quotes_status", get, path = "/api/quotes/jobs/{id}", tag = "Wycena", params(("id" = String, Path)),

@@ -150,3 +150,8 @@ Wymagają admin/passkey + CSRF. Używaj lokalnych ID przesyłek z GET `/api/admi
 | POST `/actions/{action_id}/reconcile` | `{version}` → ponowne sprawdzenie niepewnego wyniku, bez nowego zlecenia |
 
 Godziny kopiuj z dostępnej propozycji wspólnej dla wszystkich wybranych przesyłek. `repeat:true` służy do ponowienia nieudanego odbioru, jeśli Furgonetka na to pozwala. Jedna operacja obejmuje jedno zamówienie i maks. 30 przesyłek Furgonetki; pojedyncza przesyłka może zawierać wiele kartonów. Podjazd nie oznacza przekazania kurierowi. Anulowanie nie zwraca pieniędzy w Stripe. Przekazanych lub anulowanych lokalnie paczek nie można ponownie zlecić tymi endpointami. Kontrakt i ograniczenia: [L1–L2](../docs/PLAN.md#l1l2--podjazdy-i-anulowanie).
+
+
+### Logi
+
+Backend Rust emituje JSON na stderr, domyślnie `LOG_LEVEL=info`. Udane odczyty i szczegóły dostawców: `debug`; błędy pozostają widoczne na poziomie domyślnym. Każda odpowiedź HTTP ma serwerowy `x-request-id`; logi mają szablon trasy i kontekst zadania/zamówienia. Bez sekretów, body, adresów, treści wiadomości i surowych błędów. Stdout CLI/workera pozostaje bez zmian. [Konfiguracja i granice](../docs/logging.md).

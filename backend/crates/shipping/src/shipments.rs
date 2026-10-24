@@ -100,6 +100,7 @@ async fn bounded(
     Ok(body)
 }
 impl Sandbox {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(super) async fn shipment_request(
         &self,
         method: reqwest::Method,
@@ -108,65 +109,103 @@ impl Sandbox {
         body: Option<&Value>,
         mutation: bool,
     ) -> Result<Value, ShipmentError> {
-        let request = self
-            .build_request(method, path, version, body)
-            .map_err(map_error)?;
-        let response = self.client.execute(request).await.map_err(|_| {
-            if mutation {
-                ShipmentError::Unknown
-            } else {
-                ShipmentError::Unavailable
+        let operation = request_operation(path);
+        let started = std::time::Instant::now();
+        let result = async {
+            let request = self
+                .build_request(method, path, version, body)
+                .map_err(map_error)?;
+            let response = self.client.execute(request).await.map_err(|_| {
+                if mutation {
+                    ShipmentError::Unknown
+                } else {
+                    ShipmentError::Unavailable
+                }
+            })?;
+            let status = response.status();
+            tracing::debug!(
+                event = "provider_response",
+                provider = "furgonetka",
+                operation = operation,
+                status = status.as_u16()
+            );
+            if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+                return Err(ShipmentError::Unauthorized);
             }
-        })?;
-        let status = response.status();
-        if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
-            return Err(ShipmentError::Unauthorized);
-        }
-        if status == StatusCode::NOT_FOUND {
-            return Err(ShipmentError::NotFound);
-        }
-        if status == StatusCode::BAD_REQUEST
-            || status == StatusCode::UNPROCESSABLE_ENTITY
-            || status == StatusCode::CONFLICT
-        {
-            let value: Value = serde_json::from_slice(&bounded(response, 65536, mutation).await?)
-                .map_err(|_| invalid())?;
-            if ["/order-commands/", "/pickup-commands/", "/cancel-command/"]
-                .iter()
-                .any(|prefix| path.starts_with(prefix))
-                && value["errors"]
-                    .as_array()
-                    .is_some_and(|errors| errors.iter().any(|e| e["code"] == "commandNotExists"))
-            {
+            if status == StatusCode::NOT_FOUND {
                 return Err(ShipmentError::NotFound);
             }
-            if value["code"] == "terms_and_conditions_not_valid" {
-                return Err(ShipmentError::Invalid(
-                    "Zaakceptuj aktualny regulamin przewoźnika w panelu Furgonetki sandbox.".into(),
-                ));
+            if status == StatusCode::BAD_REQUEST
+                || status == StatusCode::UNPROCESSABLE_ENTITY
+                || status == StatusCode::CONFLICT
+            {
+                let value: Value =
+                    serde_json::from_slice(&bounded(response, 65536, mutation).await?)
+                        .map_err(|_| invalid())?;
+                if ["/order-commands/", "/pickup-commands/", "/cancel-command/"]
+                    .iter()
+                    .any(|prefix| path.starts_with(prefix))
+                    && value["errors"].as_array().is_some_and(|errors| {
+                        errors.iter().any(|e| e["code"] == "commandNotExists")
+                    })
+                {
+                    return Err(ShipmentError::NotFound);
+                }
+                if value["code"] == "terms_and_conditions_not_valid" {
+                    return Err(ShipmentError::Invalid(
+                        "Zaakceptuj aktualny regulamin przewoźnika w panelu Furgonetki sandbox."
+                            .into(),
+                    ));
+                }
+                return Err(invalid());
             }
-            return Err(invalid());
-        }
-        if !status.is_success() {
-            return Err(if mutation {
-                ShipmentError::Unknown
-            } else {
-                ShipmentError::Unavailable
-            });
-        }
-        if status == StatusCode::NO_CONTENT {
-            return Ok(Value::Null);
-        }
-        let bytes = bounded(response, 5 * 1024 * 1024, mutation).await?;
-        serde_json::from_slice(&bytes).map_err(|_| {
-            if mutation {
-                ShipmentError::Unknown
-            } else {
-                ShipmentError::Unavailable
+            if !status.is_success() {
+                return Err(if mutation {
+                    ShipmentError::Unknown
+                } else {
+                    ShipmentError::Unavailable
+                });
             }
-        })
+            if status == StatusCode::NO_CONTENT {
+                return Ok(Value::Null);
+            }
+            let bytes = bounded(response, 5 * 1024 * 1024, mutation).await?;
+            serde_json::from_slice(&bytes).map_err(|_| {
+                if mutation {
+                    ShipmentError::Unknown
+                } else {
+                    ShipmentError::Unavailable
+                }
+            })
+        }
+        .await;
+        if let Err(error) = &result {
+            let reason = match error {
+                ShipmentError::Invalid(_) => "provider_rejected",
+                ShipmentError::Unavailable => "unavailable",
+                ShipmentError::Unauthorized => "unauthorized",
+                ShipmentError::NotFound => "not_found",
+                ShipmentError::Unknown => "unknown_outcome",
+            };
+            tracing::warn!(
+                event = "operation_failed",
+                provider = "furgonetka",
+                operation = operation,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason
+            );
+        } else {
+            tracing::debug!(
+                event = "operation_completed",
+                provider = "furgonetka",
+                operation = operation,
+                elapsed_ms = started.elapsed().as_millis() as u64
+            );
+        }
+        result
     }
     /// Validate and price the purchased service, never silently select a cheaper carrier.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn quote_shipment(
         &self,
         recipient: &Recipient,
@@ -274,6 +313,7 @@ impl Sandbox {
         }
         Ok(result)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn add_shipment(&self, body: &Value) -> Result<ProviderPackage, ShipmentError> {
         if serde_json::to_vec(body).map_or(true, |v| v.len() > 131072) || !body.is_object() {
             return Err(invalid());
@@ -287,6 +327,7 @@ impl Sandbox {
         }
         Ok(package)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn order_shipments(
         &self,
         command: &str,
@@ -314,6 +355,7 @@ impl Sandbox {
         }
         Ok(())
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn shipment_command(&self, command: &str) -> Result<CommandStatus, ShipmentError> {
         if !valid_uuid(command) {
             return Err(invalid());
@@ -329,6 +371,7 @@ impl Sandbox {
             .await?;
         parse_command(&value)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn get_shipment(&self, provider_id: &str) -> Result<ProviderPackage, ShipmentError> {
         if !safe_id(provider_id) {
             return Err(invalid());
@@ -345,6 +388,7 @@ impl Sandbox {
         )
     }
     /// Bounded search; an incomplete or ambiguous search is never proof of absence.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn find_shipment_reference(
         &self,
         reference: &str,
@@ -384,6 +428,7 @@ impl Sandbox {
             _ => Err(ShipmentError::Unknown),
         }
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn shipment_label(
         &self,
         provider_id: &str,
@@ -409,6 +454,7 @@ impl Sandbox {
         }
         Ok(pdf)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn shipment_tracking(&self, provider_id: &str) -> Result<Tracking, ShipmentError> {
         if !safe_id(provider_id) {
             return Err(invalid());
@@ -425,6 +471,7 @@ impl Sandbox {
         parse_tracking(&value)
     }
     /// Sandbox-only test diagnostic; this adapter has no production base URL.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn simulate_tracking(
         &self,
         provider_id: &str,

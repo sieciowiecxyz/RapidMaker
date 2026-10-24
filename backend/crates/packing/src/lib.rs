@@ -178,12 +178,19 @@ fn fill(carton: Carton, units: &[Unit]) -> (Parcel, Vec<usize>) {
     (parcel, assigned)
 }
 
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn estimate(request: EstimateRequest) -> Estimate {
-    estimate_with(request, CARTONS.len(), false)
+    let estimate = estimate_with(request, CARTONS.len(), false);
+    tracing::debug!(
+        event = "packing_estimated",
+        parcels = estimate.parcels.len()
+    );
+    estimate
 }
 
 /// Fill cartons first; compare prices only among plans with the fewest parcels.
 /// At most five carrier-distinct plans; pickup and manual review remain single results.
+#[tracing::instrument(skip_all, level = "debug")]
 pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
     let baseline = estimate(request.clone());
     if baseline.status != "estimated" || baseline.parcels.is_empty() {
@@ -212,6 +219,11 @@ pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
         .min()
         .unwrap_or(0);
     plans.retain(|plan| plan.parcels.len() == minimum);
+    tracing::debug!(
+        event = "packing_candidates",
+        candidates = plans.len(),
+        parcels = minimum
+    );
     plans
 }
 

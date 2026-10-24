@@ -7,6 +7,7 @@ use rapidmaker_shipping::{PickupDate, ShipmentError};
 use rapidmaker_storage::{Shipment, ShipmentAction, StorageError};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tracing::Instrument;
 
 #[derive(Deserialize)]
 struct Input {
@@ -31,7 +32,34 @@ async fn save(
         .shipment_action_update(s, &a.id, state, result, canceled, now())
         .await?
     {
+        tracing::warn!(event = "shipment_action_lease_lost", action_id = %a.id, reason = "lease_lost");
         return Err("shipment action lease lost".into());
+    }
+    let reason = match result["error"].as_str() {
+        Some("retry_exhausted") => "retry_exhausted",
+        Some("operator_disabled") => "operator_disabled",
+        Some("operation_unavailable") => "operation_unavailable",
+        Some("pickup_window_unavailable") => "pickup_window_unavailable",
+        Some("provider_rejected") => "provider_rejected",
+        Some("invalid_provider_response") => "invalid_provider_response",
+        _ if state == "failed" => "provider_failed",
+        _ if state == "partial" => "provider_partial",
+        _ if state == "manual_review" => "provider_evidence_incomplete",
+        _ => "none",
+    };
+    match state {
+        "succeeded" => tracing::info!(
+            event = "shipment_action_succeeded",
+            canceled_packages = canceled.len()
+        ),
+        "failed" | "partial" | "manual_review" => tracing::warn!(
+            event = "shipment_action_finished",
+            outcome = state,
+            reason,
+            canceled_packages = canceled.len()
+        ),
+        "submitting" => tracing::info!(event = "shipment_action_submitting"),
+        _ => tracing::debug!(event = "shipment_action_pending", outcome = state),
     }
     Ok(())
 }
@@ -44,193 +72,211 @@ pub(super) async fn process(app: &App, s: &Shipment) -> Result<bool, StorageErro
         }
         return Ok(false);
     };
-    let input: Input = serde_json::from_value(a.input.clone())?;
-    let api = app.shipping.as_ref().ok_or("shipping unavailable")?;
-    if s.attempts >= 999 {
-        save(
-            app,
-            s,
-            &a,
-            "manual_review",
-            &json!({"error":"retry_exhausted"}),
-            &[],
-        )
-        .await?;
-        db.shipment_retry(s, 900, now()).await?;
-        return Ok(true);
-    }
-    if a.state == "queued" {
-        if !db.shipment_action_authorized(&a.id).await? {
+    let started = std::time::Instant::now();
+    let kind = if a.kind == "pickup" {
+        "pickup"
+    } else {
+        "cancel"
+    };
+    let result: Result<bool, StorageError> = async {
+        let input: Input = serde_json::from_value(a.input.clone())?;
+        let api = app.shipping.as_ref().ok_or("shipping unavailable")?;
+        if s.attempts >= 999 {
             save(
                 app,
                 s,
                 &a,
-                "failed",
-                &json!({"error":"operator_disabled"}),
+                "manual_review",
+                &json!({"error":"retry_exhausted"}),
                 &[],
             )
             .await?;
-            db.shipment_retry(s, 1, now()).await?;
+            db.shipment_retry(s, 900, now()).await?;
             return Ok(true);
         }
-        // Availability may have changed between admin approval and the worker lease.
-        let check = available(app, &input.provider_ids, &a.kind, input.repeat).await;
-        if let Err((status, _)) = check {
-            if status.is_client_error() {
+        if a.state == "queued" {
+            if !db.shipment_action_authorized(&a.id).await? {
                 save(
                     app,
                     s,
                     &a,
                     "failed",
-                    &json!({"error":"operation_unavailable"}),
+                    &json!({"error":"operator_disabled"}),
                     &[],
                 )
                 .await?;
                 db.shipment_retry(s, 1, now()).await?;
                 return Ok(true);
             }
-            return Err("logistics availability unavailable".into());
-        }
-        if a.kind == "pickup" {
-            let date = input.pickup_date.as_ref().ok_or("missing pickup date")?;
-            let proposals = api
-                .pickup_proposals(&input.provider_ids, &date.date, input.repeat)
+            // Availability may have changed between admin approval and the worker lease.
+            let check = available(app, &input.provider_ids, &a.kind, input.repeat).await;
+            if let Err((status, _)) = check {
+                if status.is_client_error() {
+                    save(
+                        app,
+                        s,
+                        &a,
+                        "failed",
+                        &json!({"error":"operation_unavailable"}),
+                        &[],
+                    )
+                    .await?;
+                    db.shipment_retry(s, 1, now()).await?;
+                    return Ok(true);
+                }
+                return Err("logistics availability unavailable".into());
+            }
+            if a.kind == "pickup" {
+                let date = input.pickup_date.as_ref().ok_or("missing pickup date")?;
+                let proposals = api
+                    .pickup_proposals(&input.provider_ids, &date.date, input.repeat)
+                    .await
+                    .map_err(|_| "pickup proposals unavailable")?;
+                if !offered(&proposals, &input.provider_ids, date) {
+                    save(
+                        app,
+                        s,
+                        &a,
+                        "failed",
+                        &json!({"error":"pickup_window_unavailable"}),
+                        &[],
+                    )
+                    .await?;
+                    db.shipment_retry(s, 1, now()).await?;
+                    return Ok(true);
+                }
+            }
+            // This durable transition must happen before the only mutating HTTP attempt.
+            save(app, s, &a, "submitting", &json!({}), &[]).await?;
+            let submitted = if a.kind == "pickup" {
+                api.request_pickup(
+                    &a.id,
+                    &input.provider_ids,
+                    input.pickup_date.as_ref().ok_or("missing date")?,
+                )
                 .await
-                .map_err(|_| "pickup proposals unavailable")?;
-            if !offered(&proposals, &input.provider_ids, date) {
-                save(
-                    app,
-                    s,
-                    &a,
-                    "failed",
-                    &json!({"error":"pickup_window_unavailable"}),
-                    &[],
-                )
-                .await?;
-                db.shipment_retry(s, 1, now()).await?;
-                return Ok(true);
+            } else {
+                api.cancel_shipments(&a.id, &input.provider_ids).await
+            };
+            match submitted {
+                Ok(()) => save(app, s, &a, "pending", &json!({}), &[]).await?,
+                Err(
+                    ShipmentError::Invalid(_)
+                    | ShipmentError::Unauthorized
+                    | ShipmentError::NotFound,
+                ) => {
+                    save(
+                        app,
+                        s,
+                        &a,
+                        "failed",
+                        &json!({"error":"provider_rejected"}),
+                        &[],
+                    )
+                    .await?;
+                    db.shipment_retry(s, 1, now()).await?;
+                    return Ok(true);
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        event = "shipment_action_submission_uncertain",
+                        reason = "provider_unknown"
+                    );
+                    db.shipment_retry(s, 30, now()).await?;
+                    return Ok(true);
+                }
             }
+            db.shipment_retry(s, 3, now()).await?;
+            return Ok(true);
         }
-        // This durable transition must happen before the only mutating HTTP attempt.
-        save(app, s, &a, "submitting", &json!({}), &[]).await?;
-        let submitted = if a.kind == "pickup" {
-            api.request_pickup(
-                &a.id,
-                &input.provider_ids,
-                input.pickup_date.as_ref().ok_or("missing date")?,
-            )
-            .await
-        } else {
-            api.cancel_shipments(&a.id, &input.provider_ids).await
-        };
-        match submitted {
-            Ok(()) => save(app, s, &a, "pending", &json!({}), &[]).await?,
-            Err(
-                ShipmentError::Invalid(_) | ShipmentError::Unauthorized | ShipmentError::NotFound,
-            ) => {
+        let command = match api.logistics_command(&a.kind, &a.id).await {
+            Ok(v) => v,
+            Err(ShipmentError::NotFound) => {
+                // A lost response is not permission to send another PUT, even with the same UUID.
+                let misses = a.result["not_found_count"].as_u64().unwrap_or(0) + 1;
                 save(
                     app,
                     s,
                     &a,
-                    "failed",
-                    &json!({"error":"provider_rejected"}),
+                    if misses >= 3 {
+                        "manual_review"
+                    } else {
+                        "pending"
+                    },
+                    &json!({"error":"command_not_found","not_found_count":misses}),
                     &[],
                 )
                 .await?;
-                db.shipment_retry(s, 1, now()).await?;
-                return Ok(true);
-            }
-            Err(_) => {
                 db.shipment_retry(s, 30, now()).await?;
                 return Ok(true);
             }
-        }
-        db.shipment_retry(s, 3, now()).await?;
-        return Ok(true);
-    }
-    let command = match api.logistics_command(&a.kind, &a.id).await {
-        Ok(v) => v,
-        Err(ShipmentError::NotFound) => {
-            // A lost response is not permission to send another PUT, even with the same UUID.
-            let misses = a.result["not_found_count"].as_u64().unwrap_or(0) + 1;
+            Err(_) => return Err("logistics command unavailable".into()),
+        };
+        if command["uuid"].as_str() != Some(a.id.as_str())
+            || !matches!(
+                command["status"].as_str(),
+                Some("queueing" | "running" | "successful" | "partial_success" | "error")
+            )
+        {
             save(
                 app,
                 s,
                 &a,
-                if misses >= 3 {
-                    "manual_review"
-                } else {
-                    "pending"
-                },
-                &json!({"error":"command_not_found","not_found_count":misses}),
+                "manual_review",
+                &json!({"error":"invalid_provider_response"}),
                 &[],
             )
             .await?;
-            db.shipment_retry(s, 30, now()).await?;
+            db.shipment_retry(s, 900, now()).await?;
             return Ok(true);
         }
-        Err(_) => return Err("logistics command unavailable".into()),
-    };
-    if command["uuid"].as_str() != Some(a.id.as_str())
-        || !matches!(
-            command["status"].as_str(),
-            Some("queueing" | "running" | "successful" | "partial_success" | "error")
-        )
-    {
-        save(
-            app,
-            s,
-            &a,
-            "manual_review",
-            &json!({"error":"invalid_provider_response"}),
-            &[],
-        )
-        .await?;
-        db.shipment_retry(s, 900, now()).await?;
-        return Ok(true);
-    }
-    let running = matches!(command["status"].as_str(), Some("queueing" | "running"));
-    let mut result = json!({"command":command});
-    let (state, canceled) = if a.kind == "pickup" {
-        let state = pickup_result(&result["command"], &input.provider_ids);
-        (state, vec![])
-    } else {
-        let mut canceled = vec![];
-        for (local, provider) in input.package_ids.iter().zip(&input.provider_ids) {
-            let p = api
-                .get_shipment(provider)
-                .await
-                .map_err(|_| "cancellation confirmation unavailable")?;
-            if p.state == "cancelled" {
-                canceled.push(local.clone());
-            }
-        }
-        let state = if canceled.len() == input.package_ids.len() {
-            "succeeded"
-        } else if running || deferred(&result["command"]) {
-            "pending"
-        } else if result["command"]["status"] == "successful" {
-            "manual_review"
-        } else if canceled.is_empty() {
-            "failed"
+        let running = matches!(command["status"].as_str(), Some("queueing" | "running"));
+        let mut result = json!({"command":command});
+        let (state, canceled) = if a.kind == "pickup" {
+            let state = pickup_result(&result["command"], &input.provider_ids);
+            (state, vec![])
         } else {
-            "partial"
+            let mut canceled = vec![];
+            for (local, provider) in input.package_ids.iter().zip(&input.provider_ids) {
+                let p = api
+                    .get_shipment(provider)
+                    .await
+                    .map_err(|_| "cancellation confirmation unavailable")?;
+                if p.state == "cancelled" {
+                    canceled.push(local.clone());
+                }
+            }
+            let state = if canceled.len() == input.package_ids.len() {
+                "succeeded"
+            } else if running || deferred(&result["command"]) {
+                "pending"
+            } else if result["command"]["status"] == "successful" {
+                "manual_review"
+            } else if canceled.is_empty() {
+                "failed"
+            } else {
+                "partial"
+            };
+            (state, canceled)
         };
-        (state, canceled)
-    };
-    if a.kind == "cancel" {
-        result["confirmed_canceled_package_ids"] = json!(canceled);
+        if a.kind == "cancel" {
+            result["confirmed_canceled_package_ids"] = json!(canceled);
+        }
+        save(app, s, &a, state, &result, &canceled).await?;
+        let delay = if state != "pending" {
+            1
+        } else if deferred(&result["command"]) {
+            900
+        } else {
+            60
+        };
+        db.shipment_retry(s, delay, now()).await?;
+        Ok(true)
     }
-    save(app, s, &a, state, &result, &canceled).await?;
-    let delay = if state != "pending" {
-        1
-    } else if deferred(&result["command"]) {
-        900
-    } else {
-        60
-    };
-    db.shipment_retry(s, delay, now()).await?;
-    Ok(true)
+    .instrument(tracing::info_span!("shipment_action", action_id = %a.id, kind))
+    .await;
+    tracing::debug!(event = "shipment_action_processed", action_id = %a.id, elapsed_ms = started.elapsed().as_millis() as u64, succeeded = result.is_ok());
+    result
 }
 fn deferred(command: &Value) -> bool {
     command["cancel_command_details"]

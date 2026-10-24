@@ -362,6 +362,7 @@ async fn upload(
         ));
     }
     pending.0 = None;
+    tracing::info!(event="model_uploaded", model_id=%record.id, source_bytes=record.source_bytes, mesh_bytes=record.mesh_bytes, preview_bytes=record.preview_bytes);
     let mut response = (StatusCode::CREATED, Json(public_metadata(&record))).into_response();
     if record.user_id.is_none() {
         response.headers_mut().insert(

@@ -127,11 +127,36 @@ impl Imap {
         .collect()
     }
     /// Initial or changed UIDVALIDITY establishes a baseline, never imports old mail.
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn poll(&self, cursor: Option<ImapCursor>) -> Result<ImapBatch, MailError> {
-        let _slot = self.slot.try_acquire().map_err(|_| MailError::Busy)?;
-        tokio::time::timeout(Duration::from_secs(30), self.poll_inner(cursor))
-            .await
-            .map_err(|_| MailError::Transient)?
+        let started = std::time::Instant::now();
+        let result = async {
+            let _slot = self.slot.try_acquire().map_err(|_| MailError::Busy)?;
+            tokio::time::timeout(Duration::from_secs(30), self.poll_inner(cursor))
+                .await
+                .map_err(|_| MailError::Transient)?
+        }
+        .await;
+        match &result {
+            Ok(batch) if !batch.items.is_empty() => tracing::debug!(
+                event = "imap_batch",
+                provider = "icloud",
+                operation = "imap_poll",
+                messages = batch.items.len(),
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "Mailbox batch received"
+            ),
+            Err(reason) => tracing::warn!(
+                event = "imap_poll_failed",
+                provider = "icloud",
+                operation = "imap_poll",
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason = %reason,
+                "Mailbox polling failed"
+            ),
+            _ => {}
+        }
+        result
     }
     async fn poll_inner(&self, cursor: Option<ImapCursor>) -> Result<ImapBatch, MailError> {
         let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());

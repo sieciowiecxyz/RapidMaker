@@ -219,6 +219,7 @@ async fn pickup(
         .await
         .map_err(|_| unavailable())?
         .map_err(domain)?;
+    tracing::info!(event="shipment_action_requested", action_id=%a.id, shipment_id=%a.shipment_id, kind="pickup");
     Ok((StatusCode::ACCEPTED, Json(a)))
 }
 #[utoipa::path(post,path="/api/admin/orders/{id}/shipment/cancel",operation_id="shipment_cancel",tag="Admin",
@@ -253,6 +254,7 @@ async fn cancel(
         .await
         .map_err(|_| unavailable())?
         .map_err(domain)?;
+    tracing::info!(event="shipment_action_requested", action_id=%a.id, shipment_id=%a.shipment_id, kind="cancel");
     Ok((StatusCode::ACCEPTED, Json(a)))
 }
 #[utoipa::path(post,path="/api/admin/orders/{id}/shipment/actions/{action_id}/reconcile",operation_id="shipment_action_reconcile",tag="Admin",

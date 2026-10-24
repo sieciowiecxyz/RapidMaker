@@ -7,6 +7,7 @@ mod checkout_worker;
 mod docs;
 mod email;
 mod files;
+mod logging;
 mod mail_inbound;
 mod models;
 pub use mail_inbound::receive_once as mail_receive_once;
@@ -94,7 +95,8 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let router = checkout::protect(router.merge(docs::router(document)), auth.clone())
         .merge(webhook)
         .layer(axum::Extension(mailer.clone()))
-        .layer(axum::Extension(auth));
+        .layer(axum::Extension(auth))
+        .layer(axum::middleware::from_fn(logging::request));
     let worker = storage
         .as_ref()
         .filter(|_| mailer.enabled())

@@ -105,6 +105,7 @@ impl Stripe {
             .map_err(|_| Error::InvalidInput)?;
         Ok(Self { client, secret })
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn create_checkout(
         &self,
         form: &[(String, String)],
@@ -121,6 +122,7 @@ impl Stripe {
             .await?;
         checkout(value, expected, None)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn retrieve_checkout(
         &self,
         id: &str,
@@ -132,6 +134,7 @@ impl Stripe {
             .await?;
         checkout(value, expected, Some(id))
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn expire_checkout(
         &self,
         id: &str,
@@ -152,6 +155,7 @@ impl Stripe {
         }
         Ok(session)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn create_intent(
         &self,
         form: &[(String, String)],
@@ -168,6 +172,7 @@ impl Stripe {
             .await?;
         intent(value, expected, None)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn retrieve_intent(
         &self,
         id: &str,
@@ -179,58 +184,100 @@ impl Stripe {
             .await?;
         intent(value, expected, Some(id))
     }
+    #[tracing::instrument(skip_all, level = "debug", fields(provider = "stripe", operation = tracing::field::Empty))]
     async fn request(
         &self,
         method: Method,
         path: &str,
         form: Option<(&[(String, String)], &str)>,
     ) -> Result<Value, Error> {
-        let mut request = self
-            .client
-            .request(method, format!("{API}/{path}"))
-            .bearer_auth(&self.secret)
-            .header("Stripe-Version", API_VERSION);
-        if let Some((form, key)) = form {
-            if key.is_empty() || key.len() > 255 || !key.bytes().all(|b| b.is_ascii_graphic()) {
-                return Err(Error::InvalidInput);
+        let operation = match path.split('/').next() {
+            Some("checkout") => "checkout_session",
+            Some("payment_intents") => "payment_intent",
+            Some("refunds") => "refund",
+            _ => "stripe_request",
+        };
+        tracing::Span::current().record("operation", operation);
+        let started = std::time::Instant::now();
+        let result = async {
+            let mut request = self
+                .client
+                .request(method, format!("{API}/{path}"))
+                .bearer_auth(&self.secret)
+                .header("Stripe-Version", API_VERSION);
+            if let Some((form, key)) = form {
+                if key.is_empty() || key.len() > 255 || !key.bytes().all(|b| b.is_ascii_graphic()) {
+                    return Err(Error::InvalidInput);
+                }
+                request = request.header("Idempotency-Key", key).form(form);
             }
-            request = request.header("Idempotency-Key", key).form(form);
-        }
-        let mut response = request.send().await.map_err(|_| Error::Unknown)?;
-        let status = response.status();
-        if response
-            .content_length()
-            .is_some_and(|n| n > MAX_RESPONSE as u64)
-        {
-            return Err(Error::Unknown);
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unknown)? {
-            if bytes.len() + chunk.len() > MAX_RESPONSE {
+            let mut response = request.send().await.map_err(|_| Error::Unknown)?;
+            let status = response.status();
+            tracing::debug!(
+                event = "provider_response",
+                provider = "stripe",
+                operation = operation,
+                status = status.as_u16()
+            );
+            if response
+                .content_length()
+                .is_some_and(|n| n > MAX_RESPONSE as u64)
+            {
                 return Err(Error::Unknown);
             }
-            bytes.extend_from_slice(&chunk);
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unknown)? {
+                if bytes.len() + chunk.len() > MAX_RESPONSE {
+                    return Err(Error::Unknown);
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unknown)?;
+            if !status.is_success() {
+                return Err(
+                    if status.is_client_error() && !matches!(status.as_u16(), 408 | 409 | 429) {
+                        Error::Rejected {
+                            status: status.as_u16(),
+                            code: value["error"]["code"]
+                                .as_str()
+                                .filter(|s| {
+                                    s.len() <= 80
+                                        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                                })
+                                .map(str::to_owned),
+                        }
+                    } else {
+                        Error::Unknown
+                    },
+                );
+            }
+            Ok(value)
         }
-        let value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Unknown)?;
-        if !status.is_success() {
-            return Err(
-                if status.is_client_error() && !matches!(status.as_u16(), 408 | 409 | 429) {
-                    Error::Rejected {
-                        status: status.as_u16(),
-                        code: value["error"]["code"]
-                            .as_str()
-                            .filter(|s| {
-                                s.len() <= 80
-                                    && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                            })
-                            .map(str::to_owned),
-                    }
-                } else {
-                    Error::Unknown
-                },
+        .await;
+        if let Err(error) = &result {
+            let reason = match error {
+                Error::InvalidInput => "invalid_input",
+                Error::Rejected { .. } => "provider_rejected",
+                Error::Unknown => "unknown_outcome",
+                Error::Mismatch => "payment_mismatch",
+                Error::InvalidSignature => "invalid_signature",
+            };
+            tracing::warn!(
+                event = "operation_failed",
+                provider = "stripe",
+                operation = operation,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason
+            );
+        } else {
+            tracing::debug!(
+                event = "operation_completed",
+                provider = "stripe",
+                operation = operation,
+                elapsed_ms = started.elapsed().as_millis() as u64
             );
         }
-        Ok(value)
+        result
     }
 }
 fn validate_id(id: &str, prefix: &str) -> Result<(), Error> {

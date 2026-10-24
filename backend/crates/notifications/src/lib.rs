@@ -169,24 +169,58 @@ impl Mailer {
         .await
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn send_inner(
         &self,
         recipient: &str,
         notification: Notification<'_>,
         message_id: Option<String>,
     ) -> Result<(), MailError> {
-        let deadline = Instant::now() + DEADLINE;
-        let sender = self.enabled.as_ref().ok_or(MailError::Disabled)?;
-        let message = sender.message_with_id(recipient, notification, message_id)?;
-        let _slot = timeout_at(deadline, self.slots.acquire())
-            .await
-            .map_err(|_| MailError::Busy)?
-            .map_err(|_| MailError::Busy)?;
-        timeout_at(deadline, sender.transport.send(message))
-            .await
-            .map_err(|_| MailError::Uncertain)?
-            .map_err(smtp_error)?;
-        Ok(())
+        let started = std::time::Instant::now();
+        let result = async {
+            let deadline = Instant::now() + DEADLINE;
+            let sender = self.enabled.as_ref().ok_or(MailError::Disabled)?;
+            let message = sender.message_with_id(recipient, notification, message_id)?;
+            let _slot = timeout_at(deadline, self.slots.acquire())
+                .await
+                .map_err(|_| MailError::Busy)?
+                .map_err(|_| MailError::Busy)?;
+            timeout_at(deadline, sender.transport.send(message))
+                .await
+                .map_err(|_| MailError::Uncertain)?
+                .map_err(smtp_error)?;
+            Ok(())
+        }
+        .await;
+        if let Err(error) = &result {
+            let reason = match error {
+                MailError::Disabled => "disabled",
+                MailError::Configuration => "configuration",
+                MailError::InvalidAddress => "invalidaddress",
+                MailError::InvalidMessage => "invalidmessage",
+                MailError::TestRecipient => "testrecipient",
+                MailError::Busy => "busy",
+                MailError::Authentication => "authentication",
+                MailError::Transient => "transient",
+                MailError::Rejected => "rejected",
+                MailError::Uncertain => "uncertain",
+            };
+            tracing::warn!(
+                event = "operation_failed",
+                provider = "icloud",
+                operation = "smtp_send",
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                reason
+            );
+        } else {
+            tracing::debug!(
+                event = "operation_completed",
+                provider = "icloud",
+                operation = "smtp_send",
+                elapsed_ms = started.elapsed().as_millis() as u64
+            );
+        }
+        result
     }
 
     /// A local diagnostic, restricted to the configured test recipient in test mode.

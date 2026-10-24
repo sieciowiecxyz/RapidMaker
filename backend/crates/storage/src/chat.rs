@@ -162,6 +162,12 @@ impl Storage {
         )
         .await?;
         tx.commit().await?;
+        tracing::info!(
+            event = "chat_message_saved",
+            order_id = id,
+            operator,
+            origin = "web"
+        );
         Ok(true)
     }
     /// Local operator opt-in only; this is not an HTTP authorization mechanism.

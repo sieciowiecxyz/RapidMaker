@@ -11,6 +11,7 @@ use tokio::{
     sync::watch,
     task::{JoinHandle, JoinSet},
 };
+use tracing::Instrument;
 type Failure = rapidmaker_storage::StorageError;
 type PollResult = (
     ShipmentPackage,
@@ -49,10 +50,15 @@ impl ShipmentWorker {
         let mut task = self.task;
         match tokio::time::timeout(Duration::from_secs(25), &mut task).await {
             Ok(Ok(())) => {}
-            Ok(Err(_)) => eprintln!("event=shipment_worker_failed"),
+            Ok(Err(_)) => {
+                tracing::error!(event = "shipment_worker_failed", reason = "task_failure")
+            }
             Err(_) => {
                 task.abort();
-                eprintln!("event=shipment_worker_shutdown_timeout");
+                tracing::error!(
+                    event = "shipment_worker_shutdown_timeout",
+                    reason = "shutdown_timeout"
+                );
             }
         }
     }
@@ -63,23 +69,41 @@ async fn run_once(app: &Arc<App>) {
         Ok(Some(s)) => s,
         Ok(None) => return,
         Err(_) => {
-            eprintln!("event=shipment_claim_failed");
+            tracing::error!(event = "shipment_claim_failed", reason = "database");
             return;
         }
     };
-    if !matches!(
-        tokio::time::timeout(Duration::from_secs(90), process(app, &s)).await,
-        Ok(Ok(()))
-    ) {
-        eprintln!("event=shipment_process_failed");
-        if db
-            .shipment_retry(&s, backoff(s.attempts), now())
-            .await
-            .is_err()
-        {
-            eprintln!("event=shipment_retry_failed");
+    let span = tracing::info_span!("shipment_job", shipment_id = %s.id, order_id = %s.order_id, attempt = s.attempts);
+    async {
+        let started = std::time::Instant::now();
+        let result = tokio::time::timeout(Duration::from_secs(90), process(app, &s)).await;
+        if !matches!(result, Ok(Ok(()))) {
+            let reason = if result.is_err() {
+                "timeout"
+            } else {
+                "processing_failed"
+            };
+            tracing::error!(
+                event = "shipment_process_failed",
+                reason,
+                elapsed_ms = started.elapsed().as_millis() as u64
+            );
+            if db
+                .shipment_retry(&s, backoff(s.attempts), now())
+                .await
+                .is_err()
+            {
+                tracing::error!(event = "shipment_retry_failed", reason = "database");
+            }
+        } else {
+            tracing::debug!(
+                event = "shipment_processed",
+                elapsed_ms = started.elapsed().as_millis() as u64
+            );
         }
     }
+    .instrument(span)
+    .await
 }
 fn backoff(attempts: i32) -> i64 {
     (5_i64 << attempts.clamp(0, 7)).min(900)
@@ -100,10 +124,12 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                 }
                 Err(_) => {
                     db.shipment_problem(s, "command_unknown", now()).await?;
+                    tracing::warn!(event = "shipment_manual_review", reason = "command_unknown");
                     return Ok(());
                 }
             };
             if command.state == "pending" {
+                tracing::debug!(event = "shipment_booking_pending");
                 db.shipment_retry(s, backoff(s.attempts), now()).await?;
                 return Ok(());
             }
@@ -113,6 +139,10 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                     .any(|p| p.provider_id.as_ref() == Some(id))
             }) {
                 db.shipment_problem(s, "command_mismatch", now()).await?;
+                tracing::warn!(
+                    event = "shipment_manual_review",
+                    reason = "command_mismatch"
+                );
                 return Ok(());
             }
             let mut failed = false;
@@ -138,8 +168,13 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
             if failed || command.state != "succeeded" {
                 db.shipment_problem(s, "partial_or_failed_booking", now())
                     .await?;
+                tracing::warn!(
+                    event = "shipment_manual_review",
+                    reason = "partial_or_failed_booking"
+                );
             } else {
                 db.shipment_state(s, "booked", 0, now()).await?;
+                tracing::info!(event = "shipment_booked", consignments = s.packages.len());
             }
         }
         "queued" | "creating" => {
@@ -164,6 +199,10 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                     }
                     _ => {
                         db.shipment_problem(s, "package_unknown", now()).await?;
+                        tracing::warn!(
+                            event = "shipment_manual_review",
+                            reason = "package_unknown"
+                        );
                     }
                 }
             } else if let Some(p) = s.packages.iter().find(|p| p.state == "pending") {
@@ -187,10 +226,15 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                         db.shipment_state(s, "queued", 0, now()).await?;
                     }
                     Err(ShipmentError::Unknown) => {
+                        tracing::warn!(
+                            event = "shipment_creation_uncertain",
+                            reason = "provider_unknown"
+                        );
                         db.shipment_retry(s, 5, now()).await?;
                     }
                     Err(e) => {
                         db.shipment_problem(s, error_code(&e), now()).await?;
+                        tracing::warn!(event = "shipment_manual_review", reason = error_code(&e));
                     }
                 }
             } else if !s.packages.is_empty() && s.packages.iter().all(|p| p.state == "created") {
@@ -199,6 +243,10 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                     Ok(q) => q,
                     Err(_) => {
                         db.shipment_problem(s, "price_unavailable", now()).await?;
+                        tracing::warn!(
+                            event = "shipment_manual_review",
+                            reason = "price_unavailable"
+                        );
                         return Ok(());
                     }
                 };
@@ -213,11 +261,19 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                 {
                     db.shipment_problem(s, "price_or_data_changed", now())
                         .await?;
+                    tracing::warn!(
+                        event = "shipment_manual_review",
+                        reason = "price_or_data_changed"
+                    );
                     return Ok(());
                 }
                 if !db.shipment_order_start(s, now()).await? {
                     db.shipment_problem(s, "order_or_refund_changed", now())
                         .await?;
+                    tracing::warn!(
+                        event = "shipment_manual_review",
+                        reason = "order_or_refund_changed"
+                    );
                     return Ok(());
                 }
                 let ids = s
@@ -227,14 +283,17 @@ async fn process(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                     .collect::<Result<Vec<_>, _>>()?;
                 match api.order_shipments(&s.command_uuid, &ids).await {
                     Ok(()) | Err(ShipmentError::Unknown) => {
+                        tracing::debug!(event = "shipment_booking_reconcile_scheduled");
                         db.shipment_state(s, "ordering", 3, now()).await?;
                     }
                     Err(e) => {
                         db.shipment_problem(s, error_code(&e), now()).await?;
+                        tracing::warn!(event = "shipment_manual_review", reason = error_code(&e));
                     }
                 }
             } else {
                 db.shipment_problem(s, "package_review", now()).await?;
+                tracing::warn!(event = "shipment_manual_review", reason = "package_review");
             }
         }
         "booked" | "dispatched" | "manual_review" => poll(app, s).await?,
@@ -262,37 +321,40 @@ fn same_body(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 }
 fn start_poll(tasks: &mut JoinSet<PollResult>, app: &Arc<App>, p: ShipmentPackage) {
     let api = app.shipping.clone();
-    tasks.spawn(async move {
-        let result = async {
-            let api = api.ok_or(ShipmentError::Unavailable)?;
-            let id = p.provider_id.as_deref().ok_or(ShipmentError::NotFound)?;
-            let actual = api.get_shipment(id).await?;
-            if !matches_prepared(&actual, &p.payload) {
-                return Err(ShipmentError::Invalid(
-                    "Nieprawidłowe powiązanie przesyłki.".into(),
-                ));
+    tasks.spawn(
+        async move {
+            let result = async {
+                let api = api.ok_or(ShipmentError::Unavailable)?;
+                let id = p.provider_id.as_deref().ok_or(ShipmentError::NotFound)?;
+                let actual = api.get_shipment(id).await?;
+                if !matches_prepared(&actual, &p.payload) {
+                    return Err(ShipmentError::Invalid(
+                        "Nieprawidłowe powiązanie przesyłki.".into(),
+                    ));
+                }
+                let tracking = match api.shipment_tracking(id).await {
+                    Ok(t) => t,
+                    Err(ShipmentError::NotFound) => rapidmaker_shipping::Tracking {
+                        state: "awaiting_handover".into(),
+                        numbers: actual.tracking_numbers.clone(),
+                        parcels: actual
+                            .tracking_numbers
+                            .iter()
+                            .map(|n| (n.clone(), "awaiting_handover".into()))
+                            .collect(),
+                    },
+                    Err(e) => return Err(e),
+                };
+                if !tracking_complete(&actual.tracking_numbers, &tracking.numbers) {
+                    return Err(ShipmentError::Unavailable);
+                }
+                Ok((actual, tracking))
             }
-            let tracking = match api.shipment_tracking(id).await {
-                Ok(t) => t,
-                Err(ShipmentError::NotFound) => rapidmaker_shipping::Tracking {
-                    state: "awaiting_handover".into(),
-                    numbers: actual.tracking_numbers.clone(),
-                    parcels: actual
-                        .tracking_numbers
-                        .iter()
-                        .map(|n| (n.clone(), "awaiting_handover".into()))
-                        .collect(),
-                },
-                Err(e) => return Err(e),
-            };
-            if !tracking_complete(&actual.tracking_numbers, &tracking.numbers) {
-                return Err(ShipmentError::Unavailable);
-            }
-            Ok((actual, tracking))
+            .await;
+            (p, result)
         }
-        .await;
-        (p, result)
-    });
+        .in_current_span(),
+    );
 }
 async fn poll(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
     let db = app.db.as_ref().ok_or("missing shipment database")?;
@@ -333,6 +395,17 @@ async fn poll(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                     now(),
                 )
                 .await?;
+                if p.tracking["state"].as_str() != Some(tracking.state.as_str()) {
+                    let state = match tracking.state.as_str() {
+                        "awaiting_handover" => "awaiting_handover",
+                        "in_transit" => "in_transit",
+                        "delivered" => "delivered",
+                        "exception" => "exception",
+                        "returned" => "returned",
+                        _ => "unknown",
+                    };
+                    tracing::info!(event = "shipment_tracking_changed", package_id = %p.id, state);
+                }
                 if tracking.state == "returned" {
                     returned = true;
                     let from = if dispatched {
@@ -345,6 +418,7 @@ async fn poll(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
                 }
             }
             Err(e) => {
+                tracing::warn!(event = "shipment_tracking_retry", package_id = %p.id, reason = error_code(&e));
                 let _ = provider_error(e);
                 failed = true;
             }
@@ -355,6 +429,10 @@ async fn poll(app: &Arc<App>, s: &Shipment) -> Result<(), Failure> {
     }
     if returned {
         db.shipment_problem(s, "shipment_returned", now()).await?;
+        tracing::warn!(
+            event = "shipment_manual_review",
+            reason = "shipment_returned"
+        );
     } else {
         db.shipment_retry(s, if failed { backoff(s.attempts) } else { 900 }, now())
             .await?;

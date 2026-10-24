@@ -559,6 +559,9 @@ impl Storage {
                 .bind(row.get::<String,_>("draft_id")).execute(&mut *tx).await?;
         }
         tx.commit().await?;
+        if state != next {
+            tracing::info!(event="payment_state_changed", attempt_id=id, from=%state, to=next);
+        }
         Ok(true)
     }
     /// Acknowledge only after durable insertion. Duplicate events have no additional side effects.

@@ -261,68 +261,98 @@ pub async fn slice(model_path: &Path, material_id: &str) -> Result<Estimate, Err
 /// Arrange actual copies on the first plate, measure it, then reuse identical full
 /// plates and slice the remainder. Bambu limits cloning to 512 copies per run; this
 /// is a bounded feasible plan, not a guarantee of globally optimal plate count.
+#[tracing::instrument(skip_all, level = "debug")]
 pub async fn slice_job(
     model_path: &Path,
     material_id: &str,
     options: &Options,
 ) -> Result<BatchEstimate, Error> {
-    options.validate()?;
-    let filament = MATERIAL_PROFILES
-        .as_ref()
-        .map_err(|_| Error::Failed("Invalid trusted material catalog".into()))?
-        .get(material_id)
-        .ok_or(Error::UnsupportedMaterial)?;
-    let _permit = BUSY.try_acquire().map_err(|_| Error::Busy)?;
-    let metadata = fs::symlink_metadata(model_path)?;
-    if !metadata.is_file()
-        || metadata.len() == 0
-        || metadata.len() > 64 * 1024 * 1024
-        || model_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_none_or(|s| !s.eq_ignore_ascii_case("stl"))
-    {
-        return Err(Error::InvalidModel);
-    }
-    let workspace =
-        Workspace(std::env::temp_dir().join(format!("rapidmaker-slicer-{}", uuid::Uuid::new_v4())));
-    fs::create_dir(&workspace.0)?;
-    fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))?;
-    // Copy into our private directory, avoiding changes to the input during execution.
-    fs::copy(model_path, workspace.0.join("model.stl"))?;
-    write_profiles(&workspace.0, filament, options)?;
-    let mut batches = Vec::with_capacity(2);
-    let first = run_plate(&workspace, options.quantity.min(512)).await?;
-    let capacity = first.copies_per_plate;
-    let repeats = options.quantity / capacity;
-    batches.push(PlateBatch {
-        repeat_count: repeats,
-        ..first
-    });
-    let remainder = options.quantity % capacity;
-    if remainder > 0 {
-        let remaining = run_plate(&workspace, remainder).await?;
-        if remaining.copies_per_plate != remainder {
-            return Err(Error::Failed(
-                "Remainder did not fit its measured plate".into(),
-            ));
+    let started = std::time::Instant::now();
+    let result = async {
+        options.validate()?;
+        let filament = MATERIAL_PROFILES
+            .as_ref()
+            .map_err(|_| Error::Failed("Invalid trusted material catalog".into()))?
+            .get(material_id)
+            .ok_or(Error::UnsupportedMaterial)?;
+        let _permit = BUSY.try_acquire().map_err(|_| Error::Busy)?;
+        let metadata = fs::symlink_metadata(model_path)?;
+        if !metadata.is_file()
+            || metadata.len() == 0
+            || metadata.len() > 64 * 1024 * 1024
+            || model_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .is_none_or(|s| !s.eq_ignore_ascii_case("stl"))
+        {
+            return Err(Error::InvalidModel);
         }
-        batches.push(remaining);
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-slicer-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0)?;
+        fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))?;
+        // Copy into our private directory, avoiding changes to the input during execution.
+        fs::copy(model_path, workspace.0.join("model.stl"))?;
+        write_profiles(&workspace.0, filament, options)?;
+        let mut batches = Vec::with_capacity(2);
+        let first = run_plate(&workspace, options.quantity.min(512)).await?;
+        let capacity = first.copies_per_plate;
+        let repeats = options.quantity / capacity;
+        batches.push(PlateBatch {
+            repeat_count: repeats,
+            ..first
+        });
+        let remainder = options.quantity % capacity;
+        if remainder > 0 {
+            let remaining = run_plate(&workspace, remainder).await?;
+            if remaining.copies_per_plate != remainder {
+                return Err(Error::Failed(
+                    "Remainder did not fit its measured plate".into(),
+                ));
+            }
+            batches.push(remaining);
+        }
+        Ok(BatchEstimate {
+            quantity: options.quantity,
+            plates: batches.iter().map(|b| b.repeat_count).sum(),
+            time_seconds: batches
+                .iter()
+                .map(|b| b.time_seconds * u64::from(b.repeat_count))
+                .sum(),
+            filament_grams: batches
+                .iter()
+                .map(|b| b.filament_grams * f64::from(b.repeat_count))
+                .sum(),
+            profile_version: options.version(),
+            batches,
+        })
     }
-    Ok(BatchEstimate {
-        quantity: options.quantity,
-        plates: batches.iter().map(|b| b.repeat_count).sum(),
-        time_seconds: batches
-            .iter()
-            .map(|b| b.time_seconds * u64::from(b.repeat_count))
-            .sum(),
-        filament_grams: batches
-            .iter()
-            .map(|b| b.filament_grams * f64::from(b.repeat_count))
-            .sum(),
-        profile_version: options.version(),
-        batches,
-    })
+    .await;
+    if let Err(error) = &result {
+        let reason = match error {
+            Error::Busy => "busy",
+            Error::UnsupportedMaterial => "unsupported_material",
+            Error::InvalidModel => "invalid_model",
+            Error::InvalidOptions => "invalid_options",
+            Error::Failed(_) => "slicer_failed",
+        };
+        tracing::warn!(
+            event = "operation_failed",
+            provider = "local",
+            operation = "slice_job",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            reason
+        );
+    } else {
+        tracing::debug!(
+            event = "operation_completed",
+            provider = "local",
+            operation = "slice_job",
+            elapsed_ms = started.elapsed().as_millis() as u64
+        );
+    }
+    result
 }
 
 async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Error> {

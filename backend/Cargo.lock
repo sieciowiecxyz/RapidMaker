@@ -2560,6 +2560,9 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",
@@ -2573,8 +2576,10 @@ dependencies = [
  "axum",
  "rapidmaker-api",
  "rapidmaker-notifications",
+ "rapidmaker-observability",
  "rapidmaker-storage",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2597,6 +2602,7 @@ dependencies = [
  "lib3mf",
  "ply-rs-bw",
  "serde_json",
+ "tracing",
  "truck-meshalgo",
  "truck-polymesh",
  "truck-stepio",
@@ -2615,12 +2621,18 @@ dependencies = [
  "sha2",
  "tokio",
  "tokio-rustls",
+ "tracing",
  "webpki-roots 1.0.10",
 ]
 
 [[package]]
 name = "rapidmaker-observability"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "rapidmaker-orders"
@@ -2632,6 +2644,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tracing",
  "utoipa",
 ]
 
@@ -2644,6 +2657,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
 ]
 
 [[package]]
@@ -2651,6 +2665,7 @@ name = "rapidmaker-pricing"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "tracing",
  "utoipa",
 ]
 
@@ -2663,6 +2678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
  "utoipa",
 ]
 
@@ -2673,6 +2689,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
  "utoipa",
  "uuid",
 ]
@@ -2686,6 +2703,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "tracing",
  "utoipa",
  "uuid",
 ]
@@ -3086,6 +3104,15 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest",
+]
+
+[[package]]
+name = "sharded-slab"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
+dependencies = [
+ "lazy_static",
 ]
 
 [[package]]
@@ -3525,6 +3552,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "time"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3711,6 +3747,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sharded-slab",
+ "thread_local",
+ "tracing-core",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -4001,6 +4062,12 @@ dependencies = [
  "serde_core",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "vcpkg"

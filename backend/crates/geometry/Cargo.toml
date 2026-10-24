@@ -6,6 +6,7 @@ license = "MIT"
 publish.workspace = true
 
 [dependencies]
+tracing.workspace = true
 gltf = { version = "1.4.1", features = ["import"] }
 lib3mf = "0.1.6"
 ply-rs-bw = "4.0.0"

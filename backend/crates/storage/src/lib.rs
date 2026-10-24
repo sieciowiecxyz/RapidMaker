@@ -78,12 +78,22 @@ struct ImportedMaterial {
 
 impl Storage {
     pub async fn connect(url: &str) -> Result<Self, StorageError> {
+        let started = std::time::Instant::now();
         let pool = PgPoolOptions::new()
             .max_connections(5)
             .acquire_timeout(Duration::from_secs(5))
             .connect(url)
-            .await?;
-        sqlx::migrate!().run(&pool).await?;
+            .await
+            .inspect_err(|_| {
+                tracing::error!(event = "database_init_failed", stage = "connect");
+            })?;
+        sqlx::migrate!().run(&pool).await.inspect_err(|_| {
+            tracing::error!(event = "database_init_failed", stage = "migrate");
+        })?;
+        tracing::info!(
+            event = "database_ready",
+            elapsed_ms = started.elapsed().as_millis() as u64
+        );
         Ok(Self { pool })
     }
 

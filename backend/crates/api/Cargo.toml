@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+tracing.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -27,3 +28,7 @@ percent-encoding = "2"
 utoipa.workspace = true
 utoipa-axum.workspace = true
 utoipa-swagger-ui = { version = "10", default-features = false, features = ["axum", "vendored"] }
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+tower = { version = "0.5", features = ["util"] }

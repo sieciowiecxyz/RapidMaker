@@ -5,6 +5,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::{sync::watch, task::JoinHandle};
+use tracing::Instrument;
 
 type Failure = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Default, Serialize)]
@@ -31,14 +32,14 @@ impl InboundWorker {
                     result = receive(&db, &imap) => {
                         if let Ok(counts) = &result
                             && counts.imported + counts.duplicate + counts.rejected + counts.review > 0 {
-                            eprintln!("event=mail_inbound_batch imported={} duplicate={} rejected={} review={}", counts.imported, counts.duplicate, counts.rejected, counts.review);
+                            tracing::info!(event = "mail_inbound_batch", imported = counts.imported, duplicate = counts.duplicate, rejected = counts.rejected, review = counts.review);
                         }
                         if let Err(error) = result {
                             if matches!(error.downcast_ref::<rapidmaker_notifications::MailError>(), Some(rapidmaker_notifications::MailError::Authentication | rapidmaker_notifications::MailError::Configuration | rapidmaker_notifications::MailError::TestRecipient)) {
-                                eprintln!("event=mail_inbound_paused reason=configuration");
+                                tracing::error!(event = "mail_inbound_paused", reason = "configuration");
                                 break;
                             }
-                            eprintln!("event=mail_inbound_failed reason=receive");
+                            tracing::error!(event = "mail_inbound_failed", reason = "receive");
                         }
                     }
                     _ = receiver.changed() => break,
@@ -56,10 +57,10 @@ impl InboundWorker {
         let mut task = self.task;
         match tokio::time::timeout(Duration::from_secs(25), &mut task).await {
             Ok(Ok(())) => {}
-            Ok(Err(_)) => eprintln!("event=mail_inbound_stopped reason=task_failure"),
+            Ok(Err(_)) => tracing::error!(event = "mail_inbound_stopped", reason = "task_failure"),
             Err(_) => {
                 task.abort();
-                eprintln!("event=mail_inbound_stopped reason=shutdown_timeout");
+                tracing::error!(event = "mail_inbound_stopped", reason = "shutdown_timeout");
             }
         }
     }
@@ -138,10 +139,12 @@ async fn receive(db: &Storage, imap: &Imap) -> Result<MailReceived, Failure> {
             )
             .await?
         {
+            tracing::warn!(event = "mail_inbound_lease_lost", reason = "lease_lost");
             return Err("IMAP lease lost".into());
         }
         Ok(received)
     }
+    .instrument(tracing::info_span!("mail_inbound_batch"))
     .await;
     let released = db.inbox_release(&lease).await;
     match result {
