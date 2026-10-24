@@ -51,3 +51,11 @@ Małe commity po etapie; krótki test rzeczywistego ryzyka, bez Astry i testują
 Sekret webhooka/Stripe CLI mogą wymagać autoryzacji właściciela. Brak danych nadawcy, aktywnych usług sandbox, cen lub materiałów blokuje odpowiedni test integracyjny, ale nie kontrakt, migracje i lokalne testy awarii. Obsługa zwrotów, etykiety i publiczne wdrożenie pozostają poza C1–C6.
 
 Dowody i granice: [checkpoint](milestones/backend.md#checkout-c1c6--2026-10-24). Live, publiczny TLS/proxy i frontend nie były wdrażane.
+
+## P1 — Warianty pakowania i cena całej dostawy — PASS lokalnie, 2026-10-24
+
+- Do 5 planów bez duplikatów; liczba sztuk, brak kolizji, wymiary, ochrona, masa i limity zachowane. Dotychczasowy `estimate` pozostaje dostępny.
+- Rzeczywiste wyceny Furgonetki porównane z kosztami opakowań; walidacja od najtańszej pary plan/usługa. Jeden zwycięski plan w ofercie, PostgreSQL i zamówieniu; dotychczasowy HTTP/SQL bez zmian.
+- PASS: 25 testów jednostkowych API/pakowania/dostawy; osobno test sandbox porównujący 3 plany (1/12/2 paczki) z wycenami każdego z osobna. Test rankingu chroni wybór kosztu całkowitego i tożsamości planu, także przepełnienie kwoty. Bez nadawania przesyłek.
+- PASS: zakresowe fmt, Clippy i build. Dokładny nesting, palety, automatyczne porównanie różnych metod i kalibracja kartonów poza zakresem.
+- Pomiar tokei, 3 zmienione pliki Rust: produkcja 1583 → 1703 (+120), testy 252 → 424 (+172); bez pustych linii i komentarzy. Bez nowych plików, crate’ów, zależności i migracji.

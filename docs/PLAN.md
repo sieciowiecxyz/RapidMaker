@@ -1,6 +1,6 @@
 # Checkout, adres i dostawa — backend Rust
 
-Status: C1–C6 wdrożone i sprawdzone lokalnie w sandboxach; bez Stripe live/publicznego wdrożenia. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
+Status: P1 (warianty pakowania i ceny dostawy) oraz C1–C6 wdrożone i sprawdzone lokalnie w sandboxach; bez Stripe live/publicznego wdrożenia. Zakres: wyłącznie backend i OpenAPI, bez pisania strony. [Milestones](MILESTONES.md).
 
 ## Cel i punkt wyjścia
 
@@ -65,3 +65,9 @@ Potrzebne: lokalny PostgreSQL, istniejące testowe Stripe/Furgonetka, poprawne d
 Źródła kontraktu: [webhooki Stripe](https://docs.stripe.com/webhooks), [idempotencja](https://docs.stripe.com/api/idempotent_requests), [potwierdzanie Checkout](https://docs.stripe.com/payments/checkout/fulfill-orders). Szczegóły zdarzeń i okna retry potwierdź przy implementacji dla przypiętej wersji API.
 
 Dowody, aktualne ograniczenia i pomiar LOC: [checkpoint C1–C6](milestones/backend.md#checkout-c1c6--2026-10-24).
+
+## P1 — Warianty pakowania i najtańsza dostawa — wdrożone
+
+Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; ceny Furgonetki + opakowania, walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 5 wycen zbiorczych/10 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
+
+Sprawdzone: regresje pakowania/rankingu, rzeczywiste ceny i walidacja kilku planów w sandboxie; szczegóły w milestone P1. Rezerwy i katalog kartonów wymagają kalibracji przed użyciem produkcyjnym.

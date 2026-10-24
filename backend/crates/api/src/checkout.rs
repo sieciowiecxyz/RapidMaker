@@ -478,7 +478,7 @@ pub(super) async fn quote_draft(
     }
     let cart =
         super::cart::prepare(app.db.as_ref(), headers, input.parts.clone(), input.manual).await?;
-    let mut packing = rapidmaker_packing::estimate(EstimateRequest {
+    let mut plans = rapidmaker_packing::candidates(EstimateRequest {
         parts: cart.parts,
         delivery: match input.delivery.method {
             Method::Courier => Delivery::Courier,
@@ -486,8 +486,11 @@ pub(super) async fn quote_draft(
             Method::Pickup => Delivery::Pickup,
         },
     });
-    packing.geometry_source = "parsed_model_slicer_mass_upper_bound";
-    let manual = cart.manual || packing.status != "estimated";
+    for plan in &mut plans {
+        plan.geometry_source = "parsed_model_slicer_mass_upper_bound";
+    }
+    let manual = cart.manual || plans[0].status != "estimated";
+    let mut selected_plan = 0;
     let shipping = if incomplete.is_some() {
         rapidmaker_shipping::Quote {
             offers: vec![],
@@ -507,13 +510,17 @@ pub(super) async fn quote_draft(
     } else {
         app.provider_limit(&cart.owner).await?;
         let _permit = app.permit()?;
-        app.shipping
+        let (plan, quote) = app
+            .shipping
             .as_ref()
             .ok_or_else(unavailable)?
-            .quote(&packing, &input.recipient, &input.delivery)
+            .quote_best(&plans, &input.recipient, &input.delivery)
             .await
-            .map_err(shipping_error)?
+            .map_err(shipping_error)?;
+        selected_plan = plan;
+        quote
     };
+    let packing = plans.swap_remove(selected_plan);
     let subtotal = cart
         .total
         .checked_add(packing.packaging_grosze)

@@ -1,6 +1,7 @@
 //! Domestic address validation and bounded Furgonetka sandbox adapter. No labels are purchased.
 mod address;
 pub use address::{DeliveryChoice, Invoice, Method, Recipient, Validation};
+use rapidmaker_packing::Estimate;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -233,44 +234,41 @@ impl Sandbox {
         }
         Ok(result)
     }
-    pub async fn quote(
+    /// Compare all bounded plans using provider prices, then validate cheapest first.
+    /// All returned offers use the selected plan, preserving the checkout snapshot contract.
+    pub async fn quote_best(
         &self,
-        packing: &rapidmaker_packing::Estimate,
+        plans: &[Estimate],
         recipient: &Recipient,
         choice: &DeliveryChoice,
-    ) -> Result<Quote, Error> {
+    ) -> Result<(usize, Quote), Error> {
         let mut recipient = recipient.clone();
         recipient.normalize(choice).map_err(Error::Validation)?;
+        if plans.is_empty() || plans.len() > 5 {
+            return Err(unavailable());
+        }
         if choice.method == Method::Pickup {
-            return Ok(Quote::pickup());
+            return Ok((0, Quote::pickup()));
         }
-        if packing.status != "estimated" && packing.status != "estimated_poc" {
-            return Ok(Quote::manual(
-                packing
-                    .reason
-                    .unwrap_or("Paczki wymagają indywidualnej wyceny."),
-            ));
+        if plans
+            .iter()
+            .any(|p| p.status != "estimated" || p.parcels.is_empty() || p.parcels.len() > 30)
+        {
+            return Ok((0, Quote::manual("Paczki wymagają indywidualnej wyceny.")));
         }
-        if packing.parcels.is_empty() || packing.parcels.len() > 30 {
-            return Ok(Quote::manual("Liczba paczek wymaga indywidualnej wyceny."));
-        }
-        match tokio::time::timeout(
+        tokio::time::timeout(
             Duration::from_secs(30),
-            self.quote_inner(packing, &recipient, choice),
+            self.quote_inner(plans, &recipient, choice),
         )
         .await
         .map_err(|_| unavailable())?
-        {
-            Err(Error::NoService(reason)) => Ok(Quote::manual(&reason)),
-            result => result,
-        }
     }
     async fn quote_inner(
         &self,
-        packing: &rapidmaker_packing::Estimate,
+        plans: &[Estimate],
         recipient: &Recipient,
         choice: &DeliveryChoice,
-    ) -> Result<Quote, Error> {
+    ) -> Result<(usize, Quote), Error> {
         let data = provider_json(
             self.request(reqwest::Method::GET, "/account/services", 1, None)
                 .await?,
@@ -298,7 +296,6 @@ impl Sandbox {
                 "Konto Furgonetki nie ma aktywnych usług tej metody dostawy.".into(),
             ));
         }
-        let parcels=packing.parcels.iter().map(|p|json!({"width":p.outer_mm[0].div_ceil(10),"depth":p.outer_mm[1].div_ceil(10),"height":p.outer_mm[2].div_ceil(10),"weight":f64::from(p.weight_g)/1000.,"quantity":1,"type":"package"})).collect::<Vec<_>>();
         let street = if recipient.apartment.is_empty() {
             recipient.street.clone()
         } else {
@@ -308,7 +305,10 @@ impl Sandbox {
         let point = if choice.method == Method::Locker {
             let point = self
                 .verify_point(choice.point_id.as_deref().ok_or_else(|| {
-                    Error::Validation(Validation::field("point_id", "Wybierz punkt odbioru."))
+                    Error::Validation(Validation::field(
+                        "delivery.point_id",
+                        "Wybierz punkt odbioru.",
+                    ))
                 })?)
                 .await?;
             receiver["point"] = json!(point.code);
@@ -319,55 +319,97 @@ impl Sandbox {
         } else {
             None
         };
-        let mut package = json!({"pickup":self.sender,"receiver":receiver,"service_id":provider_id(&services[0].0),"parcels":parcels});
-        let rates=provider_json(self.request(reqwest::Method::POST,"/packages/calculate-price",2,Some(&json!({"package":package,"services":{"service_id":services.iter().map(|(id,_)|provider_id(id)).collect::<Vec<_>>()}}))).await?).await?;
-        let rows = rates["services_prices"]
-            .as_array()
-            .ok_or_else(unavailable)?;
-        let mut offers = vec![];
+        let mut packages = Vec::new();
+        let mut rates = Vec::new();
         let mut rejection = None;
-        for row in rows.iter().take(100) {
-            if row["available"] != true {
-                if row["errors"].as_array().is_some_and(|v| !v.is_empty()) {
-                    rejection = Some(classify_rejection(row));
+        for (plan, packing) in plans.iter().enumerate() {
+            let parcels = packing
+                .parcels
+                .iter()
+                .map(|p| {
+                    json!({
+                        "width":p.outer_mm[0].div_ceil(10), "depth":p.outer_mm[1].div_ceil(10),
+                        "height":p.outer_mm[2].div_ceil(10), "weight":f64::from(p.weight_g)/1000.,
+                        "quantity":1, "type":"package"
+                    })
+                })
+                .collect::<Vec<_>>();
+            let package = json!({"pickup":self.sender,"receiver":receiver,"service_id":provider_id(&services[0].0),"parcels":parcels});
+            let response = provider_json(self.request(reqwest::Method::POST,
+                "/packages/calculate-price", 2, Some(&json!({"package":package,
+                "services":{"service_id":services.iter().map(|(id,_)|provider_id(id)).collect::<Vec<_>>()}}))).await?).await;
+            packages.push(package);
+            let response = match response {
+                Ok(value) => value,
+                Err(Error::Validation(v)) => {
+                    rejection = Some(Error::Validation(v));
+                    continue;
                 }
-                continue;
-            }
-            let service_id = id(&row["service_id"]).ok_or_else(unavailable)?;
-            let Some((_, name)) = services.iter().find(|(id, _)| id == &service_id) else {
-                continue;
+                Err(Error::NoService(_)) => continue,
+                Err(e) => return Err(e),
             };
-            let price_grosze = money(&row["pricing"]["price_gross"]).ok_or_else(unavailable)?;
-            if !offers.iter().any(|offer: &Offer| offer.id == service_id) {
-                offers.push(Offer {
-                    id: service_id,
-                    name: name.to_uppercase(),
-                    price_grosze,
-                });
+            for row in response["services_prices"]
+                .as_array()
+                .ok_or_else(unavailable)?
+            {
+                if row["available"] != true {
+                    if let Some(error) = classify_rejection(row) {
+                        match error {
+                            Error::Unavailable(_) => return Err(error),
+                            _ => rejection = Some(error),
+                        }
+                    }
+                    continue;
+                }
+                let service_id = id(&row["service_id"]).ok_or_else(unavailable)?;
+                let Some((_, name)) = services.iter().find(|(id, _)| id == &service_id) else {
+                    return Err(unavailable());
+                };
+                if rates
+                    .iter()
+                    .any(|(p, o): &(usize, Offer)| *p == plan && o.id == service_id)
+                {
+                    return Err(unavailable());
+                }
+                rates.push((
+                    plan,
+                    Offer {
+                        id: service_id,
+                        name: name.to_uppercase(),
+                        price_grosze: money(&row["pricing"]["price_gross"])
+                            .ok_or_else(unavailable)?,
+                    },
+                ));
             }
         }
-        offers.sort_by_key(|offer| offer.price_grosze);
+        let ranked = rank_offers(plans, rates)?;
+        let mut selected = None;
         let mut valid = vec![];
-        for offer in offers.into_iter().take(10) {
-            package["service_id"] = provider_id(&offer.id);
+        let mut validations = 0;
+        for (plan, offer) in ranked {
+            if selected.is_some_and(|selected| selected != plan) {
+                continue;
+            }
+            if validations == 10 {
+                break;
+            }
+            validations += 1;
+            packages[plan]["service_id"] = provider_id(&offer.id);
             let response = self
                 .request(
                     reqwest::Method::POST,
                     "/packages/validate",
                     2,
-                    Some(&package),
+                    Some(&packages[plan]),
                 )
                 .await?;
             if response.status() == StatusCode::NO_CONTENT {
+                selected = Some(plan);
                 valid.push(offer);
             } else {
                 match provider_json(response).await {
-                    Err(Error::Validation(fields)) => {
-                        rejection = Some(Some(Error::Validation(fields)))
-                    }
-                    Err(Error::NoService(_)) => {
-                        rejection = Some(None);
-                    }
+                    Err(Error::Validation(v)) => rejection = Some(Error::Validation(v)),
+                    Err(Error::NoService(_)) => (),
                     Err(e) => return Err(e),
                     Ok(_) => return Err(unavailable()),
                 }
@@ -376,22 +418,50 @@ impl Sandbox {
                 break;
             }
         }
-        if valid.is_empty() {
-            if let Some(Some(error)) = rejection {
-                return Err(error);
-            }
-            return Ok(Quote::manual(
-                "Przewoźnicy nie przyjmują tych paczek dla wybranej metody. Poproś o indywidualną wycenę.",
+        if let Some(plan) = selected {
+            return Ok((
+                plan,
+                Quote {
+                    offers: valid,
+                    point,
+                    manual_required: false,
+                    reason: None,
+                },
             ));
         }
-        Ok(Quote {
-            offers: valid,
-            point,
-            manual_required: false,
-            reason: None,
-        })
+        if let Some(error) = rejection {
+            return Err(error);
+        }
+        Ok((
+            0,
+            Quote::manual(
+                "Brak zatwierdzonej usługi dla sprawdzonych paczek. Poproś o indywidualną wycenę.",
+            ),
+        ))
     }
 }
+fn rank_offers(
+    plans: &[Estimate],
+    offers: Vec<(usize, Offer)>,
+) -> Result<Vec<(usize, Offer)>, Error> {
+    let mut ranked = offers
+        .into_iter()
+        .map(|(plan, offer)| {
+            let packing = plans.get(plan).ok_or_else(unavailable)?;
+            let total = offer
+                .price_grosze
+                .checked_add(packing.packaging_grosze)
+                .ok_or_else(unavailable)?;
+            Ok((total, packing.parcels.len(), plan, offer))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    ranked.sort_by(|a, b| (a.0, a.1, a.2, &a.3.id).cmp(&(b.0, b.1, b.2, &b.3.id)));
+    Ok(ranked
+        .into_iter()
+        .map(|(_, _, plan, offer)| (plan, offer))
+        .collect())
+}
+
 fn id(value: &Value) -> Option<String> {
     value
         .as_str()
@@ -509,6 +579,118 @@ async fn provider_json(mut response: Response) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ranking_compares_shipping_plus_packaging_and_keeps_plan_identity() {
+        let mut plans = rapidmaker_packing::candidates(rapidmaker_packing::EstimateRequest {
+            parts: vec![rapidmaker_packing::Part {
+                id: "part".into(),
+                quantity: 12,
+                analysis_id: None,
+                dimensions_mm: Some([120, 80, 45]),
+                weight_g: Some(60),
+            }],
+            delivery: rapidmaker_packing::Delivery::Courier,
+        });
+        assert!(plans.len() > 1);
+        plans[0].packaging_grosze = 900;
+        plans[1].packaging_grosze = 250;
+        let offer = |id: &str, price| Offer {
+            id: id.into(),
+            name: id.into(),
+            price_grosze: price,
+        };
+        let ranked = rank_offers(
+            &plans,
+            vec![
+                (0, offer("cheap-postage", 1000)),
+                (1, offer("cheap-total", 1500)),
+                (0, offer("other-carrier", 2000)),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|(plan, o)| (*plan, o.id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (1, "cheap-total"),
+                (0, "cheap-postage"),
+                (0, "other-carrier")
+            ]
+        );
+        plans[0].packaging_grosze = u32::MAX;
+        assert!(rank_offers(&plans, vec![(0, offer("overflow", 1))]).is_err());
+        assert!(rank_offers(&plans, vec![(plans.len(), offer("bad-plan", 1))]).is_err());
+    }
+    #[tokio::test]
+    #[ignore = "requires FURGONETKA_SANDBOX_TOKEN and FURGONETKA_SENDER_JSON; only quotes, never ships"]
+    async fn sandbox_compares_actual_prices_for_multiple_plans() {
+        let token = std::env::var("FURGONETKA_SANDBOX_TOKEN").unwrap();
+        let sender: Value =
+            serde_json::from_str(&std::env::var("FURGONETKA_SENDER_JSON").unwrap()).unwrap();
+        let recipient = Recipient {
+            name: "Rapidmaker test".into(),
+            email: "void@sieciowiec.xyz".into(),
+            phone: "+48500100200".into(),
+            street: "Jarzębinowa 3".into(),
+            postal_code: "05-500".into(),
+            city: "Piaseczno".into(),
+            country: "PL".into(),
+            ..Default::default()
+        };
+        let api = Sandbox::new(token, sender).unwrap();
+        let mut plans = rapidmaker_packing::candidates(rapidmaker_packing::EstimateRequest {
+            parts: vec![rapidmaker_packing::Part {
+                id: "part".into(),
+                quantity: 12,
+                analysis_id: None,
+                dimensions_mm: Some([120, 80, 45]),
+                weight_g: Some(60),
+            }],
+            delivery: rapidmaker_packing::Delivery::Courier,
+        });
+        plans.truncate(3);
+        assert!(plans.len() > 1);
+        let mut expected = u32::MAX;
+        for (i, plan) in plans.iter().enumerate() {
+            let (_, quote) = api
+                .quote_best(
+                    std::slice::from_ref(plan),
+                    &recipient,
+                    &DeliveryChoice::default(),
+                )
+                .await
+                .unwrap();
+            for offer in quote.offers {
+                let total = offer.price_grosze + plan.packaging_grosze;
+                expected = expected.min(total);
+                eprintln!(
+                    "sandbox plan={i} parcels={} shipping={} packaging={} total={total}",
+                    plan.parcels.len(),
+                    offer.price_grosze,
+                    plan.packaging_grosze
+                );
+            }
+        }
+        let (selected, quote) = api
+            .quote_best(&plans, &recipient, &DeliveryChoice::default())
+            .await
+            .unwrap();
+        assert!(!quote.manual_required);
+        let best = quote.offers.first().unwrap().price_grosze + plans[selected].packaging_grosze;
+        assert_eq!(best, expected);
+        assert!(
+            quote
+                .offers
+                .windows(2)
+                .all(|o| o[0].price_grosze <= o[1].price_grosze)
+        );
+        eprintln!(
+            "sandbox cheapest plan={selected} parcels={} total={best}",
+            plans[selected].parcels.len()
+        );
+    }
     #[test]
     fn provider_wire_contract_and_unstructured_failures() {
         let api = Sandbox::new("test-token".into(), json!({})).unwrap();

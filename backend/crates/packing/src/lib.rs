@@ -7,7 +7,7 @@ const MAX_PARCELS: usize = 30;
 // per-part padding. Volume alone never proves that parts can be packed.
 const MAX_FILL_PERCENT: u64 = 67;
 
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Part {
     pub id: String,
@@ -17,7 +17,7 @@ pub struct Part {
     pub dimensions_mm: Option<[u32; 3]>,
     pub weight_g: Option<u32>,
 }
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Delivery {
     Courier,
@@ -25,7 +25,7 @@ pub enum Delivery {
     #[serde(alias = "collection")]
     Pickup,
 }
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EstimateRequest {
     pub parts: Vec<Part>,
@@ -179,10 +179,55 @@ fn fill(carton: Carton, units: &[Unit]) -> (Parcel, Vec<usize>) {
 }
 
 pub fn estimate(request: EstimateRequest) -> Estimate {
+    estimate_with(request, CARTONS.len(), false)
+}
+
+/// At most five carrier-distinct plans, preserving all estimation safeguards.
+/// The first plan retains the single-estimate behavior; unsuccessful alternatives
+/// are omitted. Pickup and manual review remain a single result.
+pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
+    let baseline = estimate(request.clone());
+    if baseline.status != "estimated" || baseline.parcels.is_empty() {
+        return vec![baseline];
+    }
+    let carton_count = if matches!(request.delivery, Delivery::Locker) {
+        3
+    } else {
+        CARTONS.len()
+    };
+    let mut plans = vec![baseline];
+    for (limit, longest_first) in (1..carton_count)
+        .map(|limit| (limit, false))
+        .chain(std::iter::once((carton_count, true)))
+    {
+        let plan = estimate_with(request.clone(), limit, longest_first);
+        if plan.status == "estimated"
+            && !plans.iter().any(|existing| {
+                existing.packaging_grosze == plan.packaging_grosze
+                    && parcel_signature(existing) == parcel_signature(&plan)
+            })
+        {
+            plans.push(plan);
+        }
+    }
+    plans
+}
+
+fn parcel_signature(plan: &Estimate) -> Vec<([u32; 3], u32)> {
+    let mut signature: Vec<_> = plan
+        .parcels
+        .iter()
+        .map(|parcel| (parcel.outer_mm, parcel.weight_g))
+        .collect();
+    signature.sort_unstable();
+    signature
+}
+
+fn estimate_with(request: EstimateRequest, carton_count: usize, longest_first: bool) -> Estimate {
     let locker = matches!(request.delivery, Delivery::Locker);
     // POC: lockers use our S/M/L cartons, one parcel per order. The provider
     // still validates the actual parcel; this is not a universal carrier limit.
-    let cartons = if locker { &CARTONS[..3] } else { &CARTONS[..] };
+    let cartons = &CARTONS[..carton_count.min(if locker { 3 } else { CARTONS.len() })];
     if request.parts.is_empty() || request.parts.len() > 20 {
         return Estimate::manual("Dodaj od 1 do 20 różnych części.");
     }
@@ -243,7 +288,14 @@ pub fn estimate(request: EstimateRequest) -> Estimate {
         geometry_source: "customer_estimate",
     };
     units.sort_by_key(|unit| {
-        std::cmp::Reverse(unit.size.iter().map(|&d| u64::from(d)).product::<u64>())
+        std::cmp::Reverse((
+            if longest_first {
+                unit.size[0].max(unit.size[1]).max(unit.size[2])
+            } else {
+                0
+            },
+            volume(unit.size),
+        ))
     });
     while !units.is_empty() {
         if locker && !result.parcels.is_empty() {
@@ -442,6 +494,66 @@ mod tests {
         });
         verify(&plan, 0);
         assert_eq!(plan.packaging_grosze, 0);
+    }
+    #[test]
+    fn candidates_compare_feasible_small_and_large_cartons_without_duplicates() {
+        let req = request(vec![part("a", 200, [10, 10, 10], 2)]);
+        let plans = candidates(req.clone());
+        assert!((2..=5).contains(&plans.len()));
+        assert_eq!(
+            parcel_signature(&plans[0]),
+            parcel_signature(&estimate(req))
+        );
+        assert!(plans.iter().any(|plan| plan.parcels.len() == 1));
+        assert!(plans.iter().any(|plan| plan.parcels.len() > 1));
+        for (index, plan) in plans.iter().enumerate() {
+            verify(plan, 200);
+            assert!(plans[..index].iter().all(|other| {
+                plan.packaging_grosze != other.packaging_grosze
+                    || parcel_signature(plan) != parcel_signature(other)
+            }));
+        }
+    }
+    #[test]
+    fn mixed_candidates_keep_every_part_and_all_safety_limits() {
+        let plans = candidates(request(vec![
+            part("a", 12, [45, 70, 20], 100),
+            part("b", 8, [80, 20, 30], 80),
+        ]));
+        assert!(plans.len() <= 5);
+        for plan in plans {
+            verify(&plan, 20);
+            assert_eq!(
+                plan.parcels
+                    .iter()
+                    .flat_map(|parcel| &parcel.placements)
+                    .filter(|placement| placement.part_id == "b")
+                    .count(),
+                8
+            );
+        }
+    }
+    #[test]
+    fn candidates_preserve_manual_pickup_and_locker_behavior() {
+        let manual = candidates(request(vec![part("a", 1000, [500, 300, 300], 1000)]));
+        assert_eq!(manual.len(), 1);
+        assert_eq!(manual[0].status, "manual_review");
+        assert!(manual[0].parcels.is_empty());
+        let pickup = candidates(EstimateRequest {
+            parts: vec![part("a", 1, [1, 1, 1], 1)],
+            delivery: Delivery::Pickup,
+        });
+        assert_eq!(pickup.len(), 1);
+        verify(&pickup[0], 0);
+        let locker = candidates(EstimateRequest {
+            parts: vec![part("a", 200, [10, 10, 10], 2)],
+            delivery: Delivery::Locker,
+        });
+        for plan in locker {
+            verify(&plan, 200);
+            assert_eq!(plan.parcels.len(), 1);
+            assert_ne!(plan.parcels[0].box_id, "XL");
+        }
     }
     #[test]
     fn json_rejects_negative_fractional_and_unknown_fields() {
