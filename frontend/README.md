@@ -23,6 +23,7 @@ Strona: http://127.0.0.1:18430. Rust API: `127.0.0.1:18432`, dostępne przez pro
 ## Mapa kodu i ekranów
 
 - `src/App.svelte` — dynamicznie ładuje storefront albo workspace.
+- `admin.html`, `src/admin/` — osobny prototyp Piotra z brancha `admin_panel_PG`: zamówienia, produkcja, wiadomości i rozliczenia. Otwórz `/admin.html`; przykładowe dane są tylko w localStorage, bez logowania i wywołań API. Nie zastępuje jeszcze panelu `/admin`. [Zakres](src/admin/README.md).
 - `src/storefront/Storefront.svelte` — landing i konfigurator Piotra na `/` i `/wycena`: wiele części, materiał/kolor, jakość, wytrzymałość, liczba sztuk i animacja przejścia do zamówienia.
 - `src/storefront/lib/api.ts` — łączy nowy konfigurator z istniejącym adapterem `src/lib/api.ts`, analizą serwera, wyceną i koszykiem. Katalog zachowuje zgodność materiałów i dostępność kolorów.
 - `src/Workspace.svelte`, `src/pages/`, `src/components/` — checkout `/zamowienie`, logowanie, konto, admin oraz konfiguracja techniczna `/wycena/zaawansowana`. Powrót `/wycena?restore=cart` zachowuje opcje koszyka.

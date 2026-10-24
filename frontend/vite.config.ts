@@ -6,4 +6,7 @@ export default defineConfig({
   plugins: [tailwindcss(), svelte()],
   server: { proxy },
   preview: { proxy },
+  build: {
+    rollupOptions: { input: { main: 'index.html', admin: 'admin.html' } },
+  },
 });
