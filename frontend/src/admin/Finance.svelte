@@ -1,6 +1,6 @@
 <script lang="ts">
   import { IconArrowUpRight, IconSearch } from '@tabler/icons-svelte';
-  import { total, money, type Order } from './data';
+  import { total, money, shortId, type Order } from './data';
   let {
     orders,
     mode,
@@ -88,7 +88,7 @@
         >{#each shown as o}<tr
             ><td
               ><button class="order-link" onclick={(e) => onopen(o, e)}
-                >{o.id}<IconArrowUpRight size={14} /></button
+                >{shortId(o.id)}<IconArrowUpRight size={14} /></button
               ><strong class="client">{o.client}</strong></td
             ><td
               ><span class="status" data-status={o.paid ? 'complete' : 'waiting'}>{o.payment}</span

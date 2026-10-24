@@ -37,3 +37,5 @@ Auth: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-auth
 ## Integracja istniejących paneli
 
 `live-panels.spec.ts` oraz `operator.spec.ts`: kontrakt HTTP interfejsu (kod email/claim, MFA przed odczytem, zamówienia/pliki/chat, preferencje, RGBA i CSRF, ponowienie zwrotu bez nowego request_id). Odpowiedzi API są podstawiane; nie jest to ponowny test rzeczywistego SMTP, passkey/Stripe/Furgonetki ani autoryzacji PostgreSQL. Starszy `flows.spec.ts` nadal wymaga migracji. Używaj `http://localhost:18430` dla rzeczywistego auth; port testów 18431 nie jest skonfigurowanym origin backendu.
+
+`operations.spec.ts`: kontrakty formularzy logistyki (paczki/koszt/zgoda/book/retry/PDF/podjazd/anulowanie), częściowego zwrotu z zachowaniem ID po reloadzie i natywnego WebAuthn z wirtualnym uwierzytelniaczem. `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npx playwright test operations.spec.ts live-panels.spec.ts operator.spec.ts` z `frontend/`. To test UI z podstawionym API, bez połączeń z dostawcami. Screenshoty fixture dostawy: `frontend/tests/artifacts/shipping-desktop.png` i `shipping-mobile.png` (ignorowane przez Git).

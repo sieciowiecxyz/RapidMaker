@@ -33,7 +33,7 @@ Strona: http://localhost:18430 (musi odpowiadać `AUTH_ORIGIN`, także dla passk
 
 ## Granice POC
 
-Przepływ: **Druk → dane i dostawa → podsumowanie → płatność**. Adres i kontakt wpisujemy raz. Stripe Address Element udostępnia podpowiedzi, Payment Element płatność kartą testową; pozostałe ścieżki używają hosted Checkout. Oferty Furgonetki sandbox i punkty odbioru pochodzą z API. Brak oferty nie oznacza darmowej dostawy ani automatycznie błędnego adresu. Backend obsługuje nadania; obecny frontend nie udostępnia pełnego potwierdzenia nadania i kosztów.
+Przepływ: **Druk → dane i dostawa → podsumowanie → płatność**. Adres i kontakt wpisujemy raz. Stripe Address Element udostępnia podpowiedzi, Payment Element płatność kartą testową; pozostałe ścieżki używają hosted Checkout. Oferty Furgonetki sandbox i punkty odbioru pochodzą z API. Brak oferty nie oznacza darmowej dostawy ani automatycznie błędnego adresu. Panel `/admin.html` ma zakładki Dostawa i Rozliczenie: paczki, koszt, nadanie, etykiety, podjazd/anulowanie oraz zwroty częściowe i pełne. Operacje wymagają jawnego działania operatora, a niepewne wyniki zachowują ten sam request_id.
 
 Analiza serwera obsługuje STL/STEP/3MF do 32 MiB, z `bubblewrap` i `prlimit`. STL w mm; STEP pojedynczej części w mm, bez złożeń. Wymiary pochodzą z geometrii, masę i czas mierzy Bambu Studio; pakowanie dostaje ostrożny szacunek z całego zużycia filamentu na sztukę. Niepewne analizy i przykłady bez analizy wymagają ręcznej oceny; nie otrzymują automatycznej płatności.
 
@@ -46,3 +46,11 @@ Kontakt checkoutu pozostaje szkicem w `sessionStorage`, koszyk lokalnie; panel k
 `npm --prefix frontend run build` uruchamia svelte-check i Vite build. Po zmianie wyglądu obejrzyj zmieniony ekran na komputerze i telefonie. POC: bez obowiązkowego pełnego E2E przy każdej iteracji.
 
 Wybrane E2E: `npm --prefix frontend run test:e2e`, Playwright/Chromium na osobnym porcie 18431. Chromium: `npx playwright install chromium` z tego katalogu albo `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium`. Wyniki: ignorowane `tests/artifacts/`. Formatowanie: `npm --prefix frontend run format:check`. Panel scenariuszy demo usunięto z workspace.
+
+## Nowe formularze operatora
+
+`src/admin/Shipment.svelte` + `lib/shipping.ts`: odczyt snapshotu, rzeczywiste paczki, aktualna oferta z jawną akceptacją kosztu, nadanie, PDF, potwierdzenie przekazania, wspólny termin podjazdu i anulowanie zaznaczonych przesyłek. Brak automatycznego nadawania/podjazdów. Refresh pokazuje zapisany stan; 202 oznacza przyjęte zlecenie, nie sukces przewoźnika. Niepewne komendy zachowują request_id/payload w sessionStorage (bez adresów/sekretów). Stany techniczne manual_review/reconcile/reopen wymagają nadal procedury operatora.
+
+`src/admin/Refunds.svelte` + `lib/refunds.ts`: kwoty w groszach, częściowy/pozostały zwrot, rezerwacje i lista stanów. Niepewne zlecenie blokuje zmianę kwoty i zachowuje request_id po przeładowaniu. Bieżące zwroty odświeżają się co 30 s, najwyżej 10 razy podczas otwartego widoku; dalej ręczne Odśwież.
+
+`components/Passkeys.svelte` + `lib/passkeys.ts`: natywny WebAuthn, pierwszy/zapasowy klucz, usunięcie (oprócz ostatniego), świeże MFA i logout-all. Pierwszy klucz nadal wymaga jednorazowego zezwolenia z lokalnego CLI; nigdy nie zapisuj go w URL/Git/storage. Ustawienia klienta pokazują email, rzeczywiste preferencje i sesje zamiast pustych formularzy bez backendu.

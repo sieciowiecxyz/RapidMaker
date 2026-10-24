@@ -47,6 +47,7 @@ export type Order = {
   paid: boolean;
   payment: string;
   amount: number;
+  amountGrosze: number;
   attention: string;
   delivery: string;
   pickup: boolean;
@@ -115,6 +116,7 @@ export function orderFromServer(row: ServerOrder): Order {
               ? 'Nieudana'
               : 'Oczekuje na płatność',
     amount: row.amount_grosze / 100,
+    amountGrosze: row.amount_grosze,
     attention:
       row.payment_state === 'manual_review'
         ? 'Sprawdź płatność'
@@ -177,3 +179,7 @@ export function csvCell(value: string): string {
       : value;
   return '"' + text.replaceAll('"', '""') + '"';
 }
+
+// Display only; requests and CSV always retain the complete identifier.
+export const shortId = (id: string) =>
+  id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}`.toUpperCase() : id;

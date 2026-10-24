@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Passkeys from '../components/Passkeys.svelte';
   import { onMount } from 'svelte';
   import * as auth from '../lib/session';
   import type { EmailChallenge } from '../lib/types';
@@ -102,6 +103,12 @@
       <button class="button primary" disabled={busy} onclick={passkey}
         >{busy ? 'Potwierdzanie…' : 'Potwierdź passkey'}</button
       >
+      <details>
+        <summary>Pierwszy klucz lub odzyskanie dostępu</summary><Passkeys
+          bootstrapMode
+          {onSession}
+        />
+      </details>
       <button class="button ghost" disabled={busy} onclick={changeAccount}
         >Zaloguj na inne konto</button
       >

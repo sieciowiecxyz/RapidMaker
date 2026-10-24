@@ -179,3 +179,7 @@ SQLx 0.9 usuwa RSA z lockfile; Truck/cgmath/proc-macro-error zastąpione systemo
 ## Integracja istniejących paneli — 2026-10-25
 
 Podłączyć istniejące widoki bez redesignu i nowego backendu: wspólny email/passkey, CSRF, własność gościa, zamówienia/pliki/chat/preferencje, statusy produkcji i pełny zwrot pozostałej kwoty. Kwoty oraz uprawnienia wyłącznie z API; bez lokalnych fikcyjnych zapisów. Faktury, ręczna wycena/cena/termin, notatki wewnętrzne i pełne nadanie pozostają niedostępne. Krótki build i regresje kontraktu HTTP; bez nowych wywołań dostawców.
+
+## F2 — interfejs gotowych funkcji backendu
+
+W istniejącym stylu Piotra: dostawa operatora (paczki → koszt → jawna akceptacja → nadanie/PDF → podjazd/anulowanie), częściowe zwroty, konfiguracja pierwszego/zapasowego passkey i sesji. Bez nowych endpointów ani pozornych zapisów funkcji, których backend nie ma. Chronić kwoty, aktualną wersję i identyfikator ponowienia; sprawdzić kontrakty HTTP oraz czytelność na telefonie. Operacje u dostawców wyłącznie po osobnym działaniu operatora.

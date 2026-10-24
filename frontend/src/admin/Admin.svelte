@@ -19,8 +19,11 @@
     IconFileInvoice,
   } from '@tabler/icons-svelte';
   import Finance from './Finance.svelte';
+  import Shipment from './Shipment.svelte';
+  import Refunds from './Refunds.svelte';
   import {
     total,
+    shortId,
     pieces,
     money,
     csvCell,
@@ -338,6 +341,7 @@
       <div class="side-bottom">
         <a href="/admin/materialy">Materiały i ceny</a>
         <a href="/admin/ustawienia">Ustawienia wyceny</a>
+        <a href="/konto/ustawienia#security-heading">Bezpieczeństwo konta</a>
         <button class="text-button" onclick={signOut}>Wyloguj</button>
         <a href="/" target="_blank" rel="noreferrer">Otwórz stronę <IconArrowUpRight size={17} /></a
         >
@@ -351,6 +355,7 @@
       <header class="topbar">
         <span>Pracownia <span class="slash">/</span> {view}</span>
         <div>
+          <a class="text-button" href="/konto/ustawienia#security-heading">Konto</a>
           <button class="text-button" disabled={loading} onclick={load}>Odśwież</button><button
             class="icon"
             onclick={theme}
@@ -426,7 +431,7 @@
                 {#each visible as o}<tr class:selected={selectedId === o.id}
                     ><td
                       ><button class="order-link" onclick={(e) => open(o, e)}
-                        >{o.id}<IconArrowUpRight size={14} /></button
+                        >{shortId(o.id)}<IconArrowUpRight size={14} /></button
                       ><strong class="client">{o.client}</strong><small
                         >{fmt(o.date)} · formularz strony</small
                       ></td
@@ -504,7 +509,7 @@
                     class="production-card"
                   >
                     <button class="order-link" onclick={(e) => open(o, e)}
-                      >{o.id}<IconArrowUpRight size={15} /></button
+                      >{shortId(o.id)}<IconArrowUpRight size={15} /></button
                     >
                     <h3>{o.client}</h3>
                     <p>
@@ -542,7 +547,9 @@
                     .slice(0, 2)
                     .join('')}</span
                 ><span
-                  ><strong>{o.client} <small>{o.id}</small></strong><span>{o.message}</span></span
+                  ><strong>{o.client} <small title={o.id}>{shortId(o.id)}</small></strong><span
+                    >{o.message}</span
+                  ></span
                 ><IconChevronRight size={20} /></button
               >{/each}
           </div>
@@ -554,7 +561,7 @@
         <div class="detail-header">
           <div>
             <span class="muted">Zamówienie</span>
-            <h2>{selected.id}</h2>
+            <h2 title={selected.id}>{shortId(selected.id)}</h2>
           </div>
           <button class="icon" aria-label="Zamknij szczegóły" onclick={close}
             ><IconX size={21} /></button
@@ -585,7 +592,7 @@
           >
         </div>
         <div class="detail-tabs" aria-label="Sekcje zamówienia">
-          {#each ['Modele i wycena', 'Pliki', 'Rozliczenie', 'Wiadomości', 'Notatki', 'Historia'] as t}<button
+          {#each ['Modele i wycena', 'Pliki', 'Dostawa', 'Rozliczenie', 'Wiadomości', 'Historia'] as t}<button
               class:chosen={tab === t}
               aria-pressed={tab === t}
               onclick={() => {
@@ -661,6 +668,12 @@
                 {selected}
                 mode="Rozliczenie"
                 onopen={openFinance}
+              />
+              <Refunds
+                orderId={selected.id}
+                amountGrosze={selected.amountGrosze}
+                paid={selected.paid}
+                onchange={load}
               />{/key}
           {:else if tab === 'Pliki'}
             <div class="section-title">
@@ -724,28 +737,26 @@
                 >Wyślij wiadomość</button
               >
             </form>
-          {:else if tab === 'Notatki'}
-            <h3>Notatki wewnętrzne</h3>
-            <p class="helper">Notatki wewnętrzne nie są jeszcze obsługiwane przez serwer.</p>
-            <textarea rows="4" disabled aria-label="Notatka wewnętrzna"></textarea>
+          {:else if tab === 'Dostawa'}
+            {#key selected.id}<Shipment orderId={selected.id} onchange={load} />{/key}
           {:else}<h3>Historia realizacji</h3>
             <ol class="history">
               {#each selected.history as h}<li>{h}</li>{/each}
             </ol>{/if}
         </div>
-        <div class="detail-footer">
-          <p role="status">{feedback}</p>
-          <div>
-            <span>Kwota zamówienia<strong>{money(total(selected))}</strong></span><button
-              class="primary"
-              disabled={busy || !nextStatus(selected)}
-              onclick={() => advance(selected!)}
-              >{nextStatus(selected)
-                ? 'Dalej: ' + nextStatus(selected)!.label
-                : selected.status}<IconArrowRight size={17} /></button
-            >
-          </div>
-        </div>
+        {#if !['Dostawa', 'Rozliczenie'].includes(tab)}<div class="detail-footer">
+            <p role="status">{feedback}</p>
+            <div>
+              <span>Kwota zamówienia<strong>{money(total(selected))}</strong></span><button
+                class="primary"
+                disabled={busy || !nextStatus(selected)}
+                onclick={() => advance(selected!)}
+                >{nextStatus(selected)
+                  ? 'Dalej: ' + nextStatus(selected)!.label
+                  : selected.status}<IconArrowRight size={17} /></button
+              >
+            </div>
+          </div>{/if}
       </aside>
     {/if}
   </div>

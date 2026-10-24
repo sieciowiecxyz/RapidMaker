@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Passkeys from '../../components/Passkeys.svelte';
   import { onMount } from 'svelte';
   import { getProfile, updateProfile } from '../../lib/api';
   import type { Profile } from '../../lib/types';
@@ -55,84 +56,9 @@
     </div>{:else}
     <form onsubmit={save} class="stack">
       <section class="panel stack">
-        <h2>Dane kontaktowe</h2>
-        <p class="muted">
-          Email jest powiązany z kontem. Pozostałe dane podajesz przy zamówieniu; książka adresowa
-          nie jest jeszcze dostępna.
-        </p>
-        <div class="form-grid">
-          <label
-            >Imię i nazwisko<input
-              disabled
-              bind:value={profile.contact.name}
-              autocomplete="name"
-              required
-            /></label
-          ><label
-            >Email do logowania<input value={profile.contact.email} type="email" disabled /><small
-              class="muted">Adres email pozostaje bez zmian.</small
-            ></label
-          ><label
-            >Telefon<input
-              disabled
-              bind:value={profile.contact.phone}
-              autocomplete="tel"
-              type="tel"
-            /></label
-          >
-        </div>
-      </section>
-      <section class="panel stack">
-        <h2>Adres dostawy</h2>
-        <div class="form-grid">
-          <label
-            >Ulica i numer<input
-              disabled
-              bind:value={profile.contact.street}
-              autocomplete="street-address"
-            /></label
-          ><label
-            >Kod pocztowy<input
-              disabled
-              bind:value={profile.contact.postalCode}
-              autocomplete="postal-code"
-              placeholder="00-000"
-              pattern={'[0-9]{2}-[0-9]{3}'}
-            /></label
-          ><label
-            >Miejscowość<input
-              disabled
-              bind:value={profile.contact.city}
-              autocomplete="address-level2"
-            /></label
-          ><label
-            >Ulubiony punkt odbioru<input
-              disabled
-              bind:value={profile.contact.pickupPoint}
-              placeholder="Nazwa lub kod punktu"
-            /></label
-          >
-        </div>
-      </section>
-      <section class="panel stack">
-        <h2>Dane do faktury VAT</h2>
-        <div class="form-grid">
-          <label
-            >Nazwa firmy<input
-              disabled
-              bind:value={profile.contact.company}
-              autocomplete="organization"
-            /></label
-          ><label
-            >NIP<input
-              disabled
-              bind:value={profile.contact.nip}
-              inputmode="numeric"
-              placeholder="10 cyfr"
-              pattern={'[0-9]{10}'}
-            /></label
-          >
-        </div>
+        <h2>Twoje konto</h2>
+        <p>{profile.contact.email}</p>
+        <p class="muted">Dane odbiorcy i faktury podajesz przy zamówieniu.</p>
       </section>
       <section class="panel stack">
         <h2>Powiadomienia email</h2>
@@ -162,11 +88,10 @@
         <Button type="submit" disabled={busy}>{busy ? 'Zapisywanie…' : 'Zapisz ustawienia'}</Button>
       </div>
     </form>
-    <section class="panel stack">
-      <h2>Usunięcie konta</h2>
-      <p class="muted">Usuwanie konta nie jest jeszcze dostępne w aplikacji.</p>
-      <div><Button variant="ghost" disabled>Usuń konto</Button></div>
-    </section>
+    <Passkeys
+      bootstrapMode={new URLSearchParams(location.search).get('bootstrap') === '1'}
+      {onSession}
+    />
   {/if}
 </div>
 

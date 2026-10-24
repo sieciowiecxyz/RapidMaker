@@ -1,6 +1,6 @@
 # Auth — Rust API
 
-Stan 2026-10-23: backend klienta i admina działa. Frontend logowania/paneli wymaga podłączenia. Stary Bearer `ADMIN_API_TOKEN` i sesja operatora nie dają już dostępu.
+Stan 2026-10-25: backend i frontend klienta/admina są połączone. UI obsługuje kod email, potwierdzenie i zarządzanie passkey oraz logout-all. Stary Bearer `ADMIN_API_TOKEN` i sesja operatora nie dają już dostępu.
 
 ## Logowanie i uprawnienia
 
@@ -54,7 +54,7 @@ Mutacje wymagają dokładnego Origin i X-CSRF-Token z `/me`; start/verify zamias
 
 1. Potwierdź email w przeglądarce (klient, świeża sesja do 10 min).
 2. Lokalnie: `python backend/run.py --auth-bootstrap ADRES_EMAIL`. Zwrócony sekret jest jednorazowy, ważny 10 min i związany z tą sesją; nie zapisuj go w logach/chacie.
-3. W tej samej przeglądarce rozpocznij register/start z sekretem i zakończ rejestrację przez WebAuthn. Dopiero podpisana odpowiedź nadaje admina i rotuje sesję. Zarejestruj drugi klucz jako zapas.
+3. W tej samej przeglądarce otwórz `/konto/ustawienia?bootstrap=1`, wpisz nazwę klucza i wklej jednorazowe zezwolenie. Zatwierdź rejestrację natywnym WebAuthn. Admin oczekujący po recovery ma ten sam formularz pod „Pierwszy klucz lub odzyskanie dostępu” na ekranie logowania. Dopiero podpisana odpowiedź nadaje admina i rotuje sesję. Zarejestruj drugi klucz jako zapas.
 
 Utrata kluczy: najpierw kod email tworzący świeżą sesję oczekującą, następnie lokalne `--auth-recover ADRES_EMAIL`. Polecenie unieważnia stare klucze i pozostałe sesje, wydaje nowy bootstrap. Sam email nigdy nie zastępuje MFA. Polecenia nie są endpointami HTTP.
 
@@ -69,3 +69,5 @@ Walidacja: fmt, Clippy i build PASS; 18 testów Rust + 6 testów izolowanego Pos
 Przegląd L7: zamówienia, rozmowy, pliki i claim gościa wymagają zakończonego MFA także wtedy, gdy admin używa ścieżki klienta. Regresja na prawdziwym routerze i izolowanym PostgreSQL odtworzyła i naprawiła brak tej kontroli. Macierz oraz uruchomienie: [security.md](security.md).
 
 WebAuthn 0.5.5 usuwa zgłoszenie GHSA-22w3-693w-x895. Builder jawnie ma `allow_subdomains(false)`; rejestracja i logowanie akceptują skonfigurowany origin. Test uprawnień ponowiono po aktualizacji; samej ceremonii z fizycznym kluczem nie powtarzano w L7.
+
+Frontend zarządzania kluczami znajduje się w `/konto/ustawienia`; admin może ponownie potwierdzić passkey przed operacją wymagającą MFA z ostatnich 5 minut. Klient widzi wylogowanie urządzeń, a formularz nadania roli tylko po jawnym `?bootstrap=1`; sama obecność formularza nie daje uprawnień. Zezwolenie jest czyszczone z pola przed rejestracją i nie trafia do storage ani URL. Test Chromium z wirtualnym uwierzytelniaczem potwierdza natywne tworzenie credential i kontrakt JSON; nie zastępuje fizycznego klucza ani ponownej weryfikacji kryptografii backendu.
