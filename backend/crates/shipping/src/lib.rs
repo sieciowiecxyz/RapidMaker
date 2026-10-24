@@ -666,8 +666,12 @@ mod tests {
                 let total = offer.price_grosze + plan.packaging_grosze;
                 expected = expected.min(total);
                 eprintln!(
-                    "sandbox plan={i} parcels={} shipping={} packaging={} total={total}",
-                    plan.parcels.len(),
+                    "sandbox plan={i} cartons={:?} pieces_per_parcel={:?} shipping={} packaging={} total={total}",
+                    plan.parcels.iter().map(|p| p.box_id).collect::<Vec<_>>(),
+                    plan.parcels
+                        .iter()
+                        .map(|p| p.placements.len())
+                        .collect::<Vec<_>>(),
                     offer.price_grosze,
                     plan.packaging_grosze
                 );

@@ -68,6 +68,6 @@ Dowody, aktualne ograniczenia i pomiar LOC: [checkpoint C1–C6](milestones/back
 
 ## P1 — Warianty pakowania i najtańsza dostawa — wdrożone
 
-Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; ceny Furgonetki + opakowania, walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 5 wycen zbiorczych/10 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
+Tylko Rust backend. Do 5 różnych bezpiecznych planów z obecnego katalogu kartonów; najpierw najmniejsza liczba paczek w znalezionych planach, potem ceny Furgonetki + opakowania i walidacja od najtańszej. Zapis jednego zwycięskiego planu i usług dla tych samych paczek w istniejącym snapshocie. Do 5 wycen zbiorczych/10 walidacji/30 s; awaria nie daje oferty. Bez nowego SQL, zależności, strony i dokładnego nestingu. Kontrakt i ograniczenia: [checkout.md](checkout.md#wybór-pakowania-i-ceny-dostawy).
 
 Sprawdzone: regresje pakowania/rankingu, rzeczywiste ceny i walidacja kilku planów w sandboxie; szczegóły w milestone P1. Rezerwy i katalog kartonów wymagają kalibracji przed użyciem produkcyjnym.

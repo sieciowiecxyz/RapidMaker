@@ -182,9 +182,8 @@ pub fn estimate(request: EstimateRequest) -> Estimate {
     estimate_with(request, CARTONS.len(), false)
 }
 
-/// At most five carrier-distinct plans, preserving all estimation safeguards.
-/// The first plan retains the single-estimate behavior; unsuccessful alternatives
-/// are omitted. Pickup and manual review remain a single result.
+/// Fill cartons first; compare prices only among plans with the fewest parcels.
+/// At most five carrier-distinct plans; pickup and manual review remain single results.
 pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
     let baseline = estimate(request.clone());
     if baseline.status != "estimated" || baseline.parcels.is_empty() {
@@ -196,11 +195,8 @@ pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
         CARTONS.len()
     };
     let mut plans = vec![baseline];
-    for (limit, longest_first) in (1..carton_count)
-        .map(|limit| (limit, false))
-        .chain(std::iter::once((carton_count, true)))
-    {
-        let plan = estimate_with(request.clone(), limit, longest_first);
+    for limit in 1..=carton_count {
+        let plan = estimate_with(request.clone(), limit, true);
         if plan.status == "estimated"
             && !plans.iter().any(|existing| {
                 existing.packaging_grosze == plan.packaging_grosze
@@ -210,6 +206,12 @@ pub fn candidates(request: EstimateRequest) -> Vec<Estimate> {
             plans.push(plan);
         }
     }
+    let minimum = plans
+        .iter()
+        .map(|plan| plan.parcels.len())
+        .min()
+        .unwrap_or(0);
+    plans.retain(|plan| plan.parcels.len() == minimum);
     plans
 }
 
@@ -223,11 +225,12 @@ fn parcel_signature(plan: &Estimate) -> Vec<([u32; 3], u32)> {
     signature
 }
 
-fn estimate_with(request: EstimateRequest, carton_count: usize, longest_first: bool) -> Estimate {
+fn estimate_with(request: EstimateRequest, carton_count: usize, single_size: bool) -> Estimate {
     let locker = matches!(request.delivery, Delivery::Locker);
     // POC: lockers use our S/M/L cartons, one parcel per order. The provider
     // still validates the actual parcel; this is not a universal carrier limit.
-    let cartons = &CARTONS[..carton_count.min(if locker { 3 } else { CARTONS.len() })];
+    let end = carton_count.min(if locker { 3 } else { CARTONS.len() });
+    let cartons = &CARTONS[if single_size { end - 1 } else { 0 }..end];
     if request.parts.is_empty() || request.parts.len() > 20 {
         return Estimate::manual("Dodaj od 1 do 20 różnych części.");
     }
@@ -287,16 +290,7 @@ fn estimate_with(request: EstimateRequest, carton_count: usize, longest_first: b
         reason: None,
         geometry_source: "customer_estimate",
     };
-    units.sort_by_key(|unit| {
-        std::cmp::Reverse((
-            if longest_first {
-                unit.size[0].max(unit.size[1]).max(unit.size[2])
-            } else {
-                0
-            },
-            volume(unit.size),
-        ))
-    });
+    units.sort_by_key(|unit| std::cmp::Reverse(volume(unit.size)));
     while !units.is_empty() {
         if locker && !result.parcels.is_empty() {
             return Estimate::manual(
@@ -505,7 +499,7 @@ mod tests {
             parcel_signature(&estimate(req))
         );
         assert!(plans.iter().any(|plan| plan.parcels.len() == 1));
-        assert!(plans.iter().any(|plan| plan.parcels.len() > 1));
+        assert!(plans.iter().all(|plan| plan.parcels.len() == 1));
         for (index, plan) in plans.iter().enumerate() {
             verify(plan, 200);
             assert!(plans[..index].iter().all(|other| {
@@ -532,6 +526,33 @@ mod tests {
                 8
             );
         }
+    }
+    #[test]
+    fn candidates_consolidate_twelve_parts_into_one_parcel() {
+        let plans = candidates(request(vec![part("a", 12, [120, 80, 45], 60)]));
+        assert!(plans.len() > 1);
+        for plan in plans {
+            verify(&plan, 12);
+            assert_eq!(plan.parcels.len(), 1);
+            assert_eq!(plan.parcels[0].placements.len(), 12);
+        }
+    }
+    #[test]
+    fn bulk_fills_repeated_cartons_before_opening_the_remainder() {
+        let plan = estimate_with(request(vec![part("a", 999, [120, 80, 45], 60)]), 4, true);
+        verify(&plan, 999);
+        let capacity = plan.parcels[0].placements.len();
+        assert!(capacity > 1);
+        assert_eq!(plan.parcels.len(), 999_usize.div_ceil(capacity));
+        for parcel in &plan.parcels[..plan.parcels.len() - 1] {
+            assert_eq!(parcel.placements.len(), capacity);
+        }
+        assert!(plan.parcels.last().unwrap().placements.len() <= capacity);
+        eprintln!(
+            "999 pieces: capacity={capacity}, parcels={}, last={}",
+            plan.parcels.len(),
+            plan.parcels.last().unwrap().placements.len()
+        );
     }
     #[test]
     fn candidates_preserve_manual_pickup_and_locker_behavior() {

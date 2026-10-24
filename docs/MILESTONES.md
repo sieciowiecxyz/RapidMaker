@@ -59,3 +59,10 @@ Dowody i granice: [checkpoint](milestones/backend.md#checkout-c1c6--2026-10-24).
 - PASS: 25 testów jednostkowych API/pakowania/dostawy; osobno test sandbox porównujący 3 plany (1/12/2 paczki) z wycenami każdego z osobna. Test rankingu chroni wybór kosztu całkowitego i tożsamości planu, także przepełnienie kwoty. Bez nadawania przesyłek.
 - PASS: zakresowe fmt, Clippy i build. Dokładny nesting, palety, automatyczne porównanie różnych metod i kalibracja kartonów poza zakresem.
 - Pomiar tokei, 3 zmienione pliki Rust: produkcja 1583 → 1703 (+120), testy 252 → 424 (+172); bez pustych linii i komentarzy. Bez nowych plików, crate’ów, zależności i migracji.
+
+### Korekta P1 — najpierw pojemność i liczba paczek
+
+- Kartony każdego rozmiaru wypełniane przed otwarciem kolejnego; porównanie taryf tylko dla planów z najmniejszą znalezioną liczbą paczek. Bez twierdzenia o globalnym optimum.
+- PASS: 27 testów API/pakowania/dostawy, w tym 12 sztuk zawsze w jednej paczce i 999 sztuk jako pełne kartony + reszta. Dawny test wymagający wariantu wielopaczkowego zmieniony zgodnie z nowym priorytetem.
+- PASS: rzeczywisty sandbox dla 12 sztuk: L=[12] i XL=[12], bez wariantu 12 osobnych paczek. Log pokazuje rozmiary kartonów i sztuki w każdej paczce. Fmt/Clippy/build zakresowe; bez nowych zależności i migracji.
+- Korekta LOC (tokei, 2 zmienione pliki Rust): produkcja 891 → 886 (-5), testy 396 → 427 (+31); bez pustych linii i komentarzy.

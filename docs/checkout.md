@@ -29,11 +29,11 @@ Metody: `courier`, `locker` z ID punktu, `pickup`. Odbiór osobisty nie wymaga a
 
 ## Wybór pakowania i ceny dostawy
 
-Backend generuje do 5 różnych planów: dotychczasowy układ, mniejsze maksymalne kartony i kolejność według najdłuższego boku. Duplikaty wymiarów/mas paczek i kosztu opakowań odpadają. Zachowane limity: 1–1000 sztuk/model, do 2000 łącznie, 30 paczek, 20 kg/paczkę; punkt odbioru nadal tylko jedna paczka. Obecne kartony, odstęp 4 mm na stronę i rezerwa 33% pozostają niekalibrowanymi założeniami POC.
+Backend generuje do 5 różnych planów: dotychczasowy układ mieszany oraz pełne kartony każdego rozmiaru. Każdy karton jest wypełniany przed otwarciem następnego; ostatni zawiera resztę. Pozostają tylko plany z najmniejszą znalezioną liczbą paczek. Dopiero wśród nich porównujemy koszty. Duplikaty wymiarów/mas paczek i kosztu opakowań odpadają. Zachowane limity: 1–1000 sztuk/model, do 2000 łącznie, 30 paczek, 20 kg/paczkę; punkt odbioru nadal tylko jedna paczka. Obecne kartony, odstęp 4 mm na stronę i rezerwa 33% pozostają niekalibrowanymi założeniami POC.
 
 `shipping::quote_best` pobiera usługi i weryfikuje punkt raz, wycenia każdy plan w Furgonetce, a następnie waliduje pary plan/usługa od najniższego kosztu przewozu wszystkich paczek + opakowań. Maksymalnie 5 zbiorczych wycen, 10 walidacji, 30 s na operację; awaria dostawcy/timeout daje 503, bez pozornej darmowej dostawy. Brak zatwierdzonej pary oznacza ręczną wycenę albo błąd konkretnego pola.
 
-Wynik zawiera zwycięski `packing` i do 3 zatwierdzonych usług **dla tego samego układu**. `recommended` wskazuje najtańszą zatwierdzoną parę spośród sprawdzonych wariantów wybranej metody; nie porównuje automatycznie kuriera z punktem ani paletą. Ten układ i jego koszt opakowań trafiają do istniejącego snapshotu PostgreSQL i zamówienia. Kontrakt HTTP i schemat SQL bez zmian. Bez dokładnego nestingu i gwarancji matematycznego optimum.
+Wynik zawiera zwycięski `packing` i do 3 zatwierdzonych usług **dla tego samego układu**. `recommended` wskazuje najtańszą zatwierdzoną parę spośród sprawdzonych wariantów o najmniejszej znalezionej liczbie paczek dla wybranej metody; nie porównuje automatycznie kuriera z punktem ani paletą. Ten układ i jego koszt opakowań trafiają do istniejącego snapshotu PostgreSQL i zamówienia. Kontrakt HTTP i schemat SQL bez zmian. Bez dokładnego nestingu i gwarancji matematycznego optimum.
 
 ## Trwałość i bezpieczeństwo
 
