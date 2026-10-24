@@ -65,7 +65,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   headers.delete('X-CSRF-Token');
   if (
     !['GET', 'HEAD', 'OPTIONS'].includes(method) &&
-    !['/api/auth/start', '/api/auth/verify'].includes(url.pathname)
+    ![
+      '/api/auth/start',
+      '/api/auth/verify',
+      '/api/auth/password/login',
+      '/api/auth/passkey/login/start',
+    ].includes(url.pathname)
   ) {
     if (!csrfToken) await loadCsrf();
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
@@ -80,7 +85,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   });
   if (response.status === 401) {
     clearAuthToken();
-    if (!['/api/auth/me', '/api/auth/claim-guest'].includes(url.pathname))
+    if (!url.pathname.startsWith('/api/auth/'))
       window.dispatchEvent(new Event('rapidmaker:session-expired'));
   }
   return response;

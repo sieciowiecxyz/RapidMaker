@@ -73,7 +73,7 @@ Zadania i wyniki są trwałe w PostgreSQL, deduplikowane per właściciel i peł
 
 ## API operatora
 
-Panel operatora wymaga teraz wspólnej sesji konta z potwierdzonym passkey. Stary ADMIN_API_TOKEN/Bearer i sesja operatora są wyłączone. Każdy zapis sprawdza rolę/MFA/Origin/CSRF. Pierwszy admin: zweryfikuj email i wykonaj lokalny bootstrap; kroki i kontrakt: [auth](../docs/auth.md). Frontend admina/logowania wymaga migracji do nowych endpointów.
+Panel operatora i klienta używa wspólnego auth: hasło albo passkey + obowiązkowy email/TOTP. UI logowania i ustawień jest podłączone; rola, pełne MFA, Origin i CSRF są sprawdzane na serwerze. Pierwszy admin i odzyskanie: [auth](../docs/auth.md).
 
 - `GET /api/admin/session`: stan sesji; `POST` z `{token}` tworzy sesję cookie, `DELETE` ją unieważnia. Browser mock nie nadaje uprawnień.
 - `GET /api/admin/materials`: pełny katalog z kosztami i metadanymi.
@@ -94,11 +94,11 @@ Checkout ma trwały szkic, ofertę i próbę płatności w PostgreSQL. Przed Str
 
 ## Spis API
 
-Zwroty Stripe test: `POST /api/admin/orders/{id}/refunds` z `request_id` UUID i `amount_grosze`; `GET` pod tym samym adresem zwraca statusy. Admin/passkey/CSRF, pełne lub częściowe kwoty, trwała idempotencja i uzgadnianie w tle. `202` oznacza zapis zlecenia. [Kontrakt](../docs/checkout.md#zwroty-płatności).
+Zwroty Stripe test: `POST /api/admin/orders/{id}/refunds` z `request_id` UUID i `amount_grosze`; `GET` pod tym samym adresem zwraca statusy. Admin/MFA/CSRF, pełne lub częściowe kwoty, trwała idempotencja i uzgadnianie w tle. `202` oznacza zapis zlecenia. [Kontrakt](../docs/checkout.md#zwroty-płatności).
 
 Otwórz [Swagger UI](http://localhost:18430/api). Specyfikacja OpenAPI: `/api/openapi.json`. UI i zasoby są serwowane lokalnie przez Rust, bez CDN. `utoipa` generuje schematy z typów, a `utoipa-axum` rejestruje jednocześnie trasę i jej dokumentację przez `routes!`; nie utrzymujemy osobnego spisu endpointów.
 
-Rozwiń endpoint, aby zobaczyć parametry, body i odpowiedzi. `Try it out` wykonuje rzeczywiste żądanie. Logowanie ustawia cookie HttpOnly; dla operacji sesyjnych wymagających CSRF podaj token z `/api/auth/me` w `Authorize`. Admin wymaga również passkey. Używaj hosta `localhost` zgodnego z `AUTH_ORIGIN`. Jawne DTO mają wygenerowane schematy; odpowiedzi zwracane jako dynamiczny JSON pozostają ogólne.
+Rozwiń endpoint, aby zobaczyć parametry, body i odpowiedzi. `Try it out` wykonuje rzeczywiste żądanie. Logowanie ustawia cookie HttpOnly; dla operacji sesyjnych wymagających CSRF podaj token z `/api/auth/me` w `Authorize`. Admin wymaga również drugiego składnika. Używaj hosta `localhost` zgodnego z `AUTH_ORIGIN`. Jawne DTO mają wygenerowane schematy; odpowiedzi zwracane jako dynamiczny JSON pozostają ogólne.
 
 ## Podgląd GLB
 
@@ -135,14 +135,14 @@ Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie n
 
 ## Nadawanie przesyłek
 
-Backend sandbox, bez nowego panelu. Podjazdy i anulowanie obsługuje backend opisany poniżej. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po passkey oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
+Backend sandbox, bez nowego panelu. Podjazdy i anulowanie obsługuje backend opisany poniżej. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po pełnym MFA oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
 
 Używa istniejących FURGONETKA_SANDBOX_TOKEN/FURGONETKA_SENDER_JSON; bez nowych sekretów. DPD sandbox sprawdzony: dwa kartony/dwa numery w jednej przesyłce, PDF, restart i ponowienie bez duplikatu, przekazanie, jedna wysyłka SMTP oraz symulowane doręczenie. Właściciel zaakceptował regulamin DPD i zweryfikował telefon konta; kod nie zapisuje zgód. Test używał opłaconego zamówienia/sesji admina z fixtures i void@sieciowiec.xyz.
 
 
 ### Podjazdy i anulowanie przesyłek
 
-Wymagają admin/passkey + CSRF. Używaj lokalnych ID przesyłek z GET `/api/admin/orders/{id}/shipment`, aktualnej `version` i nowego `request_id` UUID dla nowej decyzji.
+Wymagają admin/MFA + CSRF. Używaj lokalnych ID przesyłek z GET `/api/admin/orders/{id}/shipment`, aktualnej `version` i nowego `request_id` UUID dla nowej decyzji.
 
 | Metoda i końcówka pod `/api/admin/orders/{id}/shipment` | Dane / wynik |
 | --- | --- |

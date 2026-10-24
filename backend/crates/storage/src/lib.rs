@@ -9,6 +9,7 @@ mod admin;
 mod auth;
 mod chat;
 mod checkout;
+mod credentials;
 pub use chat::{InboxLease, InboxOutcome, MessagePage, ReplyRoute};
 pub use checkout::{AttemptInput, CheckoutDraft, PaymentAttempt, StripeEvent};
 mod email;

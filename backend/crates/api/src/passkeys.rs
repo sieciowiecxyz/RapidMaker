@@ -4,7 +4,7 @@ use super::auth::{
 };
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode},
 };
 use rapidmaker_auth::{
@@ -13,7 +13,7 @@ use rapidmaker_auth::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use utoipa_axum::router::OpenApiRouter as Router;
 
 pub fn router(auth: Arc<Auth>) -> Router {
@@ -47,7 +47,7 @@ struct Start {
     path = "/api/auth/passkey/register/start",
     tag = "Passkey",
     summary = "Rozpocznij rejestrację passkey.",
-    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    description = "Rejestracja wymaga świeżego pełnego logowania lub zweryfikowanej emailowej sesji zakładania pierwszego klucza. Logowanie passkey jest pierwszym składnikiem; drugi składnik pozostaje obowiązkowy. Weryfikacja użytkownika WebAuthn jest obowiązkowa.",
     request_body = Start,
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = [], "csrf" = []))
@@ -57,7 +57,7 @@ async fn register_start(
     headers: HeaderMap,
     Json(input): Json<Start>,
 ) -> Result<Json<Value>, Error> {
-    auth.mutation(&headers).await?;
+    auth.pending_mutation(&headers).await?;
     if input
         .bootstrap
         .as_ref()
@@ -114,7 +114,7 @@ fn registration_credential<'de, D: serde::Deserializer<'de>>(
     path = "/api/auth/passkey/register/finish",
     tag = "Passkey",
     summary = "Zweryfikuj rejestrację passkey i obróć sesję.",
-    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    description = "Rejestracja wymaga świeżego pełnego logowania lub zweryfikowanej emailowej sesji zakładania pierwszego klucza. Logowanie passkey jest pierwszym składnikiem; drugi składnik pozostaje obowiązkowy. Weryfikacja użytkownika WebAuthn jest obowiązkowa.",
     request_body = Register,
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = [], "csrf" = []))
@@ -124,7 +124,7 @@ async fn register_finish(
     headers: HeaderMap,
     Json(input): Json<Register>,
 ) -> Result<axum::response::Response, Error> {
-    auth.mutation(&headers).await?;
+    auth.pending_mutation(&headers).await?;
     let new_token = random_token().map_err(|_| unavailable())?;
     let session = auth
         .database()?
@@ -148,31 +148,66 @@ async fn register_finish(
     post,
     path = "/api/auth/passkey/login/start",
     tag = "Passkey",
-    summary = "Rozpocznij potwierdzenie administratora passkey.",
-    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
-    request_body = Value,
+    summary = "Rozpocznij logowanie passkey klienta lub administratora.",
+    description = "Rejestracja wymaga świeżego pełnego logowania lub zweryfikowanej emailowej sesji zakładania pierwszego klucza. Logowanie passkey jest pierwszym składnikiem; drugi składnik pozostaje obowiązkowy. Weryfikacja użytkownika WebAuthn jest obowiązkowa.",
+    request_body = Email,
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = [], "csrf" = []))
 )]
 async fn login_start(
     State(auth): State<Arc<Auth>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    Json(_input): Json<Value>,
-) -> Result<Json<Value>, Error> {
-    auth.mutation(&headers).await?;
+    Json(input): Json<Email>,
+) -> Result<axum::response::Response, Error> {
+    auth.check_origin(&headers)?;
+    auth.key()?;
+    let email = input.email.trim().to_lowercase();
+    if !email.is_ascii() || !rapidmaker_notifications::valid_address(&email) {
+        return Err(denied());
+    }
+    if auth
+        .database()?
+        .auth_login_record(
+            &email,
+            &rapidmaker_auth::hash_token(&auth.client_ip(peer, &headers)?.to_string()),
+            now(),
+        )
+        .await
+        .map_err(|_| unavailable())?
+        .is_none()
+    {
+        return Err(error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Spróbuj ponownie później.",
+        ));
+    }
+    let pending = random_token().map_err(|_| unavailable())?;
+    let session = auth
+        .database()?
+        .auth_primary(&email, None, &pending, session_cookie(&headers)?, now())
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(denied)?;
     let start = auth
         .database()?
         .passkey_login_start(
             auth.webauthn.as_ref().ok_or_else(unavailable)?,
-            token(&headers)?,
+            &pending,
             now(),
         )
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(denied)?;
-    Ok(Json(
-        json!({"challenge_id":start.id,"options":start.options}),
-    ))
+    let mut body = auth.session_body(&pending, &session)?;
+    body["challenge_id"] = json!(start.id);
+    body["options"] = start.options;
+    response(body, &[set_cookie(session_name(), &pending, 600)])
+}
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct Email {
+    email: String,
 }
 #[derive(Deserialize, utoipa::ToSchema)]
 #[schema(as = PasskeyLogin)]
@@ -187,8 +222,8 @@ struct Login {
     post,
     path = "/api/auth/passkey/login/finish",
     tag = "Passkey",
-    summary = "Zweryfikuj passkey administratora i obróć sesję.",
-    description = "Wymaga sesji email i CSRF/Origin. Rejestracja wymaga świeżego MFA albo lokalnego zezwolenia bootstrap. Odpowiedzi opcji i credential są standardowymi obiektami WebAuthn; weryfikacja użytkownika jest obowiązkowa.",
+    summary = "Zweryfikuj passkey i rozpocznij obowiązkowy drugi składnik.",
+    description = "Rejestracja wymaga świeżego pełnego logowania lub zweryfikowanej emailowej sesji zakładania pierwszego klucza. Logowanie passkey jest pierwszym składnikiem; drugi składnik pozostaje obowiązkowy. Weryfikacja użytkownika WebAuthn jest obowiązkowa.",
     request_body = Login,
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = [], "csrf" = []))
@@ -198,7 +233,7 @@ async fn login_finish(
     headers: HeaderMap,
     Json(input): Json<Login>,
 ) -> Result<axum::response::Response, Error> {
-    auth.mutation(&headers).await?;
+    auth.pending_mutation(&headers).await?;
     let new_token = random_token().map_err(|_| unavailable())?;
     let session = auth
         .database()?
@@ -213,6 +248,13 @@ async fn login_finish(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(denied)?;
+    if let Err(e) = auth.send_factor(&new_token, &session).await {
+        auth.database()?
+            .auth_logout(&new_token)
+            .await
+            .map_err(|_| unavailable())?;
+        return Err(e);
+    }
     tracing::info!(event = "passkey_verified");
     finish(&auth, &new_token, session)
 }
@@ -221,27 +263,21 @@ fn finish(
     token: &str,
     session: rapidmaker_storage::AuthSession,
 ) -> Result<axum::response::Response, Error> {
-    response(
-        json!({"user":session.user,"admin_verified":true,"csrf_token":auth.csrf(token)?}),
-        &[set_cookie(
-            session_name(),
-            token,
-            (session.expires_at - now()).clamp(0, 8 * 3600) as u32,
-        )],
-    )
+    auth.finish_session(token, &session)
 }
+
 #[utoipa::path(
     operation_id = "passkeys_list",
     get,
     path = "/api/auth/passkeys",
     tag = "Passkey",
-    summary = "Lista passkeys administratora.",
-    description = "Wymaga administratora i świeżego potwierdzenia MFA.",
+    summary = "Lista własnych passkeys po świeżym pełnym logowaniu.",
+    description = "Wymaga własnej sesji i pełnego logowania z ostatnich 5 minut.",
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
 )]
 async fn list(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
-    auth.administrator(&headers, false).await?;
+    auth.current(&headers).await?;
     let keys = auth
         .database()?
         .passkeys_list(token(&headers)?, now())
@@ -256,7 +292,7 @@ async fn list(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<
     path = "/api/auth/passkeys/{id}",
     tag = "Passkey",
     summary = "Usuń passkey; ostatni klucz jest chroniony.",
-    description = "Wymaga administratora i świeżego potwierdzenia MFA.",
+    description = "Wymaga własnej sesji i pełnego logowania z ostatnich 5 minut.",
     params(("id" = String, Path, description = "Identyfikator passkey.")),
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = [], "csrf" = []))
@@ -266,7 +302,7 @@ async fn remove(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Error> {
-    auth.administrator(&headers, true).await?;
+    auth.mutation(&headers).await?;
     if !auth
         .database()?
         .passkey_remove(token(&headers)?, &id, now())

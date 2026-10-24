@@ -23,7 +23,7 @@ Strona: http://localhost:18430 (musi odpowiadać `AUTH_ORIGIN`, także dla passk
 ## Mapa kodu i ekranów
 
 - `src/App.svelte` — dynamicznie ładuje storefront albo workspace.
-- `admin.html`, `src/admin/` — panel Piotra: rzeczywiste zamówienia, dozwolone statusy, chat, pliki, CSV i odczyt płatności. Wymaga email + passkey. [Zakres](src/admin/README.md).
+- `admin.html`, `src/admin/` — panel Piotra: rzeczywiste zamówienia, dozwolone statusy, chat, pliki, CSV i odczyt płatności. Wymaga hasła albo passkey oraz email/TOTP. [Zakres](src/admin/README.md).
 - `src/storefront/Storefront.svelte` — landing i konfigurator Piotra na `/` i `/wycena`: wiele części, materiał/kolor, jakość, wytrzymałość, liczba sztuk i animacja przejścia do zamówienia.
 - `src/storefront/lib/api.ts` — łączy nowy konfigurator z istniejącym adapterem `src/lib/api.ts`, analizą serwera, wyceną i koszykiem. Katalog zachowuje zgodność materiałów i dostępność kolorów.
 - `src/Workspace.svelte`, `src/pages/`, `src/components/` — checkout `/zamowienie`, logowanie, konto, admin oraz konfiguracja techniczna `/wycena/zaawansowana`. Powrót `/wycena?restore=cart` zachowuje opcje koszyka.
@@ -37,7 +37,7 @@ Przepływ: **Druk → dane i dostawa → podsumowanie → płatność**. Adres i
 
 Analiza serwera obsługuje STL/STEP/3MF do 32 MiB, z `bubblewrap` i `prlimit`. STL w mm; STEP pojedynczej części w mm, bez złożeń. Wymiary pochodzą z geometrii, masę i czas mierzy Bambu Studio; pakowanie dostaje ostrożny szacunek z całego zużycia filamentu na sztukę. Niepewne analizy i przykłady bez analizy wymagają ręcznej oceny; nie otrzymują automatycznej płatności.
 
-Katalog i kolory pochodzą z PostgreSQL. Ceny ustala slicer i cennik operatora; przygotowanie raz na koszyk, opakowanie i dostawa osobno. Brak kosztu zakupu, dopuszczenia lub magazynu oznacza ręczną ocenę. Panel materiałów i cennika zapisuje API, ze wspólną sesją email/passkey i CSRF. Konta klientów, chat i panele zamówień korzystają z trwałego API. Nie ma skalibrowanej oferty sprzedażowej.
+Katalog i kolory pochodzą z PostgreSQL. Ceny ustala slicer i cennik operatora; przygotowanie raz na koszyk, opakowanie i dostawa osobno. Brak kosztu zakupu, dopuszczenia lub magazynu oznacza ręczną ocenę. Panel materiałów i cennika zapisuje API, ze wspólną sesją hasło/passkey + email/TOTP i CSRF. Konta klientów, chat i panele zamówień korzystają z trwałego API. Nie ma skalibrowanej oferty sprzedażowej.
 
 Kontakt checkoutu pozostaje szkicem w `sessionStorage`, koszyk lokalnie; panel konta i admina czyta PostgreSQL. Lokalna karta powrotu Stripe nie jest źródłem listy zamówień ani uprawnień. Potwierdzenie płatności należy do serwera. Oferty, próby płatności i zamówienia są trwałe; oryginały plików podlegają retencji backendu. POC używa tylko sandboxów. Nieobsługiwane faktury, notatki/terminy, ręczne zmiany ceny i konto/adresy nie zapisują fikcyjnych zmian. Stan: [PLAN.md](../docs/PLAN.md).
 
@@ -53,4 +53,4 @@ Wybrane E2E: `npm --prefix frontend run test:e2e`, Playwright/Chromium na osobny
 
 `src/admin/Refunds.svelte` + `lib/refunds.ts`: kwoty w groszach, częściowy/pozostały zwrot, rezerwacje i lista stanów. Niepewne zlecenie blokuje zmianę kwoty i zachowuje request_id po przeładowaniu. Bieżące zwroty odświeżają się co 30 s, najwyżej 10 razy podczas otwartego widoku; dalej ręczne Odśwież.
 
-`components/Passkeys.svelte` + `lib/passkeys.ts`: natywny WebAuthn, pierwszy/zapasowy klucz, usunięcie (oprócz ostatniego), świeże MFA i logout-all. Pierwszy klucz nadal wymaga jednorazowego zezwolenia z lokalnego CLI; nigdy nie zapisuj go w URL/Git/storage. Ustawienia klienta pokazują email, rzeczywiste preferencje i sesje zamiast pustych formularzy bez backendu.
+`components/Passkeys.svelte` + `lib/passkeys.ts`: natywny WebAuthn dla klienta/admina, zapasowe klucze, usuwanie i świeże MFA. Ostatni klucz można usunąć tylko mając hasło. Lokalny bootstrap jest potrzebny do nadania pierwszej roli admina, nie do zwykłego klucza klienta. `AccountSecurity.svelte` obsługuje hasło, TOTP, jednorazowe kody odzyskiwania i logout-all; `Login.svelte` wymaga drugiego składnika po haśle/passkey. Dane zabezpieczeń nie trafiają do URL ani browser storage. [Kontrakt](../docs/auth.md).

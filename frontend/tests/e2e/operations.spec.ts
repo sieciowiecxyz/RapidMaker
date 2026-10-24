@@ -49,6 +49,8 @@ async function admin(page: Page, booked = false) {
     if (path === '/api/auth/me')
       data = {
         user: { id: 'admin-1', email: 'operator@example.invalid', role: 'admin' },
+        stage: 'authenticated',
+        second_factor: 'email',
         admin_verified: true,
         csrf_token: 'csrf-operations',
       };
@@ -232,8 +234,16 @@ test('first passkey uses native WebAuthn, clears grant and protects last key', a
           email: 'client@example.invalid',
           role: registered ? 'admin' : 'client',
         },
+        stage: 'authenticated',
+        second_factor: 'email',
         admin_verified: registered,
         csrf_token: 'csrf-key',
+      };
+    else if (path === '/api/account/security')
+      data = {
+        has_password: false,
+        totp_enabled: false,
+        passkeys: registered ? [{ id: 'key-1', name: 'Mój klucz', created_at: 1792840000 }] : [],
       };
     else if (path === '/api/account/notifications')
       data = { email_order_updates: true, email_chat_messages: true };
@@ -256,6 +266,8 @@ test('first passkey uses native WebAuthn, clears grant and protects last key', a
       registered = true;
       data = {
         user: { id: 'client-1', email: 'client@example.invalid', role: 'admin' },
+        stage: 'authenticated',
+        second_factor: 'email',
         admin_verified: true,
         csrf_token: 'csrf-key',
       };

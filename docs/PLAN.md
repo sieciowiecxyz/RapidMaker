@@ -101,7 +101,7 @@ Klient płaci i wybiera usługę/punkt. Admin potwierdza rzeczywistą liczbę, z
 
 ### API i użycie
 
-Wszystkie trasy admina wymagają sesji po passkey; zapisy także CSRF/Origin. Odczyt klienta korzysta z dotychczasowej własności konta/gościa. DTO i błędy są w Swaggerze.
+Wszystkie trasy admina wymagają sesji po pełnym MFA; zapisy także CSRF/Origin. Odczyt klienta korzysta z dotychczasowej własności konta/gościa. DTO i błędy są w Swaggerze.
 
 | Endpoint | Działanie |
 | --- | --- |
@@ -142,7 +142,7 @@ Dotychczasowe `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`; bez nowych 
 
 ## L1–L2 — Podjazdy i anulowanie
 
-Bez frontendu. Istniejące crate’y, worker i lease nadania; jedna tabela `shipment_actions`. Admin po passkey + CSRF, aktualna wersja nadania, `request_id` UUID. Wybrane `package_ids` to lokalne ID z GET nadania; od 1 do 30 przesyłek jednego zamówienia. Jedna aktywna operacja, maksymalnie 100 operacji historii na zamówienie. Łączenie podjazdów różnych zamówień poza tym etapem.
+Bez frontendu. Istniejące crate’y, worker i lease nadania; jedna tabela `shipment_actions`. Admin po pełnym MFA + CSRF, aktualna wersja nadania, `request_id` UUID. Wybrane `package_ids` to lokalne ID z GET nadania; od 1 do 30 przesyłek jednego zamówienia. Jedna aktywna operacja, maksymalnie 100 operacji historii na zamówienie. Łączenie podjazdów różnych zamówień poza tym etapem.
 
 - **L1:** POST `/api/admin/orders/{id}/shipment/pickup/proposals` z `{package_ids,ready_date,repeat:false}` pobiera terminy. POST `/pickup` z `{version,request_id,package_ids,pickup_date:{date,min_time,max_time},repeat:false}` zleca wybrany wspólny termin. Ponowienie nieudanego odbioru: `repeat:true`, tylko jeśli przewoźnik udostępnia `repickup`. Worker ponownie sprawdza dostępność i termin przed HTTP. Dopiero wynik z numerem podjazdu i zgodnymi ID oznacza sukces. Podjazd nie oznacza wysłania zamówienia.
 - **L2:** POST `/api/admin/orders/{id}/shipment/cancel` z `{version,request_id,package_ids}` anuluje wybrane zamówione przesyłki. Sprawdzamy `cancel_available`. Ostateczne `canceled` wymaga stanu `cancelled` w szczegółach Furgonetki; anulowanie odroczone pozostaje `pending`. Przy anulowaniu części grup nadanie wymaga ręcznego rozstrzygnięcia. Nie tworzymy automatycznie nowej przesyłki i nie zmieniamy zamówienia ani Stripe. Anulowanie może podlegać opłatom przewoźnika.
@@ -183,3 +183,7 @@ Podłączyć istniejące widoki bez redesignu i nowego backendu: wspólny email/
 ## F2 — interfejs gotowych funkcji backendu
 
 W istniejącym stylu Piotra: dostawa operatora (paczki → koszt → jawna akceptacja → nadanie/PDF → podjazd/anulowanie), częściowe zwroty, konfiguracja pierwszego/zapasowego passkey i sesji. Bez nowych endpointów ani pozornych zapisów funkcji, których backend nie ma. Chronić kwoty, aktualną wersję i identyfikator ponowienia; sprawdzić kontrakty HTTP oraz czytelność na telefonie. Operacje u dostawców wyłącznie po osobnym działaniu operatora.
+
+## A1 — Hasło/passkey i obowiązkowe 2FA
+
+Wdrożone dla klientów i adminów: hasło albo passkey, potem email albo skonfigurowany TOTP; osiem jednorazowych kodów odzyskiwania, ustawienia konta, świeże MFA i rotacja sesji. Migracja 0018 unieważnia stare sesje. Sam email służy rejestracji kont bez podstawowej metody, nie omija istniejących zabezpieczeń. Kryteria: brak dostępu przed drugim składnikiem, brak email fallback przy TOTP, limity/replay w PostgreSQL, CSRF i natywny WebAuthn w przeglądarce. Kontrakt i ograniczenia: [auth](auth.md). Dowody: [testing](testing.md).

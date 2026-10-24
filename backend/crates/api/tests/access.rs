@@ -76,9 +76,11 @@ async fn session(
     sqlx::query("INSERT INTO users(id,email,role,created_at) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING")
         .bind(user).bind(format!("{user}@example.invalid")).bind(role).bind(now).execute(pool).await.unwrap();
     let token = random_token().unwrap();
-    sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at) VALUES($1,$2,$3,$3,$4,$5)")
+    let complete = role == "client" || verified;
+    sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at,stage,primary_verified_at,factor_verified_at) VALUES($1,$2,$3,$3,$4,$5,$6,$7,$7)")
         .bind(hash_token(&token).as_slice()).bind(user).bind(now).bind(now+3600)
-        .bind(verified.then_some(now)).execute(pool).await.unwrap();
+        .bind(verified.then_some(now)).bind(if complete {"authenticated"} else {"second_factor"})
+        .bind(complete.then_some(now)).execute(pool).await.unwrap();
     Actor::session(&token, key)
 }
 struct Fixture {
@@ -336,7 +338,11 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         for actor in [&a, &b, &pending] {
             assert_eq!(
                 call(&app, "GET", &path, Some(actor), None).await.0,
-                403,
+                if std::ptr::eq(actor, &pending) {
+                    401
+                } else {
+                    403
+                },
                 "admin boundary {path}"
             );
         }
@@ -365,7 +371,11 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
                 call(&app, "POST", &path, Some(actor), Some(body.clone()))
                     .await
                     .0,
-                403,
+                if std::ptr::eq(actor, &pending) {
+                    401
+                } else {
+                    403
+                },
                 "admin mutation {path}"
             );
         }
@@ -411,7 +421,7 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
             .as_u16(),
         403
     );
-    // A pending admin may finish WebAuthn, but cannot use business resources before MFA.
+    // Incomplete authentication is not a business session: it must finish the second factor.
     assert_eq!(
         call(
             &app,
@@ -422,7 +432,7 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         )
         .await
         .0,
-        403
+        401
     );
     let mut pending_guest = pending.clone();
     pending_guest
@@ -438,7 +448,7 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         )
         .await
         .0,
-        403
+        401
     );
     // Claim needs both authenticated account and the original guest cookie. Knowing IDs is insufficient.
     assert_eq!(

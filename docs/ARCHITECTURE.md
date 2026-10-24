@@ -34,7 +34,7 @@ Szkic, dane odbiorcy, oferta i próba płatności są trwałe w PostgreSQL. Jedn
 
 `frontend/`: Svelte 5/TypeScript/Vite, Tailwind 4, GSAP, Manrope/Oxanium i limonkowe akcenty. `App.svelte` ładuje `storefront/Storefront.svelte` dla `/` i `/wycena`; `Workspace.svelte` dla checkoutu, konta, admina i wyceny zaawansowanej. STL: natywny WebGL i parser w workerze przeglądarki. STL/STEP/3MF mają backendowy GLB przez chroniony `/api/models/{id}/preview.glb`; pełny viewer GLB/Three.js na froncie pozostaje planem. GLB nie zastępuje oryginału ani siatki dla produkcji.
 
-Konfigurator i checkout używają prawdziwego katalogu i wyniku slicera. Koszyk jest lokalnym szkicem, kwoty należą do serwera; zmiana parametrów unieważnia ofertę. Konta, zamówienia, chat, pliki i preferencje powiadomień korzystają z API. `session.ts` obsługuje email/passkey; `http.ts` wymusza same-origin, HttpOnly i CSRF w RAM; `orders.ts` mapuje trwałe rekordy na istniejące widoki. Podczas logowania własne zasoby gościa są atomowo przypisywane do konta. Backend nie przyjmuje starego tokena ani operator-cookie.
+Konfigurator i checkout używają prawdziwego katalogu i wyniku slicera. Koszyk jest lokalnym szkicem, kwoty należą do serwera; zmiana parametrów unieważnia ofertę. Konta, zamówienia, chat, pliki i preferencje powiadomień korzystają z API. `session.ts` obsługuje hasło/passkey + obowiązkowy email/TOTP; `http.ts` wymusza same-origin, HttpOnly i CSRF w RAM; `orders.ts` mapuje trwałe rekordy na istniejące widoki. Podczas logowania własne zasoby gościa są atomowo przypisywane do konta. Backend nie przyjmuje starego tokena ani operator-cookie.
 
 Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/314 kolorów. Ceny presetów mają niepotwierdzoną walutę/VAT; ceny zakupu netto PLN, magazyn i dopuszczenie operatora pozostają osobne. Sama obecność profilu P1P nie kwalifikuje sprzętu.
 
@@ -44,7 +44,7 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 
 ## Auth
 
-[Auth](auth.md): email klienta, passkey admina, trwałe sesje, tryb HTTPS i własność zasobów przez konto są zaimplementowane. UI i publiczny reverse proxy TLS pozostają do konfiguracji.
+[Auth](auth.md): wszyscy klienci i admini logują się hasłem albo passkey oraz obowiązkowo kodem email lub TOTP. `auth/credentials.rs` zapewnia Argon2id, TOTP i szyfrowanie sekretów; `storage/credentials.rs` transakcje, limity, rotację i jednorazowe kody odzyskiwania; `api/account_security.rs` endpointy. Login/AccountSecurity/Passkeys są podłączone. Migracja 0018 unieważnia stare sesje. Publiczny reverse proxy TLS pozostaje do konfiguracji.
 
 Nadawanie sandbox: transport `shipping/shipments.rs` i `operations.rs`, trzy tabele PostgreSQL, istniejący outbox i jeden worker aplikacji. Podjazd na decyzję admina i anulowanie: tabela operacji, UUID i GET po niepewnym PUT; bez live/akceptacji regulaminów; nadanie, PDF, tracking i anulowanie DPD sandbox sprawdzone; rezerwacja podjazdu zwraca `carrierConnectionError` i nie ma potwierdzonego sukcesu. Szczegóły i stan: [PLAN](PLAN.md#s0s4--nadawanie-przesyłek).
 

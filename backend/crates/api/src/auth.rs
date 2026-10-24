@@ -52,6 +52,8 @@ fn attempt_name() -> &'static str {
 pub(crate) struct Auth {
     pub storage: Option<Storage>,
     key: Option<AuthKey>,
+    pub(super) password_work: Arc<tokio::sync::Semaphore>,
+    pub(super) dummy_password: Option<String>,
     origin: String,
     mailer: Arc<Mailer>,
     production: bool,
@@ -127,9 +129,21 @@ impl Auth {
             .ok()
             .map(|v| v.parse())
             .transpose()?;
+        let dummy_password = if key.is_some() {
+            Some(
+                rapidmaker_auth::credentials::hash_password(
+                    &random_token().map_err(|_| "password entropy unavailable")?,
+                )
+                .map_err(|_| "password hashing unavailable")?,
+            )
+        } else {
+            None
+        };
         Ok(Arc::new(Self {
             storage,
             key,
+            password_work: Arc::new(tokio::sync::Semaphore::new(2)),
+            dummy_password,
             origin,
             mailer,
             production,
@@ -165,7 +179,11 @@ impl Auth {
         host.is_some_and(local)
             && origin.is_none_or(|v| v.strip_prefix("http://").is_some_and(local))
     }
-    fn client_ip(&self, peer: SocketAddr, headers: &HeaderMap) -> Result<std::net::IpAddr, Error> {
+    pub(super) fn client_ip(
+        &self,
+        peer: SocketAddr,
+        headers: &HeaderMap,
+    ) -> Result<std::net::IpAddr, Error> {
         if self.trusted_proxy == Some(peer.ip()) {
             headers
                 .get("x-forwarded-for")
@@ -189,7 +207,7 @@ impl Auth {
         if session.user.role != "admin" || session.admin_verified_at.is_none() {
             return Err(error(
                 StatusCode::FORBIDDEN,
-                "Potwierdź dostęp kluczem passkey.",
+                "Wymagane konto administratora i pełne logowanie dwuskładnikowe.",
             ));
         }
         Ok(session)
@@ -197,7 +215,7 @@ impl Auth {
     pub fn database(&self) -> Result<&Storage, Error> {
         self.storage.as_ref().ok_or_else(unavailable)
     }
-    fn key(&self) -> Result<&AuthKey, Error> {
+    pub(super) fn key(&self) -> Result<&AuthKey, Error> {
         self.key.as_ref().ok_or_else(unavailable)
     }
     pub fn csrf(&self, token: &str) -> Result<String, Error> {
@@ -220,6 +238,74 @@ impl Auth {
             .map_err(|_| unavailable())?
             .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Sesja wygasła."))?;
         Ok(session)
+    }
+    pub(super) async fn pending(&self, headers: &HeaderMap) -> Result<AuthSession, Error> {
+        self.key()?;
+        let token = session_cookie(headers)?
+            .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Zaloguj się."))?;
+        self.database()?
+            .auth_pending(token, now())
+            .await
+            .map_err(|_| unavailable())?
+            .ok_or_else(|| error(StatusCode::UNAUTHORIZED, "Sesja wygasła."))
+    }
+    pub(super) async fn pending_mutation(&self, headers: &HeaderMap) -> Result<AuthSession, Error> {
+        self.check_origin(headers)?;
+        let session = self.pending(headers).await?;
+        let token = session_cookie(headers)?.ok_or_else(unavailable)?;
+        if !self.key()?.verify_csrf(
+            token,
+            headers
+                .get("x-csrf-token")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default(),
+        ) {
+            return Err(error(
+                StatusCode::FORBIDDEN,
+                "Nieprawidłowy token formularza.",
+            ));
+        }
+        Ok(session)
+    }
+    pub(super) async fn send_factor(
+        &self,
+        token: &str,
+        session: &AuthSession,
+    ) -> Result<(), Error> {
+        if session.second_factor == "totp" {
+            return Ok(());
+        }
+        let code = random_code().map_err(|_| unavailable())?;
+        if !self
+            .database()?
+            .auth_factor_start(self.key()?, token, &code, now())
+            .await
+            .map_err(|_| unavailable())?
+        {
+            return Err(error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Odczekaj minutę przed ponowną wysyłką kodu.",
+            ));
+        }
+        self.mailer
+            .send(&session.user.email, Notification::LoginCode(&code))
+            .await
+            .map_err(|_| unavailable())
+    }
+    pub(super) fn session_body(&self, token: &str, s: &AuthSession) -> Result<Value, Error> {
+        Ok(
+            json!({"user":s.user,"stage":s.stage,"second_factor":s.second_factor,"expires_at":s.expires_at,"csrf_token":self.csrf(token)?,"admin_verified":s.stage=="authenticated" && s.user.role=="admin"}),
+        )
+    }
+    pub(super) fn finish_session(&self, token: &str, s: &AuthSession) -> Result<Response, Error> {
+        response(
+            self.session_body(token, s)?,
+            &[set_cookie(
+                session_name(),
+                token,
+                (s.expires_at - now()).clamp(0, 30 * 86400) as u32,
+            )],
+        )
     }
     pub async fn mutation(&self, headers: &HeaderMap) -> Result<AuthSession, Error> {
         self.check_origin(headers)?;
@@ -337,6 +423,17 @@ async fn start(
             "Podaj poprawny adres email.",
         ));
     }
+    if !auth
+        .database()?
+        .auth_enrollment_allowed(&email)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        return Err(error(
+            StatusCode::FORBIDDEN,
+            "Użyj hasła lub passkey, a następnie drugiego składnika.",
+        ));
+    }
     let browser = random_token().map_err(|_| unavailable())?;
     let id = uuid::Uuid::new_v4().to_string();
     let code = random_code().map_err(|_| unavailable())?;
@@ -390,7 +487,7 @@ struct Verify {
     path = "/api/auth/verify",
     tag = "Auth",
     summary = "Zweryfikuj kod i utwórz sesję.",
-    description = "Wymaga cookie próby z /auth/start i tego samego Origin. Zwraca csrf_token; administrator nadal musi potwierdzić passkey.",
+    description = "Rejestracja/migracja kont bez hasła i passkey. Wymaga cookie próby i tego samego Origin; zwraca ograniczoną sesję setup do ustawienia pierwszej metody.",
     request_body = Verify,
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 429, description = "Przekroczono limit prób.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value))
 )]
@@ -440,7 +537,7 @@ async fn verify(
         })?;
     tracing::info!(event="auth_verified", role=%session.user.role);
     response(
-        json!({"user":session.user,"csrf_token":auth.key()?.csrf(&token),"admin_verified":session.admin_verified_at.is_some()}),
+        auth.session_body(&token, &session)?,
         &[
             set_cookie(
                 session_name(),
@@ -461,10 +558,11 @@ async fn verify(
     security(("session" = []))
 )]
 async fn me(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Result<Json<Value>, Error> {
-    let s = auth.current(&headers).await?;
-    Ok(Json(
-        json!({"user":s.user,"expires_at":s.expires_at,"csrf_token":auth.key()?.csrf(session_cookie(&headers)?.ok_or_else(unavailable)?),"admin_verified":s.admin_verified_at.is_some()}),
-    ))
+    let s = auth.pending(&headers).await?;
+    Ok(Json(auth.session_body(
+        session_cookie(&headers)?.ok_or_else(unavailable)?,
+        &s,
+    )?))
 }
 #[utoipa::path(
     operation_id = "auth_logout",
@@ -481,7 +579,7 @@ async fn logout(
     headers: HeaderMap,
     Json(_input): Json<Value>,
 ) -> Result<Response, Error> {
-    auth.mutation(&headers).await?;
+    auth.pending_mutation(&headers).await?;
     auth.database()?
         .auth_logout(session_cookie(&headers)?.ok_or_else(unavailable)?)
         .await

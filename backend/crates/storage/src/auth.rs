@@ -18,6 +18,9 @@ pub struct AuthSession {
     pub user: AuthUser,
     pub expires_at: i64,
     pub admin_verified_at: Option<i64>,
+    pub stage: String,
+    pub second_factor: String,
+    pub factor_verified_at: Option<i64>,
 }
 
 impl Storage {
@@ -168,6 +171,12 @@ impl Storage {
             return Ok(None);
         };
         let user = user(&row)?;
+        let credentialed: bool = sqlx::query_scalar("SELECT password_hash IS NOT NULL OR totp_secret IS NOT NULL OR EXISTS(SELECT 1 FROM passkeys WHERE user_id=users.id) FROM users WHERE id=$1")
+            .bind(&user.id).fetch_one(&mut *tx).await?;
+        if credentialed {
+            tx.commit().await?;
+            return Ok(None);
+        }
         if let Some(previous) = previous_session {
             sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
                 .bind(hash_token(previous).as_slice())
@@ -177,12 +186,7 @@ impl Storage {
         // A bounded number of active sessions prevents unbounded state for frequent logins.
         sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY created_at DESC OFFSET 19)")
             .bind(&user.id).execute(&mut *tx).await?;
-        let expires_at = now
-            + if user.role == "admin" {
-                600
-            } else {
-                30 * 86400
-            };
+        let expires_at = now + 600;
         sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)")
             .bind(hash_token(session_token).as_slice()).bind(&user.id).bind(now).bind(expires_at)
             .execute(&mut *tx).await?;
@@ -191,6 +195,9 @@ impl Storage {
             user,
             expires_at,
             admin_verified_at: None,
+            stage: "setup".into(),
+            second_factor: "email".into(),
+            factor_verified_at: None,
         }))
     }
 
@@ -199,11 +206,22 @@ impl Storage {
         token: &str,
         now: i64,
     ) -> Result<Option<AuthSession>, StorageError> {
+        Ok(self
+            .auth_pending(token, now)
+            .await?
+            .filter(|s| s.stage == "authenticated"))
+    }
+
+    pub async fn auth_pending(
+        &self,
+        token: &str,
+        now: i64,
+    ) -> Result<Option<AuthSession>, StorageError> {
         if !valid_token(token) {
             return Ok(None);
         }
         let mut tx = self.pool.begin().await?;
-        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,s.expires_at,s.admin_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL")
+        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,u.totp_secret IS NOT NULL AS has_totp,s.expires_at,s.admin_verified_at,s.stage,s.factor_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL")
             .bind(hash_token(token).as_slice()).bind(now)
             .fetch_optional(&mut *tx).await?;
         let result = row
@@ -212,6 +230,14 @@ impl Storage {
                     user: user(&row)?,
                     expires_at: row.try_get("expires_at")?,
                     admin_verified_at: row.try_get("admin_verified_at")?,
+                    stage: row.try_get("stage")?,
+                    second_factor: if row.try_get::<bool, _>("has_totp")? {
+                        "totp"
+                    } else {
+                        "email"
+                    }
+                    .into(),
+                    factor_verified_at: row.try_get("factor_verified_at")?,
                 })
             })
             .transpose()?;
@@ -415,13 +441,13 @@ mod tests {
             usize::from(a_result.unwrap().is_some()) + usize::from(b_result.unwrap().is_some()),
             1
         );
-        let session = if db.auth_session(&a, now + 63).await.unwrap().is_some() {
+        let session = if db.auth_pending(&a, now + 63).await.unwrap().is_some() {
             a
         } else {
             b
         };
         let user = db
-            .auth_session(&session, now + 64)
+            .auth_pending(&session, now + 64)
             .await
             .unwrap()
             .unwrap()
@@ -437,14 +463,14 @@ mod tests {
         let reconnected = Storage::connect(&url).await.unwrap();
         assert!(
             reconnected
-                .auth_session(&session, now + 65)
+                .auth_pending(&session, now + 65)
                 .await
                 .unwrap()
                 .is_some()
         );
         assert!(
             reconnected
-                .auth_session(&session, now + 65 + 7 * 86400)
+                .auth_pending(&session, now + 65 + 7 * 86400)
                 .await
                 .unwrap()
                 .is_none()
@@ -454,9 +480,9 @@ mod tests {
             .execute(&db.pool)
             .await
             .unwrap();
-        assert!(db.auth_session(&session, now + 66).await.unwrap().is_none());
+        assert!(db.auth_pending(&session, now + 66).await.unwrap().is_none());
         db.auth_logout_all(&user.id).await.unwrap();
-        assert!(db.auth_session(&session, now + 66).await.unwrap().is_none());
+        assert!(db.auth_pending(&session, now + 66).await.unwrap().is_none());
         sqlx::query("DELETE FROM users WHERE id=$1")
             .bind(&user.id)
             .execute(&db.pool)

@@ -129,3 +129,5 @@ mod tests {
 }
 
 pub mod passkeys;
+
+pub mod credentials;

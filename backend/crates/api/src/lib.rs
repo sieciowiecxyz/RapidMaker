@@ -1,3 +1,4 @@
+mod account_security;
 mod admin;
 mod auth;
 mod cart;
@@ -95,6 +96,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .merge(models::router())
         .merge(quotes::router(storage.clone())?)
         .merge(auth::router(auth.clone()))
+        .merge(account_security::router(auth.clone()))
         .merge(passkeys::router(auth.clone()))
         .merge(orders::router(auth.clone()));
     let (router, mut document) = api.split_for_parts();

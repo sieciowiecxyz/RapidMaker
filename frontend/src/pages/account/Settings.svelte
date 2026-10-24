@@ -1,5 +1,6 @@
 <script lang="ts">
   import Passkeys from '../../components/Passkeys.svelte';
+  import AccountSecurity from '../../components/AccountSecurity.svelte';
   import { onMount } from 'svelte';
   import { getProfile, updateProfile } from '../../lib/api';
   import type { Profile } from '../../lib/types';
@@ -10,32 +11,45 @@
   let busy = $state(false);
   let error = $state('');
   let success = $state('');
+  let alive = true,
+    generation = 0;
   async function load() {
+    const current = ++generation;
     loading = true;
     error = '';
     try {
-      profile = await getProfile();
+      const result = await getProfile();
+      if (alive && current === generation) profile = result;
     } catch (e) {
-      error = (e as Error).message;
+      if (alive && current === generation) error = (e as Error).message;
     } finally {
-      loading = false;
+      if (alive && current === generation) loading = false;
     }
   }
-  onMount(load);
+  onMount(() => {
+    void load();
+    return () => {
+      alive = false;
+      generation++;
+    };
+  });
   async function save(event: SubmitEvent) {
     event.preventDefault();
-    if (!profile) return;
+    if (!profile || busy) return;
+    const current = generation;
     busy = true;
     error = '';
     success = '';
     try {
-      profile = await updateProfile(profile);
+      const result = await updateProfile(profile);
+      if (!alive || current !== generation) return;
+      profile = result;
       success = 'Zapisano preferencje powiadomień na koncie.';
       onSession();
     } catch (e) {
-      error = (e as Error).message;
+      if (alive && current === generation) error = (e as Error).message;
     } finally {
-      busy = false;
+      if (alive && current === generation) busy = false;
     }
   }
 </script>
@@ -68,13 +82,17 @@
         </p>
         <div class="notification-grid">
           <label
-            ><input type="checkbox" bind:checked={profile.notifications.message} /><span
-              >Nowe wiadomości od obsługi</span
-            ></label
+            ><input
+              type="checkbox"
+              disabled={busy}
+              bind:checked={profile.notifications.message}
+            /><span>Nowe wiadomości od obsługi</span></label
           ><label
-            ><input type="checkbox" bind:checked={profile.notifications.status} /><span
-              >Zmiany statusu, wysyłka i gotowość do odbioru</span
-            ></label
+            ><input
+              type="checkbox"
+              disabled={busy}
+              bind:checked={profile.notifications.status}
+            /><span>Zmiany statusu, wysyłka i gotowość do odbioru</span></label
           >
         </div>
       </section>
@@ -88,6 +106,7 @@
         <Button type="submit" disabled={busy}>{busy ? 'Zapisywanie…' : 'Zapisz ustawienia'}</Button>
       </div>
     </form>
+    <AccountSecurity />
     <Passkeys
       bootstrapMode={new URLSearchParams(location.search).get('bootstrap') === '1'}
       {onSession}

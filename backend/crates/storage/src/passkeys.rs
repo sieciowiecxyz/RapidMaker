@@ -1,8 +1,5 @@
 //! Server-only, one-use WebAuthn challenges bound to a live PostgreSQL session.
-use crate::{
-    AuthSession, Storage, StorageError,
-    auth::{limit, user},
-};
+use crate::{AuthSession, Storage, StorageError, auth::limit};
 use rapidmaker_auth::{constant_eq, hash_token, passkeys::*, random_token, valid_token};
 use serde::Serialize;
 use serde_json::Value;
@@ -32,7 +29,7 @@ impl Storage {
         if exists {
             return Ok(None);
         }
-        let row=sqlx::query("SELECT u.id,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.email=$1 AND u.role='client' AND u.disabled_at IS NULL AND s.expires_at>$2 AND s.last_seen_at>$2-604800 AND s.created_at>$2-600 ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF u,s")
+        let row=sqlx::query("SELECT u.id,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.email=$1 AND u.role='client' AND u.disabled_at IS NULL AND s.expires_at>$2 AND s.last_seen_at>$2-604800 AND s.created_at>$2-600 AND s.stage='authenticated' AND s.factor_verified_at>$2-300 ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF u,s")
             .bind(email).bind(now).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             return Ok(None);
@@ -44,8 +41,8 @@ impl Storage {
         Ok(Some(secret))
     }
 
-    /// Trusted local recovery requires a newly verified email-only admin session.
-    /// Old passkeys and sessions are revoked before a new one-use local grant is issued.
+    /// Trusted local key replacement requires an already fully authenticated, fresh admin session.
+    /// This is not password/TOTP recovery: email-only sessions and TOTP users are refused.
     pub async fn recover_admin(
         &self,
         email: &str,
@@ -53,7 +50,7 @@ impl Storage {
     ) -> Result<Option<String>, StorageError> {
         let mut tx = self.pool.begin().await?;
         lock(&mut tx).await?;
-        let row=sqlx::query("SELECT u.id,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.email=$1 AND u.role='admin' AND u.disabled_at IS NULL AND s.expires_at>$2 AND s.created_at>$2-600 AND s.admin_verified_at IS NULL ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF u,s")
+        let row=sqlx::query("SELECT u.id,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.email=$1 AND u.role='admin' AND u.disabled_at IS NULL AND s.expires_at>$2 AND s.created_at>$2-600 AND s.stage='authenticated' AND s.primary_verified_at>$2-300 AND s.factor_verified_at>$2-300 AND u.totp_secret IS NULL AND u.password_hash IS NOT NULL ORDER BY s.created_at DESC LIMIT 1 FOR UPDATE OF u,s")
             .bind(email).bind(now).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             return Ok(None);
@@ -94,7 +91,8 @@ impl Storage {
         };
         let user_id: String = row.try_get("id")?;
         let bootstrap_valid = bootstrap_allowed(&mut tx, token, &user_id, bootstrap, now).await?;
-        if !fresh_admin(&row, now)? && !bootstrap_valid {
+        let enrollment = enrollment_allowed(&mut tx, &row, now).await?;
+        if !fresh_admin(&row, now)? && !enrollment {
             return Ok(None);
         }
         let keys = keys(&mut tx, &user_id).await?;
@@ -155,11 +153,8 @@ impl Storage {
         };
         let user_id: String = row.try_get("id")?;
         let bootstrap: bool = challenge.try_get("bootstrap")?;
-        let allowed = if bootstrap {
-            bootstrap_active(&mut tx, token, &user_id, now).await?
-        } else {
-            fresh_admin(&row, now)?
-        };
+        let allowed = (fresh_admin(&row, now)? || enrollment_allowed(&mut tx, &row, now).await?)
+            && (!bootstrap || bootstrap_active(&mut tx, token, &user_id, now).await?);
         if !allowed || keys(&mut tx, &user_id).await?.len() >= 5 {
             tx.commit().await?;
             return Ok(None);
@@ -186,6 +181,7 @@ impl Storage {
                 .execute(&mut *tx)
                 .await?;
         }
+        crate::credentials::revoke_others(&mut tx, &user_id, token).await?;
         let result = rotate(&mut tx, token, &user_id, new_token, now).await?;
         tx.commit().await?;
         Ok(Some(result))
@@ -202,7 +198,7 @@ impl Storage {
         let Some(row) = session(&mut tx, token, now).await? else {
             return Ok(None);
         };
-        if row.try_get::<String, _>("role")? != "admin" {
+        if row.try_get::<String, _>("stage")? != "primary" {
             return Ok(None);
         }
         let id: String = row.try_get("id")?;
@@ -247,7 +243,7 @@ impl Storage {
         let Some(row) = session(&mut tx, token, now).await? else {
             return Ok(None);
         };
-        if row.try_get::<String, _>("role")? != "admin" {
+        if row.try_get::<String, _>("stage")? != "primary" {
             return Ok(None);
         }
         let Some(challenge) = consume(&mut tx, token, id, "login", now).await? else {
@@ -286,7 +282,9 @@ impl Storage {
             tx.commit().await?;
             return Ok(None);
         }
-        let session = rotate(&mut tx, token, &user_id, new_token, now).await?;
+        let session =
+            crate::credentials::rotate(&mut tx, token, &user_id, new_token, "second_factor", now)
+                .await?;
         tx.commit().await?;
         Ok(Some(session))
     }
@@ -338,16 +336,21 @@ impl Storage {
             return Ok(false);
         }
         let user_id: String = row.try_get("id")?;
-        if keys(&mut tx, &user_id).await?.len() <= 1 {
+        if keys(&mut tx, &user_id).await?.len() <= 1
+            && row.try_get::<Option<String>, _>("password_hash")?.is_none()
+        {
             return Ok(false);
         }
         let deleted = sqlx::query("DELETE FROM passkeys WHERE id=$1 AND user_id=$2")
             .bind(id)
-            .bind(user_id)
+            .bind(&user_id)
             .execute(&mut *tx)
             .await?
             .rows_affected()
             == 1;
+        if deleted {
+            crate::credentials::revoke_others(&mut tx, &user_id, token).await?;
+        }
         tx.commit().await?;
         Ok(deleted)
     }
@@ -364,17 +367,19 @@ async fn session(
     token: &str,
     now: i64,
 ) -> Result<Option<PgRow>, StorageError> {
-    if !valid_token(token) {
-        return Ok(None);
-    }
-    Ok(sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,s.admin_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL FOR UPDATE OF u,s")
-        .bind(hash_token(token).as_slice()).bind(now).fetch_optional(&mut **tx).await?)
+    crate::credentials::row(tx, token, now).await
 }
 fn fresh_admin(row: &PgRow, now: i64) -> Result<bool, StorageError> {
-    Ok(row.try_get::<String, _>("role")? == "admin"
-        && row
-            .try_get::<Option<i64>, _>("admin_verified_at")?
-            .is_some_and(|time| time <= now && time > now - 300))
+    crate::credentials::fresh(row, now)
+}
+async fn enrollment_allowed(
+    tx: &mut Transaction<'_, Postgres>,
+    row: &PgRow,
+    now: i64,
+) -> Result<bool, StorageError> {
+    Ok(row.try_get::<String, _>("stage")? == "setup"
+        && row.try_get::<i64, _>("session_created_at")? > now - 300
+        && crate::credentials::credentialless(tx, &row.try_get::<String, _>("id")?).await?)
 }
 async fn bootstrap_active(
     tx: &mut Transaction<'_, Postgres>,
@@ -465,34 +470,19 @@ async fn rotate(
     new_token: &str,
     now: i64,
 ) -> Result<AuthSession, StorageError> {
-    sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
-        .bind(hash_token(token).as_slice())
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at) VALUES($1,$2,$3,$3,$4,$3)")
-        .bind(hash_token(new_token).as_slice()).bind(user_id).bind(now).bind(now+8*3600).execute(&mut **tx).await?;
-    let row = sqlx::query(
-        "SELECT id,email,role,email_order_updates,email_chat_messages FROM users WHERE id=$1",
-    )
-    .bind(user_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(AuthSession {
-        user: user(&row)?,
-        expires_at: now + 8 * 3600,
-        admin_verified_at: Some(now),
-    })
+    crate::credentials::rotate(tx, token, user_id, new_token, "authenticated", now).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[tokio::test]
     #[ignore = "requires dedicated AUTH_TEST_DATABASE_URL PostgreSQL database"]
-    async fn challenge_binding_bootstrap_recovery_and_admin_expiry() {
-        let url = std::env::var("AUTH_TEST_DATABASE_URL").expect("dedicated test DB");
-        let db = Storage::connect(&url).await.unwrap();
+    async fn enrollment_challenges_are_bound_and_bootstrap_requires_full_mfa() {
+        let db =
+            Storage::connect(&std::env::var("AUTH_TEST_DATABASE_URL").expect("dedicated test DB"))
+                .await
+                .unwrap();
         let now = 1_800_000_000;
         let id = Uuid::new_v4().to_string();
         let email = format!("{id}@example.invalid");
@@ -505,35 +495,19 @@ mod tests {
             .unwrap();
         let token = random_token().unwrap();
         let other = random_token().unwrap();
-        for (token, created) in [(&token, now), (&other, now - 1)] {
-            sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)").bind(hash_token(token).as_slice()).bind(&id).bind(created).bind(now+86400).execute(&db.pool).await.unwrap();
+        for token in [&token, &other] {
+            sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)").bind(hash_token(token).as_slice()).bind(&id).bind(now).bind(now+600).execute(&db.pool).await.unwrap();
         }
         let webauthn =
             WebauthnBuilder::new("localhost", &Url::parse("http://localhost:18430").unwrap())
                 .unwrap()
                 .build()
                 .unwrap();
-        assert!(
-            db.passkey_registration_start(&webauthn, &token, None, now)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        let secret = db.grant_admin(&email, now).await.unwrap().unwrap();
-        assert!(
-            db.passkey_registration_start(&webauthn, &other, Some(&secret), now)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            db.passkey_registration_start(&webauthn, &token, Some(&random_token().unwrap()), now)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        // Email enrollment may add the very first credential but has no business/admin rights.
+        assert!(db.auth_session(&token, now).await.unwrap().is_none());
+        assert!(db.grant_admin(&email, now).await.unwrap().is_none());
         let start = db
-            .passkey_registration_start(&webauthn, &token, Some(&secret), now)
+            .passkey_registration_start(&webauthn, &token, None, now)
             .await
             .unwrap()
             .unwrap();
@@ -574,59 +548,35 @@ mod tests {
                 .is_none()
         );
         tx.commit().await.unwrap();
-        assert!(db.passkeys_list(&token, now).await.unwrap().is_none());
-        // Local recovery never works for a client, and role change revokes the bootstrap session.
-        assert!(db.recover_admin(&email, now).await.unwrap().is_none());
+        // A pre-existing primary credential closes email-enrollment grants, even pending ones.
+        sqlx::query("UPDATE users SET password_hash='fixture' WHERE id=$1")
+            .bind(&id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert!(
+            db.passkey_registration_start(&webauthn, &token, None, now + 2)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(db.passkeys_list(&token, now + 2).await.unwrap().is_none());
+        sqlx::query("UPDATE sessions SET stage='authenticated',primary_verified_at=$2,factor_verified_at=$2 WHERE token_hash=$1").bind(hash_token(&token).as_slice()).bind(now).execute(&db.pool).await.unwrap();
+        let secret = db.grant_admin(&email, now + 3).await.unwrap().unwrap();
+        assert!(
+            db.passkey_registration_start(&webauthn, &token, Some(&secret), now + 3)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        // Role changes revoke old sessions; local recovery cannot start from email-only state.
         sqlx::query("UPDATE users SET role='admin' WHERE id=$1")
             .bind(&id)
             .execute(&db.pool)
             .await
             .unwrap();
-        assert!(db.auth_session(&token, now).await.unwrap().is_none());
-        assert!(db.grant_admin(&email, now).await.unwrap().is_none());
-        let pending = random_token().unwrap();
-        let old = random_token().unwrap();
-        for (token, mfa) in [(&pending, None), (&old, Some(now))] {
-            sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at) VALUES($1,$2,$3,$3,$4,$5)").bind(hash_token(token).as_slice()).bind(&id).bind(now).bind(now+600).bind(mfa).execute(&db.pool).await.unwrap();
-        }
-        let recovery = db.recover_admin(&email, now + 1).await.unwrap().unwrap();
-        assert!(db.auth_session(&old, now + 1).await.unwrap().is_none());
-        let current = db.auth_session(&pending, now + 1).await.unwrap().unwrap();
-        assert_eq!(current.admin_verified_at, None);
-        assert_eq!(current.expires_at, now + 600);
-        assert!(
-            db.passkey_registration_start(&webauthn, &pending, Some(&recovery), now + 1)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            db.auth_session(&pending, now + 601)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        // Elevation always gets its own 8h expiry and 30min idle window.
-        let elevated = random_token().unwrap();
-        let mut tx = db.pool.begin().await.unwrap();
-        let session = rotate(&mut tx, &pending, &id, &elevated, now + 10)
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-        assert_eq!(session.expires_at, now + 10 + 8 * 3600);
-        assert_eq!(session.admin_verified_at, Some(now + 10));
-        assert!(
-            db.auth_session(&elevated, now + 1809)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            db.auth_session(&elevated, now + 3610)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(db.auth_session(&token, now + 4).await.unwrap().is_none());
+        assert!(db.recover_admin(&email, now + 4).await.unwrap().is_none());
         sqlx::query("DELETE FROM users WHERE id=$1")
             .bind(id)
             .execute(&db.pool)

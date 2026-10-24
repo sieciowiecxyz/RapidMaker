@@ -1,73 +1,61 @@
-# Auth — Rust API
+# Logowanie i zabezpieczenia konta
 
-Stan 2026-10-25: backend i frontend klienta/admina są połączone. UI obsługuje kod email, potwierdzenie i zarządzanie passkey oraz logout-all. Stary Bearer `ADMIN_API_TOKEN` i sesja operatora nie dają już dostępu.
+Klient i admin: **hasło albo passkey → obowiązkowo drugi składnik**. Domyślnie kod email; po włączeniu aplikacji uwierzytelniającej TOTP zastępuje email. Role i uprawnienia nadaje wyłącznie backend.
 
-## Logowanie i uprawnienia
+## Przepływ
 
-- Email → 8-cyfrowy kod, 10 min, 5 prób, związany z przeglądarką. Pierwsze potwierdzenie tworzy klienta. Ta sama odpowiedź dla istniejącego/nowego adresu; SMTP failure unieważnia próbę. Adresy ASCII: trim + lowercase, bez usuwania kropek/`+suffix`.
-- Klient dostaje sesję. Admin po kodzie dostaje tylko sesję oczekującą, maks. 10 min; dostęp administracyjny wymaga passkey z PIN/biometrią (WebAuthn UV Required).
-- Role i aktywność pochodzą z PostgreSQL, nigdy z formularza/localStorage. Każdy endpoint admina sprawdza aktualną rolę i MFA; zapis dodatkowo Origin i CSRF.
-- Modele, wyceny i zamówienia sprawdzają własność. `claim-guest` wymaga jednocześnie sesji konta i oryginalnego cookie gościa, przenosi tylko własne aktywne/nieprzypisane zasoby w jednej transakcji. Bez przejmowania zakupów po samym emailu.
-- Po claim istniejące oferty checkoutu w RAM mogą wymagać ponownego przeliczenia. Robocze modele nadal wygasają po 24 h; nowe zamówienia mają osobną ochronę plików przed płatnością, przez realizację i 90 dni po zakończeniu. Dostęp przez endpointy plików zamówienia wymaga jego autoryzacji.
+1. `/logowanie`: email i hasło albo natywny passkey (PIN/biometria).
+2. Kod email lub TOTP. Przy TOTP można użyć jednego z ośmiu jednorazowych kodów odzyskiwania; nie ma obejścia przez email.
+3. Dopiero pełne logowanie daje dostęp do konta, zamówień i operacji admina. Sesja oczekująca wygasa po 10 minutach.
 
-## Sesje i kryptografia
+Nowe konto i stare konto bez hasła/passkey: potwierdzenie email otwiera ograniczony etap konfiguracji. Ustawienie pierwszego hasła lub passkey kończy rejestrację z potwierdzonym emailem. Później sam email nie loguje ani nie resetuje zabezpieczeń. Migracja `0018` wylogowuje dotychczasowe sesje.
 
-Losowe tokeny 32 B z CSPRNG, w DB SHA-256, w przeglądarce wyłącznie HttpOnly cookie. Kod: HMAC-SHA-256 z `AUTH_CODE_KEY`, związany z wyzwaniem, adresem i przeglądarką. CSRF ma osobną domenę HMAC. Bez JWT i własnej implementacji WebAuthn.
-
-- Klient: 30 dni absolutnie, 7 dni bezczynności. Admin po MFA: nowy token, 8 h absolutnie, 30 min bezczynności. Aktualizacja last_seen najwyżej raz/5 min.
-- Zmiana roli/blokada unieważnia sesje w DB; logout-all usuwa wszystkie własne sesje. Restart zachowuje logowanie.
-- Dodawanie/usuwanie passkey wymaga MFA z ostatnich 5 min albo lokalnego bootstrapu. Maks. 5 kluczy; ostatniego nie można usunąć. Ponowne potwierdzenie passkey odnawia świeżość i rotuje sesję.
-- Wyzwania WebAuthn: PostgreSQL, związane z sesją/użytkownikiem/celem, 5 min, jednorazowe, limity startów. Stan biblioteki nigdy nie trafia do klienta. Sprawdzane podpis, RP ID, dokładny Origin, UV oraz licznik; aktualizacje credential są trwałe.
-- Kody: 3 wysyłki/15 min/email, 20/IP, 100 globalnie; 20 błędnych weryfikacji/15 min/email i 5/kod. Stan auth ograniczony/sprzątany partiami. Brak sekretów, kodów i pełnych adresów w logach.
-
-## Konfiguracja
-
-| Klucz | Znaczenie |
-| --- | --- |
-| `AUTH_MODE` | `disabled` domyślnie, `localhost` albo `production`. Brak automatycznego fallbacku do HTTP. |
-| `AUTH_ORIGIN` | Local: domyślnie `http://localhost:18430`. Production: wymagany dokładny origin HTTPS z nazwą domenową, bez ścieżki/loginu/query. |
-| `AUTH_CODE_KEY` | 32 losowe bajty hex, wyłącznie `.env`/SOPS. |
-| `AUTH_TRUSTED_PROXY` | Opcjonalnie jeden zaufany adres IP proxy. Tylko od niego przyjmowany pojedynczy IP w X-Forwarded-For; łańcuch jest odrzucany. Bez konfiguracji używamy adresu połączenia. |
-
-RP ID to hostname Origin. WebAuthn lokalnie wymaga **localhost**, nie `127.0.0.1`. Klucze localhost i domeny produkcyjnej są oddzielne. Production wymaga TLS na reverse proxy i zachowania publicznego Host; backend nadal słucha na loopback. Host i Origin są kontrolowane, bez CORS wildcard.
-
-Production: `__Host-rapidmaker_session`/`__Host-rapidmaker_auth_attempt`, Secure/HttpOnly/SameSite=Lax/Path=/, bez Domain. Cookie gościa również ma __Host/Secure. Local ma osobne nazwy bez Secure. Nie traktować testów konfiguracji jako wdrożonego publicznego HTTPS.
+`/konto/ustawienia`: ustawienie/zmiana hasła, dodawanie i usuwanie passkey, TOTP, wylogowanie pozostałych urządzeń. Zmiana zabezpieczeń wymaga pełnego logowania z ostatnich 5 minut, rotuje cookie i unieważnia pozostałe sesje. Ostatniego passkey nie usuniesz bez ustawionego hasła. Maksymalnie pięć kluczy. TOTP dodaje się przez lokalny klucz/URI do aplikacji; kody odzyskiwania są wyświetlane tylko po aktywacji i nie trafiają do storage przeglądarki. Wyłączenie TOTP przywraca email jako drugi składnik.
 
 ## API
 
-| Metoda / ścieżka | Działanie |
+| Metoda i ścieżka | Działanie |
 | --- | --- |
-| POST `/api/auth/start` `{email}` | Wysyła kod, ustawia cookie próby; 202 `{challenge_id}`. |
-| POST `/api/auth/verify` `{challenge_id,code}` | Zużywa kod, ustawia sesję; user, csrf_token, admin_verified. |
-| GET `/api/auth/me` | Aktualne konto, CSRF, termin i stan MFA albo 401. |
-| POST `/api/auth/logout`, `/logout-all` `{}` | Unieważnia sesję/sesje i czyści cookie. |
-| POST `/api/auth/passkey/register/start` `{bootstrap?}` | Opcje rejestracji + challenge_id; bootstrap tylko dla lokalnego zezwolenia. |
-| POST `/api/auth/passkey/register/finish` `{challenge_id,credential,name}` | Sprawdza odpowiedź WebAuthn i rotuje sesję. |
-| POST `/api/auth/passkey/login/start` `{}` | Opcje potwierdzenia passkey. |
-| POST `/api/auth/passkey/login/finish` `{challenge_id,credential}` | Weryfikuje podpis/UV, rotuje sesję, nadaje MFA. |
-| GET `/api/auth/passkeys`, DELETE `/{id}` | Zarządzanie własnymi kluczami przy świeżym MFA. |
-| POST `/api/auth/claim-guest` `{}` | Atomowe przypisanie modeli/wycen/zamówień; resources_claimed. |
+| POST `/api/auth/password/login` `{email,password}` | Hasło → sesja oczekująca na drugi składnik. |
+| POST `/api/auth/passkey/login/start` `{email}` | Opcje WebAuthn i challenge_id. |
+| POST `/api/auth/passkey/login/finish` `{challenge_id,credential}` | Passkey → sesja oczekująca na drugi składnik. |
+| POST `/api/auth/factor/verify` `{code}` | Email/TOTP/kod odzyskiwania → pełna sesja. |
+| POST `/api/auth/factor/resend` `{}` | Ponowienie kodu email; niedostępne dla TOTP. |
+| POST `/api/auth/start` `{email}`, `/verify` `{challenge_id,code}` | Wyłącznie rejestracja/migracja kont bez hasła i passkey. |
+| GET `/api/auth/me` | user, stage, second_factor, csrf_token, expires_at, admin_verified. |
+| PUT `/api/account/password` `{password}` | Ustawienie lub zmiana hasła. |
+| GET `/api/account/security` | has_password, totp_enabled, passkeys, recovery_codes_remaining. |
+| POST `/api/account/totp/start` `{}` | Tymczasowy secret i otpauth_uri, ważne 5 minut. |
+| POST `/api/account/totp/confirm` `{code}` | Aktywacja, nowa sesja i osiem recovery_codes. |
+| DELETE `/api/account/totp` | Wyłączenie TOTP i unieważnienie kodów odzyskiwania. |
+| POST `/api/auth/passkey/register/start` `{bootstrap?}` i `/finish` `{challenge_id,credential,name}` | Rejestracja własnego klucza. |
+| GET `/api/auth/passkeys`, DELETE `/api/auth/passkeys/{id}` | Lista/usuwanie własnych kluczy. |
+| POST `/api/auth/logout`, `/logout-all` `{}` | Wylogowanie urządzenia/wszystkich sesji. |
+| POST `/api/auth/claim-guest` `{}` | Przypisanie własnych zasobów gościa po pełnym logowaniu. |
 
-Mutacje wymagają dokładnego Origin i X-CSRF-Token z `/me`; start/verify zamiast CSRF korzystają z cookie próby. Payloady są JSON. Opcje WebAuthn trzeba przekazać do navigator.credentials z konwersją base64url ↔ ArrayBuffer; credential to standardowa odpowiedź przeglądarki. Pusty opcjonalny credProps z Chromium oznacza brak deklaracji, nie rk=false; podpisane dane/UV nadal weryfikuje biblioteka.
+`stage`: setup, primary, second_factor, authenticated. `second_factor`: email albo totp. Business API przyjmuje wyłącznie authenticated. Mutacje sprawdzają Origin i CSRF; publiczne starty logowania mają własne limity i powiązanie cookie. Schematy endpointów są generowane w `/api/`.
 
-## Pierwszy admin i odzyskanie
+## Bezpieczeństwo
 
-1. Potwierdź email w przeglądarce (klient, świeża sesja do 10 min).
-2. Lokalnie: `python backend/run.py --auth-bootstrap ADRES_EMAIL`. Zwrócony sekret jest jednorazowy, ważny 10 min i związany z tą sesją; nie zapisuj go w logach/chacie.
-3. W tej samej przeglądarce otwórz `/konto/ustawienia?bootstrap=1`, wpisz nazwę klucza i wklej jednorazowe zezwolenie. Zatwierdź rejestrację natywnym WebAuthn. Admin oczekujący po recovery ma ten sam formularz pod „Pierwszy klucz lub odzyskanie dostępu” na ekranie logowania. Dopiero podpisana odpowiedź nadaje admina i rotuje sesję. Zarejestruj drugi klucz jako zapas.
+- Hasło: 12–128 znaków, maks. 512 bajtów UTF-8, bez normalizacji. Argon2id: 19 MiB, dwie iteracje, równoległość 1, losowa sól. Kosztowna praca poza pętlą async, ograniczona semaforem i limitami DB.
+- TOTP: RFC 6238, 6 cyfr, 30 s, tolerancja jednego kroku. Zużyte kroki nie działają ponownie. Sekret szyfrowany XChaCha20-Poly1305, klucz wyprowadzany z AUTH_CODE_KEY, związany z ID konta. Kody odzyskiwania przechowywane jako hashe i zużywane atomowo.
+- Próby drugiego składnika: 5 na sesję oraz 20 na konto/15 minut, dodatkowe limity IP/globalne. Nowa przeglądarka lub adres IP nie resetują limitu konta. Niepotwierdzone logowania nie wypierają działających sesji.
+- WebAuthn: webauthn-rs, dokładny Origin/RP ID, wymagane UV, jednorazowe wyzwania PostgreSQL związane z kontem i sesją. Brak własnej kryptografii podpisów.
+- Cookie HttpOnly/SameSite=Lax; w produkcji Secure i prefix __Host. DB trzyma hashe tokenów, bez JWT. Klient: 30 dni/7 dni bezczynności; admin: 8 h/30 min. Rola/blokada/logout unieważniają dostęp w DB.
+- Własność modeli, zamówień, rozmów i plików sprawdzana na serwerze. Claim gościa wymaga obu sesji; email zamówienia nie nadaje własności.
 
-Utrata kluczy: najpierw kod email tworzący świeżą sesję oczekującą, następnie lokalne `--auth-recover ADRES_EMAIL`. Polecenie unieważnia stare klucze i pozostałe sesje, wydaje nowy bootstrap. Sam email nigdy nie zastępuje MFA. Polecenia nie są endpointami HTTP.
+## Konfiguracja i odzyskanie
 
-## Moduły i dowody
+AUTH_MODE=localhost albo production (domyślnie disabled). Lokalnie AUTH_ORIGIN=http://localhost:18430 — passkey wymaga localhost, nie 127.0.0.1. Production wymaga dokładnego HTTPS Origin i publicznego TLS. AUTH_TRUSTED_PROXY opcjonalnie wskazuje jeden zaufany adres proxy.
 
-`auth`: CSPRNG/HMAC i webauthn-rs; `storage/auth.rs`, `passkeys.rs`, `models.rs`: SQL, transakcje i własność; `api/auth.rs`, `passkeys.rs`, `admin.rs`: HTTP/CSRF/autoryzacja. Jedyna nowa biblioteka bezpieczeństwa to webauthn-rs; serializacja stanu włączona wyłącznie na potrzeby zaufanego PostgreSQL.
+AUTH_CODE_KEY: 32 losowe bajty hex w `.env`/SOPS. **Zachowaj kopię klucza: jego wymiana uniemożliwia odczyt istniejących sekretów TOTP.** Nie ma automatycznego przejścia na email po błędzie odszyfrowania. Hasła, kody, sekrety i pełne adresy nie trafiają do logów.
 
-Sprawdzone: testy Rust, izolowany PostgreSQL oraz Chromium z wirtualnym authenticatorem: bootstrap/rejestracja/login, odmowa podpisanej odpowiedzi bez UV, replay, rotacja, brak dostępu klienta/admina przed MFA/starego Bearer, CSRF, cookie produkcyjne i Origin/Host/proxy. Fizyczny klucz i publiczny TLS nie były testowane. Źródła: [webauthn-rs](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/struct.Webauthn.html), [WebAuthn](https://w3c.github.io/webauthn/), [sesje OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+Pierwszy admin: zakończ pełne logowanie klienta, następnie lokalnie `python backend/run.py --auth-bootstrap EMAIL`. W tej samej świeżej sesji otwórz `/konto/ustawienia?bootstrap=1` i zarejestruj passkey z jednorazowym zezwoleniem. Samo CLI ani formularz nie nadają roli bez poprawnej ceremonii.
 
-Walidacja: fmt, Clippy i build PASS; 18 testów Rust + 6 testów izolowanego PostgreSQL PASS. Przyrost: 9290 → 10439 (+1149) linii kodu Rust w backend/crates, razem z testami inline, bez komentarzy/pustych/generowanych plików. Audit z lokalnej bazy: 0 nowych problemów w zależnościach auth; 9 istniejących wpisów w pozostałym grafie zależności pozostaje.
+`--auth-recover EMAIL` służy tylko wymianie kluczy admina, który już zalogował się hasłem + email (bez TOTP). Nie resetuje hasła/TOTP. Utrata telefonu: podstawowa metoda + kod odzyskiwania. Utrata hasła: alternatywny passkey. Utrata wszystkich metod wymaga osobnej procedury właściciela; email nie omija MFA.
 
-Przegląd L7: zamówienia, rozmowy, pliki i claim gościa wymagają zakończonego MFA także wtedy, gdy admin używa ścieżki klienta. Regresja na prawdziwym routerze i izolowanym PostgreSQL odtworzyła i naprawiła brak tej kontroli. Macierz oraz uruchomienie: [security.md](security.md).
+## Moduły i sprawdzenie
 
-WebAuthn 0.5.5 usuwa zgłoszenie GHSA-22w3-693w-x895. Builder jawnie ma `allow_subdomains(false)`; rejestracja i logowanie akceptują skonfigurowany origin. Test uprawnień ponowiono po aktualizacji; samej ceremonii z fizycznym kluczem nie powtarzano w L7.
+`auth/credentials.rs`: Argon2, TOTP i szyfrowanie. `storage/credentials.rs`: transakcje, limity, etapy, rotacja i replay. `api/account_security.rs`: endpointy; istniejące auth/passkeys zachowują granice HTTP. Frontend: Login, AccountSecurity, Passkeys i wspólny adapter sesji/CSRF.
 
-Frontend zarządzania kluczami znajduje się w `/konto/ustawienia`; admin może ponownie potwierdzić passkey przed operacją wymagającą MFA z ostatnich 5 minut. Klient widzi wylogowanie urządzeń, a formularz nadania roli tylko po jawnym `?bootstrap=1`; sama obecność formularza nie daje uprawnień. Zezwolenie jest czyszczone z pola przed rejestracją i nie trafia do storage ani URL. Test Chromium z wirtualnym uwierzytelniaczem potwierdza natywne tworzenie credential i kontrakt JSON; nie zastępuje fizycznego klucza ani ponownej weryfikacji kryptografii backendu.
+Testy obejmują izolowany PostgreSQL, cookie/Origin, autoryzację routera oraz Chromium z wirtualnym WebAuthn i kontrolowanym API: hasło + email, passkey + TOTP, błędny kod, ustawienia i brak sekretów w browser storage. Nie zastępują fizycznego klucza, publicznego TLS ani testu doręczenia emaila. Aktualny wynik: docs/testing.md.

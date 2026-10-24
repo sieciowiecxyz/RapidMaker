@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 const id = '00000000-0000-4000-8000-000000000001';
 async function fixture(page: Page, role = 'client', verified = true) {
+  let stage = verified ? 'authenticated' : 'second_factor';
   let authenticated = true,
     state = 'paid',
     lostRefund = false,
@@ -46,6 +47,27 @@ async function fixture(page: Page, role = 'client', verified = true) {
       data = {
         user: { id: role + '-1', email: 'client@example.invalid', role },
         admin_verified: verified,
+        stage,
+        second_factor: 'email',
+        csrf_token: 'csrf-contract',
+      };
+    } else if (path === '/api/auth/password/login') {
+      authenticated = true;
+      stage = 'second_factor';
+      data = {
+        user: { id: 'client-1', email: 'client@example.invalid', role },
+        stage,
+        second_factor: 'email',
+        admin_verified: false,
+        csrf_token: 'csrf-contract',
+      };
+    } else if (path === '/api/auth/factor/verify') {
+      stage = 'authenticated';
+      data = {
+        user: { id: 'client-1', email: 'client@example.invalid', role },
+        stage,
+        second_factor: 'email',
+        admin_verified: false,
         csrf_token: 'csrf-contract',
       };
     } else if (path === '/api/auth/start') data = { challenge_id: 'challenge-1' };
@@ -57,6 +79,9 @@ async function fixture(page: Page, role = 'client', verified = true) {
         csrf_token: 'csrf-contract',
       };
     } else if (path === '/api/auth/claim-guest') data = { resources_claimed: 1 };
+    else if (path === '/api/account/security')
+      data = { has_password: true, totp_enabled: false, passkeys: [] };
+    else if (path === '/api/auth/passkeys') data = { passkeys: [] };
     else if (path === '/api/account/notifications') {
       if (method === 'PUT') prefs = req.postDataJSON();
       data = prefs;
@@ -132,17 +157,19 @@ async function fixture(page: Page, role = 'client', verified = true) {
   };
 }
 
-test('email code connects customer orders, files, chat and notification preferences', async ({
+test('password plus email code connects customer orders, files, chat and notification preferences', async ({
   page,
 }) => {
   const api = await fixture(page);
   api.signOut();
   await page.goto('/logowanie');
   await page.getByLabel('Adres email').fill('client@example.invalid');
-  await page.getByRole('button', { name: 'Wyślij kod do logowania', exact: true }).click();
+  await page.getByLabel('Hasło', { exact: true }).fill('correct horse battery');
+  await page.getByRole('button', { name: 'Zaloguj hasłem', exact: true }).click();
+  expect(api.orderFetches()).toBe(0);
   await page.getByLabel('Kod z emaila').fill('12345678');
   await expect(page.getByLabel('Kod z emaila')).toHaveAttribute('pattern', '[0-9]{8}');
-  await page.getByRole('button', { name: 'Zaloguj się', exact: true }).click();
+  await page.getByRole('button', { name: 'Potwierdź i zaloguj', exact: true }).click();
   await expect(page).toHaveURL(/\/konto\/zamowienia$/);
   await expect(page.locator('.price')).toContainText('145,55');
   await page.getByRole('link', { name: `Szczegóły zamówienia ${id}` }).click();
@@ -162,7 +189,10 @@ test('email code connects customer orders, files, chat and notification preferen
   expect(api.writes.find((w) => w.path.endsWith('/claim-guest'))).toBeDefined();
   expect(
     api.writes
-      .filter((w) => !['/api/auth/start', '/api/auth/verify'].includes(w.path))
+      .filter(
+        (w) =>
+          !['/api/auth/start', '/api/auth/verify', '/api/auth/password/login'].includes(w.path),
+      )
       .every((w) => w.csrf === 'csrf-contract'),
   ).toBe(true);
 });
@@ -176,7 +206,7 @@ test('admin does not fetch orders before MFA despite a browser role', async ({ p
     ),
   );
   await page.goto('/admin.html');
-  await expect(page.getByRole('button', { name: 'Potwierdź passkey', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Kod z emaila', { exact: true })).toBeVisible();
   expect(api.orderFetches()).toBe(0);
   await expect(page.getByText('Klient API', { exact: true })).toHaveCount(0);
 });

@@ -8,6 +8,8 @@ test('operator color form submits valid RGBA instead of blocking native validati
     route.fulfill({
       json: {
         user: { id: 'operator-1', email: 'operator@example.invalid', role: 'admin' },
+        stage: 'authenticated',
+        second_factor: 'email',
         admin_verified: true,
         csrf_token: 'csrf-color',
       },

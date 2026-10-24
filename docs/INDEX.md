@@ -46,7 +46,7 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 
 - [Auth](auth.md)
   - przeczytaj gdy: implementujesz logowanie, sesje lub własność danych.
-  - opis: email, passkey admina, sesje, własność i lokalny bootstrap.
+  - opis: hasło/passkey + email/TOTP, ustawienia, sesje i bootstrap.
 
 - [Email — plan](email.md)
   - przeczytaj gdy: implementujesz wysyłkę lub powiadomienia.

@@ -1,13 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSession, loginPasskey } from '../lib/session';
-  import { apiRequest, clearAuthToken } from '../lib/http';
+  import { getSession } from '../lib/session';
+  import { ApiError, apiRequest } from '../lib/http';
   import { listPasskeys, registerPasskey, removePasskey, type Passkey } from '../lib/passkeys';
   let {
     bootstrapMode = false,
+    enrollmentMode = false,
     onSession = () => {},
-  }: { bootstrapMode?: boolean; onSession?: () => void | Promise<void> } = $props();
-  let admin = $state(false),
+  }: {
+    bootstrapMode?: boolean;
+    enrollmentMode?: boolean;
+    onSession?: () => void | Promise<void>;
+  } = $props();
+  let authenticated = $state(false),
     loaded = $state(false),
     busy = $state(false);
   let keys = $state<Passkey[]>([]),
@@ -15,48 +20,81 @@
     bootstrap = $state(''),
     error = $state(''),
     success = $state('');
-  async function load() {
-    const session = await getSession();
-    admin = session?.role === 'admin' && !!session.adminVerified;
-    if (admin) keys = (await listPasskeys()).passkeys;
+  let reauth = $state(false),
+    hasPassword = $state(false);
+  let alive = true,
+    generation = 0;
+  const reauthUrl = '/logowanie?reauth=1&next=%2Fkonto%2Fustawienia';
+  function failed(cause: unknown) {
+    error =
+      cause instanceof DOMException && cause.name === 'NotAllowedError'
+        ? 'Nie potwierdzono klucza. Spróbuj ponownie.'
+        : cause instanceof Error
+          ? cause.message
+          : 'Nie udało się zapisać klucza.';
+    reauth = cause instanceof ApiError && cause.status === 403;
   }
-  onMount(async () => {
-    try {
-      await load();
-    } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      loaded = true;
+  async function load() {
+    const current = ++generation;
+    const session = await getSession();
+    if (!alive || current !== generation) return;
+    authenticated = !!session;
+    if (session) {
+      const [result, security] = await Promise.all([
+        listPasskeys(),
+        apiRequest<{ has_password: boolean }>('/api/account/security'),
+      ]);
+      if (alive && current === generation) {
+        keys = result.passkeys;
+        hasPassword = security.has_password === true;
+      }
     }
+  }
+  onMount(() => {
+    void (async () => {
+      try {
+        await load();
+      } catch (cause) {
+        if (alive) failed(cause);
+      } finally {
+        if (alive) loaded = true;
+      }
+    })();
+    return () => {
+      alive = false;
+      generation++;
+      bootstrap = '';
+      keys = [];
+    };
   });
   async function act(action: () => Promise<void>, message = '') {
     if (busy) return;
     busy = true;
     error = '';
     success = '';
+    reauth = false;
     try {
       await action();
+      if (!alive) return;
       await load();
-      success = message;
-    } catch (e) {
-      error =
-        e instanceof DOMException && e.name === 'NotAllowedError'
-          ? 'Nie potwierdzono klucza. Spróbuj ponownie.'
-          : (e as Error).message;
+      if (alive) success = message;
+    } catch (cause) {
+      if (alive) failed(cause);
     } finally {
-      busy = false;
+      if (alive) busy = false;
     }
   }
-  async function add() {
+  async function add(useBootstrap = false) {
     if (busy) return;
     if (!name.trim()) {
       error = 'Podaj nazwę klucza.';
       return;
     }
-    const grant = bootstrap;
-    bootstrap = '';
+    const grant = useBootstrap ? bootstrap : '';
+    if (useBootstrap) bootstrap = '';
     await act(async () => {
       await registerPasskey(name, grant || undefined);
+      if (!alive) return;
       name = '';
       await onSession();
     }, 'Klucz dostępu został zapisany.');
@@ -67,54 +105,39 @@
       await removePasskey(key.id);
     }, 'Klucz został usunięty.');
   }
-  async function logoutAll() {
-    if (!confirm('Wylogować wszystkie urządzenia, także to?')) return;
-    busy = true;
-    error = '';
-    try {
-      await apiRequest('/api/auth/logout-all', 'POST', {});
-      clearAuthToken();
-      location.assign('/logowanie');
-    } catch (e) {
-      error = (e as Error).message;
-      busy = false;
-    }
-  }
 </script>
 
 {#if loaded}
-  <section class="panel stack" aria-labelledby="security-heading">
-    <div class="toolbar">
-      <h2 id="security-heading">Bezpieczeństwo konta</h2>
-      <button class="button ghost" disabled={busy} onclick={logoutAll}
-        >Wyloguj wszystkie urządzenia</button
-      >
-    </div>
+  <section class="panel stack" aria-labelledby="passkeys-heading">
+    <h2 id="passkeys-heading">Klucze dostępu</h2>
     {#if error}<p class="alert error" role="alert">{error}</p>{/if}
+    {#if reauth}<p class="muted">
+        Zarządzanie kluczami wymaga świeżego logowania. <a href={reauthUrl}>Zaloguj się ponownie</a
+        >, a następnie powtórz zmianę.
+      </p>{/if}
     {#if success}<p class="alert success" role="status">{success}</p>{/if}
-    {#if admin}
-      <p class="muted">Klucze dostępu administratora. Zachowaj co najmniej jeden klucz zapasowy.</p>
-      <ul class="keys">
-        {#each keys as key (key.id)}<li>
-            <span
-              ><strong>{key.name}</strong><small class="muted"
-                >Dodano {new Date(key.created_at * 1000).toLocaleDateString('pl-PL')}</small
-              ></span
-            ><button
-              class="button ghost"
-              disabled={busy || keys.length < 2}
-              onclick={() => remove(key)}>Usuń klucz</button
-            >
-          </li>{/each}
-      </ul>
-      <button
-        class="button secondary"
-        disabled={busy}
-        onclick={() =>
-          act(async () => {
-            await loginPasskey();
-          }, 'Potwierdzono dostęp. Możesz zarządzać kluczami.')}>Potwierdź dostęp passkey</button
-      >
+    {#if authenticated || enrollmentMode}
+      <p class="muted">
+        Klucz dostępu zastępuje hasło. Drugi etap logowania nadal wymaga kodu email lub aplikacji
+        uwierzytelniającej. Zachowaj zapasową metodę logowania.
+      </p>
+      {#if authenticated}<ul class="keys">
+          {#each keys as key (key.id)}<li>
+              <span
+                ><strong>{key.name}</strong><small class="muted"
+                  >Dodano {new Date(key.created_at * 1000).toLocaleDateString('pl-PL')}</small
+                ></span
+              ><button
+                class="button ghost"
+                disabled={busy || (keys.length < 2 && !hasPassword)}
+                onclick={() => remove(key)}>Usuń klucz</button
+              >
+            </li>{/each}
+        </ul>
+        <p class="muted">
+          <a href={reauthUrl}>Potwierdź logowanie ponownie</a> przed zmianą kluczy. Serwer chroni ostatnią
+          dostępną metodę logowania.
+        </p>{/if}
       <form
         class="key-form"
         onsubmit={(e) => {
@@ -134,17 +157,18 @@
           >{busy ? 'Zapisywanie…' : 'Dodaj klucz dostępu'}</button
         >
       </form>
-    {:else if bootstrapMode}
+    {/if}
+    {#if bootstrapMode}
       <h3>Pierwszy klucz lub odzyskanie dostępu</h3>
       <p class="muted">
-        Wklej jednorazowe zezwolenie z lokalnego narzędzia operatora. Sam email nie daje dostępu
-        administratora. Zezwolenie nie jest zapisywane w przeglądarce.
+        Wklej jednorazowe zezwolenie z lokalnego narzędzia operatora. Zezwolenie nie jest zapisywane
+        w przeglądarce. O dalszym potwierdzeniu dostępu decyduje aktualny etap logowania.
       </p>
       <form
         class="stack"
         onsubmit={(e) => {
           e.preventDefault();
-          void add();
+          void add(true);
         }}
       >
         <label
@@ -160,7 +184,10 @@
           >{busy ? 'Potwierdzanie…' : 'Zarejestruj klucz operatora'}</button
         >
       </form>
-    {/if}
+    {:else if !authenticated && !enrollmentMode}<p class="muted">
+        <a href="/logowanie?next=%2Fkonto%2Fustawienia">Zaloguj się</a>, aby zarządzać kluczami
+        dostępu.
+      </p>{/if}
   </section>
 {/if}
 
@@ -203,9 +230,6 @@
   @media (max-width: 640px) {
     .key-form {
       display: grid;
-    }
-    .toolbar {
-      align-items: start;
     }
   }
 </style>
