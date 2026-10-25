@@ -22,7 +22,7 @@ Nie kasuj działających testów bez powodu. Zmieniony kontrakt wymaga dopasowan
 
 Frontend: `frontend/`, port 18430; preview E2E: 18431. Vite przekazuje `/api` do `backend/` na localhost:18432. API uruchom przed testami integracji. Szczegóły konfiguracji: [README frontendu](../frontend/README.md).
 
-Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Konfigurator/checkout używają slicera i PostgreSQL; integracja wymaga osobnej bazy i jawnych stawek testowych, nie potwierdza rentowności. Materiały/cennik i sesja operatora są rzeczywiste; konta klientów, zamówienia/chat i powiadomienia korzystają z API. Ręczna zmiana ceny i faktury nie są podłączone. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
+Testy sandboxów wymagają lokalnych sekretów: Stripe test oraz `.env` z `FURGONETKA_SANDBOX_TOKEN` i `FURGONETKA_SENDER_JSON`, uprawnienia 0600, poza Gitem. Konfigurator/checkout używają slicera i PostgreSQL; integracja wymaga osobnej bazy i jawnych stawek testowych, nie potwierdza rentowności. Materiały/cennik i sesja operatora są rzeczywiste; konta klientów, zamówienia/chat i powiadomienia korzystają z API. Ręczna oferta ma własny trwały przebieg i płatność; faktury pozostają poza zakresem. Brak tokena oznacza brak dowodu integracji, a nie poprawny darmowy przewóz. Nie twórz prawdziwych obciążeń ani nadań.
 
 W `PLAN.md` zapisz krótko, co sprawdzono i czego nie. Nie wklejaj sekretów, modeli klientów ani dużych logów. Testy bezpieczeństwa kieruj tylko do własnego localhosta; dostawców sprawdzaj zwykłymi wywołaniami sandbox API. Publiczny deployment pozostaje poza zakresem.
 
@@ -47,3 +47,13 @@ PASS: fmt; Clippy auth/storage/api all-targets z `-D warnings`; build Rust; 5 te
 Pełny zestaw E2E, fizyczny klucz, publiczny HTTPS i nowe doręczenie SMTP: NOT RUN. Chromium używa kontrolowanych odpowiedzi HTTP, więc nie jest dowodem całego przepływu SMTP → przeglądarka → rzeczywisty backend.
 
 Rust: 24795 → 26219 (+1424) linii kodu w `backend/crates/**/*.rs`, łącznie z testami inline i nowymi plikami; bez komentarzy/pustych/generowanych. To pomiar łączny, nie rozdział production/test. Nowe zależności bezpośrednie: argon2 (hasła), totp-rs (TOTP), chacha20poly1305 (szyfrowanie sekretów); brak nowych zależności frontendu. Audyt zależności wykonany w tej zmianie: brak zgłoszeń w bieżącej bazie.
+
+## Finalizacja F0–F6: rzeczywisty backend
+
+Po buildzie backendu/frontendu: `python frontend/tests/run-integration.py`. Runner tworzy osobną DB `rapidmaker_test_browser_*` i prywatny katalog tymczasowy, uruchamia API:18436 i frontend:18437; nie dotyka normalnych uploadów. Wymaga lokalnego PostgreSQL/Podman oraz Chromium. Nie ładuje sekretów Stripe/mail/Furgonetki; bazowy zestaw testuje rzeczywiste uploady/geometrię/GLB i własność, nie sandboxy. Konfiguracja: playwright.integration.config.ts. Logi bez trace/cookies; błędy dają FAIL. DB i pliki są usuwane po zakończeniu runnera. Zestaw bazowy obejmuje też prawdziwy slicer; fixture kosztów istnieje wyłącznie w tej bazie. Wyniki sandbox/mail zapisujemy oddzielnie, bez deklaracji PASS z mocków.
+
+Sandboxy (jawnie, tylko test): `python frontend/tests/run-integration.py --sandbox auth.spec.ts delivery.spec.ts checkout.spec.ts journey.spec.ts abandonment.spec.ts`. Runner ładuje wyłącznie potrzebne klucze dostawców z lokalnego .env, wymusza Stripe test i iCloud test do void@sieciowiec.xyz. Tworzy prywatny fixture kont przez przykład Rust `browser_fixture`, który odmawia działania poza DB rapidmaker_test_browser_*. Kody email/TOTP i klucze sesji nie są zapisywane w raportach; auth/płatność mają wyłączone trace/screenshots. Czytnik iCloud używa readonly/BODY.PEEK i ogranicza się do świeżych testowych wiadomości. Baza, fixture i uploady są kasowane przy wyjściu; nie oznacza to automatycznego usuwania historii sandboxów ani wiadomości użytkownika.
+
+Podstawowy rzeczywisty zestaw uploadów i wyceny: 6 PASS na osobnej bazie, obejrzane screenshoty produkcyjne i poprawiony błąd ładowania CSS. Sandboxowe pełne przebiegi pozostają w wykonaniu; ich kod nie jest dowodem PASS.
+
+Do diagnozy niezależnej od emailowego logowania: `... --sandbox --client-totp journey.spec.ts`. Tworzy testowego klienta z prawdziwym TOTP (bez obchodzenia auth); odmawia uruchomienia tak `auth.spec.ts`. Test nadal wymaga doręczenia oferty i odpowiedzi email, więc awaria iCloud pozostaje FAIL, nawet gdy płatność przejdzie.

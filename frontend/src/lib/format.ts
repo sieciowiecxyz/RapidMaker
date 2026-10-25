@@ -1,8 +1,10 @@
 import type { OrderStatus, PaymentStatus, Quote } from './types';
 export const quoteAdjustment = (quote: Quote) =>
   Math.round((quote.subtotal - quote.lines.reduce((sum, line) => sum + line.total, 0)) * 100) / 100;
-export const money = (value: number) =>
-  new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
+export const money = (value: number | null) =>
+  value === null
+    ? 'Do wyceny'
+    : new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 export const date = (value: string) =>
   new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' }).format(
     new Date(value),
@@ -10,6 +12,7 @@ export const date = (value: string) =>
 export const orderStatus: Record<OrderStatus, string> = {
   awaiting_payment: 'Oczekuje na płatność',
   review: 'Ręczna wycena',
+  quote_expired: 'Wycena wygasła',
   preparing: 'Przygotowanie',
   printing: 'W druku',
   shipped: 'Wysłane',

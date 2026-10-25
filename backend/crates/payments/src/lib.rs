@@ -184,6 +184,29 @@ impl Stripe {
             .await?;
         intent(value, expected, Some(id))
     }
+    /// Cancel only an abandoned intent owned by our checkout; callers must first retrieve it.
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub async fn cancel_intent(
+        &self,
+        id: &str,
+        idempotency_key: &str,
+        expected: &ExpectedPayment,
+    ) -> Result<Intent, Error> {
+        validate_id(id, "pi_")?;
+        let form = vec![("cancellation_reason".into(), "abandoned".into())];
+        let value = self
+            .request(
+                Method::POST,
+                &format!("payment_intents/{id}/cancel"),
+                Some((&form, idempotency_key)),
+            )
+            .await?;
+        let result = intent(value, expected, Some(id))?;
+        if result.object["status"] != "canceled" {
+            return Err(Error::Mismatch);
+        }
+        Ok(result)
+    }
     #[tracing::instrument(skip_all, level = "debug", fields(provider = "stripe", operation = tracing::field::Empty))]
     async fn request(
         &self,

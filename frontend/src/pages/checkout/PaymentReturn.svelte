@@ -24,7 +24,7 @@
 
 <section class="payment-result panel stack" aria-labelledby="payment-result-title">
   <span class:paid class="result-icon" aria-hidden="true">{paid ? '✓' : '↗'}</span>
-  <span class="eyebrow">Płatność testowa</span>
+  <span class="eyebrow">Płatność</span>
   <h2 id="payment-result-title">
     {paid
       ? 'Płatność potwierdzona.'

@@ -1,60 +1,67 @@
 # Finalizacja — kolejność i kryteria
 
-Active: F1 (równolegle rozpoznanie F3/F4). Cel i kontrakty: [PLAN.md](PLAN.md). Dowody zapisuj tutaj krótko: PASS/FAIL/NOT RUN, komenda/raport i commit. Starsze etapy są w historii Git, a nie dowodem obecnej integracji.
+Active: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 gotowa; pełny cel nadal otwarty. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
 
-## F0 — Stan wyjściowy i uruchomienie
+## F0 — Stan i uruchomienie
 
-- [x] Kod/style sprawdzone; frontend/API HTTP 200, lokalna konfiguracja DB/Stripe/Furgonetka/auth obecna (sam odczyt konfiguracji, nie dowód sandboxów). Infrastruktura testów korzysta z osobnej DB/storage; przygotować świeżą instancję do F6.
-- [x] Wyjściowy Rust LOC: 26219, łącznie z testami inline, bez komentarzy/pustych/generowanych. P1P ogranicza automatyczny druk niezależnie od progu 500 mm; TPUT/profile wymagają rzeczywistego dopuszczenia.
-- Przejście: frontend/API dostępne; znane fakty i blokery zapisane, prace podzielone na rozłączne pliki.
+- [x] Odczyt kodu, stylów i Git; osobne DB/storage i porty testów, ochrona cudzych zmian.
+- [x] Wyjściowy Rust: 26219 LOC łącznie z testami; lokalny frontend/API dostępne.
+- Przejście: znany stan, działający localhost, rozłączne zadania implementacyjne.
 
-## F1 — Podglądy i prosty wybór druku
+## F1 — Podgląd i wybór druku
 
-- [ ] STL/STEP/3MF: rzeczywisty podgląd przed wyborem koloru, domyślnie biały; kolor aktualizuje wyłącznie wygląd. Podglądy także w częściach zamówienia klienta/admina, z autoryzowanym dostępem.
-- [ ] PLA/ABS/TPU jako przyciski podobne do jakości/wytrzymałości; bez support i powielonych odmian. Kolory wybieralne niezależnie od magazynu, także przy wycenie/koszyku; brak profilu/ceny prowadzi uczciwie do ręcznej obsługi.
-- [ ] Ponowny upload, usunięcie części, błąd i wiele plików bez pomylenia modelu/podglądu.
-- Przejście: różne prawdziwe fixture trzech formatów przechodzą od uploadu do podglądu; zrzuty desktop/mobile, build i regresje zmiany PASS.
+- [x] STL/STEP/3MF → biały rzeczywisty podgląd bez koloru, prywatny GLB; klient/admin mają podgląd własnych plików zamówienia.
+- [x] PLA/ABS/TPU jako przyciski; kolory bez warunku magazynu, również przy slicerze i checkout. Cena zakupu i dopuszczenie profilu nadal wymagane.
+- [x] Wiele modeli, usuwanie, odtworzenie szkicu, ponowny upload i błędne pliki; bez zastępowania nieudanego uploadu przykładem.
+- Przejście: rzeczywiste fixture trzech formatów, desktop/mobile, build i regresje PASS.
 
-## F2 — Poprawna automatyczna wycena
+## F2 — Wycena i dostawa
 
-- [ ] Slicer: 1/wiele/1000 sztuk, kilka części i płyt, jakość/wytrzymałość/kolor, brak starej ceny po zmianie parametrów.
-- [ ] Regresje groszy, minimum/VAT, jednego przygotowania, energii/filamentu i całej partii; brak ujemnych/NaN/przepełnień i zmyślonych stawek.
-- [ ] >500 mm na osi → ręczna wycena; mniejszy model niepasujący do faktycznej P1P również ręcznie. Granica, rotacja i błędny model sprawdzone.
-- [ ] Dostawa wielu sztuk: realna masa/wymiary serwera, porównanie kilku pakowań i cen sandbox, cache/ważność oferty, brak stałej ceny dla 1000 sztuk.
-- Przejście: zapisane wejścia i obliczenia kontrolne zgadzają się z API/slicerem; zmiana konfiguracji nie płaci poprzedniej kwoty.
+- [x] Headless slicer 1/2/10/100/1000 sztuk, partie/płyty, jakość/ściany/wypełnienie; zmiana parametrów unieważnia cenę.
+- [x] Grosze, VAT/minimum, jeden koszt przygotowania, energia/filament, granice liczb; wyłącznie jawne stawki.
+- [x] >500 mm na osi → manual; rzeczywista P1P 256×256×250 i wycięcie stołu również obowiązują. Rotacja XY nie powiększa wysokości drukarki.
+- [x] Serwerowe wymiary/masa, kilka pakowań, rzeczywista Furgonetka sandbox i ponowne użycie oferty; bez stałej ceny dostawy za dowolną ilość.
+- Przejście: obliczenia zgodne z pomiarami/API; bez płacenia poprzedniej kwoty. Rentowność produkcyjna wymaga rzeczywistych kosztów operatora.
 
-## F3 — Ręczna oferta → email → zapłata
+## F3 — Ręczna oferta i zapłata
 
-- [ ] Trwała prośba klienta i własne pliki; admin „Oczekuje na wycenę”, formularz ceny/zakresu/dostawy/terminu, walidacja PLN/groszy.
-- [ ] Publikacja oferty + outbox atomowo; klient dostaje link do chronionego zamówienia i może zapłacić na naszej stronie.
-- [ ] Wersja i termin 7 dni, retry/restart/podwójne kliknięcie, brak edycji przy rozpoczętej/niepewnej/opłaconej próbie; bez obchodzenia własności i kwoty.
-- Przejście: Playwright klient → admin → wiadomość → klient → Stripe test → paid; jeden zapis zapłaty/emaila. Nie tylko mock HTTP.
+- [x] Trwałe zgłoszenie i własne pliki, cena NULL do wyceny; admin ustala całość brutto, zawartą dostawę i zakres/termin wykonania.
+- [x] Publikacja + outbox atomowo; link do chronionego zamówienia, Payment Element na naszej stronie. Rzeczywista płatność Stripe test potwierdzona.
+- [x] Wersje, ważność 7 dni, ponowienia/idempotencja, własność i kwoty. Jedna próba na ręczne zamówienie; po starcie brak zmiany ceny, po zamknięciu nowa prośba.
+- [ ] Cały przebieg z ponownie potwierdzonym doręczeniem emaila — zależy od F6. Nie uznajemy SMTP accepted za doręczenie.
+- Przejście: klient → admin → doręczony email → klient → paid, bez dubli zapłaty/outboxa.
 
-## F4 — Retencja, uploady i bezpieczeństwo
+## F4 — Retencja i bezpieczeństwo
 
-- [ ] Porzucony upload/szkic 24 h; wygasła nieopłacona próba po uzgodnieniu Stripe zwalnia hold i usuwa wszystkie pliki po terminie.
-- [ ] Ręczne zgłoszenie 14 dni/oferta 7 dni; opłacone i niepewne płatności nie tracą plików; wspólny model chroni każde aktywne zamówienie. Snapshoty pozostają.
-- [ ] Negatywne uploady: rozmiar/archiwum/path/symlink/zewnętrzne zasoby, uszkodzony plik, timeout i quota; dostęp do cudzych GLB/oryginałów/zamówień/rozmów/admina, CSRF i replay.
-- Przejście: testy izolowanej DB/storage z kontrolowanym czasem dowodzą usuwania i ochrony; brak sekretów/PII w raportach. Bez atakowania dostawców.
+- [x] Upload 24 h i rzeczywiste fizyczne usunięcie wszystkich plików. Po 24 h nieopłacona próba jest zamykana w Stripe przed zwolnieniem hold.
+- [x] Manual 14 dni / oferta 7 dni; niepewne, processing i opłacone płatności zachowują ochronę. Wspólny model chronią wszystkie aktywne zamówienia; completed → 90 dni.
+- [x] Negatywne modele/archiwa/ścieżki/zewnętrzne zasoby, limity parsera i quota, własność/role, CSRF, powtórzenia i granice kwot sprawdzone na własnym środowisku.
+- Przejście: testy plików/DB, regresje Rust i audyt zależności PASS; nie oznacza certyfikacji bezpieczeństwa ani pentestu publicznego wdrożenia.
 
-## F5 — Spójność całej strony
+## F5 — Wygląd i spójność
 
-- [ ] Przejść landing, konfigurator, checkout, logowanie/rejestrację/2FA, konto, zamówienia/podglądy/chat/ustawienia i admina zgodnie ze stylem Piotra.
-- [ ] Ujednolicić tokeny/odstępy/przyciski/pola, usunąć zbędne linie i teksty demo, poprawić focus/błędy/loading/mobile bez pobocznego redesignu.
-- [ ] Linki, powrót do checkoutu po loginie, puste listy, nieaktywna oferta i retry nie gubią danych ani nie sugerują fikcyjnego sukcesu.
-- Przejście: obejrzane screenshoty desktop/mobile wszystkich kluczowych widoków; brak poziomego przepełnienia i niespójnych kontrolek.
+- [x] Zachowany styl Piotra: fonty, limonka, motyw i tokeny; nowe oferty/płatność/podglądy w istniejących widokach. Poprawiony brak CSS w produkcyjnym konfiguratorze.
+- [x] Usunięte widoczne teksty demo i pozorne pole załącznika; wspólne kontrolki, błędy/loading, krótsze numery zamówień (API nadal pełne UUID).
+- [x] Obejrzane kluczowe screenshoty desktop/mobile: konfigurator, checkout, manual klient/admin i opcje zaawansowane; bez poziomego overflow. Regresje paneli/auth/operacji sprawdzone.
+- Przejście: build, wizualny przegląd i właściwe regresje PASS; bez pobocznego redesignu.
 
-## F6 — Automatyczny przebieg całości i wielu klientów
+## F6 — Rzeczywista całość i wielu klientów
 
-- [ ] Jeden udokumentowany sposób uruchomienia Playwright + prawdziwe lokalne API/osobna DB/storage i przygotowanie użytkowników/testowych stawek, bez sekretów w repo.
-- [ ] Uploady STL/STEP/3MF → podglądy → slicer → koszyk → dostawa → Stripe test → konto/admin/status/chat/email; osobno ręczna wycena i zapłata, anulowanie/odrzucenie i wygasanie.
-- [ ] Hasło i passkey z drugim składnikiem, TOTP bez fallback email; dwa konta nie widzą cudzych danych, błędne/ponowione płatności nie zmieniają kwot.
-- [ ] SMTP/odbiór testowy void: powiadomienie o ofercie/statusie, chat → email → odpowiedź w tej samej rozmowie; kontrolowane limity liczby wiadomości.
-- [ ] Kilku klientów i uploadów jednocześnie: HTTP pozostaje responsywne, limitowane workery, brak pomieszanych wyników, lease/retry po restarcie, czytelne 202/429.
-- Przejście: realne przebiegi PASS, powtarzalny raport bez sekretów i jasne oddzielenie testów mock od sandbox; każda usterka naprawiona albo jawny zewnętrzny bloker. Goal complete dopiero po spełnieniu wymagań, nie po samym napisaniu testów.
+- [x] Powtarzalny Playwright: [testing.md](testing.md#finalizacja-f0f6-rzeczywisty-backend), osobna DB/storage, testowi użytkownicy i stawki; bez sekretów w repo/trace.
+- [x] Upload → podgląd → slicer → checkout → Stripe paid; ręczne zgłoszenie/admin/oferta → Stripe paid. Furgonetka wycenia, test nie nadaje przesyłek.
+- [x] Rzeczywiste hasło+email, passkey+email i admin hasło+TOTP; uprawnienia dwóch kont i admina. Nowsze ponowienia emailowego logowania blokuje brak doręczeń poniżej.
+- [x] Cztery niezależne konwersje/klienci, responsywne HTTP i ograniczone workery; PostgreSQL lease/retry/fencing po utracie workera, brak pomieszania wyników.
+- [ ] Najnowsza oferta/chat → doręczony email → odpowiedź SMTP → ta sama rozmowa. Test istnieje i raportuje FAIL, gdy wiadomość nie dotarła.
+- Przejście: cały rzeczywisty zestaw PASS. **Goal pozostaje aktywny; nie zamykać na buildzie ani samej płatności.**
 
-## Checkpoint
+## Checkpoint 2026-10-25
 
-2026-10-25: plan utworzony na prośbę użytkownika; wykonanie rozpoczyna F0. HEAD przed finalizacją: b42f380. Lokalne zmiany użytkownika: AGENTS.md i result.json — zachować poza commitami celu. Obecny frontend/API są połączone; część wcześniejszych E2E używa mocków. Nie jest to jeszcze dowód przejścia F1–F6. Styl: storefront/theme.css → theme.css, zgodnie z frontend/README.md. P1P i limity obecnych profili są mniejsze niż próg ręcznej wyceny 500 mm. Niepotwierdzona płatność obecnie chroni pliki — wymaga sprawdzenia wygaszania, nie bezwarunkowego kasowania.
+Plan F0–F6: commit 31c767b. Lokalne AGENTS.md i result.json są cudzą pracą i pozostają poza commitami celu. Nowa migracja 0019 i API działają także na normalnym localhost:18430/18432. Stawek fixture nie przeniesiono do normalnej bazy: PLA/ABS/TPU nie mają tam potwierdzonych kosztów i dopuszczenia; bez nich działają przez ręczną ocenę.
 
-F0: PASS odczyt stanu i HTTP, NOT RUN nowe sandboxy; F1 frontend i Rust wykonywane równolegle przez workerów implementacyjnych. AGENTS.md i result.json pozostają cudzymi zmianami.
+PASS: svelte-check/Vite build; Rust fmt/Clippy workspace all-targets, 107 testów (22 ignored osobno), cargo audit 0 podatności/ostrzeżeń. Dodatkowe 7 rzeczywistych PG: kolejka/lease, hold/retencja, chat/inbound, oba warianty limitów auth, claim/własność i quota. Worker sprawdził też PG katalogu/checkout stock=false/manual wersji i kwot oraz prawdziwy slicer 1–1000. 1000 szt. fixture: 40 płyt, 339720 s, 3629,2926 g — to pomiar testowy, nie oferta sprzedażowa.
+
+PASS Playwright rzeczywisty: models+pricing 6 scenariuszy (8,7 s), auth 1 (28,2 s), dostawa sandbox 1 (2,8 s), nieopłacona sesja Stripe/physical cleanup 1 (2,5 s), automatyczna płatność na stronie 1 (10 s). Manual journey potwierdził formularze, admina, podgląd/własność i Stripe paid; cały test FAIL na emailach. UI kontrakty z mockami: 7/9 od razu; dwa po aktualizacji selektora numeru i usuniętego stock checkboxa PASS (2,2 s). Stary flows.spec.ts nie jest dowodem obecnej integracji.
+
+Ostatnie wiadomości testowe odczytane w folderze iCloud: 24.10 23:57 UTC. Kolejne wysyłki SMTP (także osobny --mail-test) są przyjmowane, lecz odczyt IMAP nie znalazł nowych testów w żadnym folderze. Przyczyna doręczenia nieustalona; nie nazywamy tego potwierdzonym limitem iCloud. Wcześniejsze kody email i oferty rzeczywiście odebrane. TOTP pozwolił sprawdzić płatność niezależnie, ale test doręczenia pozostał FAIL. Nie usuwano wiadomości ani nie zmieniano reguł konta.
+
+Rust 26219 → 27651 (+1432): backend/crates/**/*.rs, kod bez pustych/komentarzy/generowanych, łącznie z testami inline i przykładem fixture (bez wiarygodnego podziału production/test). Nowe moduły: manual_quotes API/storage, migracja i podgląd/oferta/płatność UI oraz izolowany runner. Brak nowych zależności produkcyjnych.

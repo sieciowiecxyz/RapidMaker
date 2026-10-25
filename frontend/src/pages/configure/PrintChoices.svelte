@@ -13,17 +13,43 @@
     busy: boolean;
     onchange: (patch: Partial<PrintModel>) => void;
   } = $props();
-  let search = $state('');
-  let moreMaterials = $state(false);
   let material = $derived(materials.find((item) => item.id === model.options.materialId));
+  const families = [
+    {
+      id: 'GFA00',
+      name: 'PLA',
+      detail: 'Uniwersalny',
+      description: 'Prototypy, dekoracje i codzienne części.',
+    },
+    {
+      id: 'GFB00',
+      name: 'ABS',
+      detail: 'Techniczny',
+      description: 'Sztywne części, odporniejsze na temperaturę.',
+    },
+    {
+      id: 'GFU01',
+      name: 'TPU',
+      detail: 'Elastyczny',
+      description: 'Osłony, amortyzacja i elastyczne elementy.',
+    },
+  ];
   let common = $derived(
-    materials.filter((item) => /PLA Basic|PETG HF|ABS$|TPU/i.test(item.name)).slice(0, 4),
+    families.flatMap((family) => {
+      const item = materials.find((material) => material.id === family.id);
+      return item ? [{ ...item, ...family }] : [];
+    }),
+  );
+  let selectedColor = $derived(
+    material?.colors.find(
+      (color) => color.code === model.options.color || color.name === model.options.color,
+    ),
   );
   function options(patch: Partial<PrintModel['options']>) {
     onchange({ options: { ...model.options, ...patch } });
   }
   function chooseMaterial(item: Material) {
-    options({ materialId: item.id, color: item.colors.find((color) => color.inStock)?.name ?? '' });
+    options({ materialId: item.id, color: item.colors[0]?.code ?? item.colors[0]?.name ?? '' });
   }
 </script>
 
@@ -37,70 +63,35 @@
           class="material-option"
           class:chosen={item.id === model.options.materialId}
           aria-pressed={item.id === model.options.materialId}
-          disabled={busy || !item.compatible || !item.colors.some((color) => color.inStock)}
+          disabled={busy}
           onclick={() => chooseMaterial(item)}
         >
-          <span class="radio-dot" aria-hidden="true"></span>
-          <span
-            ><strong>{item.name.replace('Bambu ', '')}</strong><small>{item.description}</small
-            ></span
-          >
+          <span><strong>{item.name}</strong><small>{item.detail}</small></span>
         </button>
       {/each}
     </div>
-    <button
-      class="catalog-toggle"
-      aria-expanded={moreMaterials}
-      onclick={() => (moreMaterials = !moreMaterials)}
-    >
-      {moreMaterials ? 'Ukryj katalog ↑' : 'Inny materiał? Zobacz cały katalog ↓'}
-    </button>
-    {#if moreMaterials}
-      <label class="catalog-search"
-        >Szukaj materiału<input bind:value={search} placeholder="Nazwa materiału…" /></label
-      >
-      <label
-        >Cały katalog<select
-          disabled={busy}
-          value={model.options.materialId}
-          onchange={(event) => {
-            const item = materials.find((item) => item.id === event.currentTarget.value);
-            if (item) chooseMaterial(item);
-          }}
-        >
-          {#each materials.filter((item) => item.name
-                .toLowerCase()
-                .includes(search.toLowerCase()) || item.id === model.options.materialId) as item}
-            <option
-              value={item.id}
-              disabled={!item.compatible || !item.colors.some((color) => color.inStock)}
-              >{item.name}{!item.compatible
-                ? ' · niezgodny'
-                : !item.colors.some((color) => color.inStock)
-                  ? ' · niedostępny'
-                  : ''}</option
-            >
-          {/each}
-        </select></label
-      >
-    {/if}
-    {#if material && !common.some((item) => item.id === material?.id)}<p class="selected-material">
-        <strong>{material.name}</strong> · {material.description}
+    {#if material}<p class="selected-material">
+        {common.find((item) => item.id === material?.id)?.description}
       </p>{/if}
-    <div class="color-heading">Kolor <strong>{model.options.color}</strong></div>
+    {#if material?.compatible === false}<p class="selected-material">
+        Ten profil wymaga ręcznej wyceny. Kolory pozostają dostępne do wyboru.
+      </p>{/if}
+    <div class="color-heading">Kolor <strong>{selectedColor?.name ?? 'Wybierz kolor'}</strong></div>
     <div class="swatches" role="group" aria-label="Kolor materiału">
       {#each material?.colors ?? [] as color}
         <button
           class="color-option"
-          class:chosen={model.options.color === color.name}
-          aria-pressed={model.options.color === color.name}
-          disabled={busy || !color.inStock}
-          title={`${color.name}${!color.inStock ? ' — niedostępny' : ''}`}
-          onclick={() => options({ color: color.name })}
+          class:chosen={model.options.color === color.name || model.options.color === color.code}
+          aria-pressed={model.options.color === color.name || model.options.color === color.code}
+          disabled={busy}
+          title={color.name}
+          onclick={() => options({ color: color.code ?? color.name })}
         >
           <span class="swatch" style={`--swatch:${color.hex}`} aria-hidden="true"></span>
-          <span>{color.name}{!color.inStock ? ' · brak' : ''}</span>
-          {#if model.options.color === color.name}<span class="check" aria-hidden="true">✓</span
+          <span>{color.name}</span>
+          {#if model.options.color === color.name || model.options.color === color.code}<span
+              class="check"
+              aria-hidden="true">✓</span
             >{/if}
         </button>
       {/each}
@@ -268,22 +259,31 @@
   }
   .material-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    border: 1px solid var(--color-option-border);
   }
   button {
     font: inherit;
   }
   .material-option {
-    display: flex;
-    gap: 10px;
-    text-align: left;
-    padding: 13px;
-    border: 1px solid var(--color-option-border);
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    padding: 16px 6px;
+    border: 0;
+    border-bottom: 2px solid transparent;
     background: var(--color-option);
-    border-radius: 8px;
+    border-radius: 0;
     color: var(--color-text);
     cursor: pointer;
+  }
+  .material-option.chosen {
+    border-bottom-color: var(--color-accent);
+  }
+  button:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 3px;
   }
   .material-option > span:last-child {
     display: grid;
@@ -297,17 +297,6 @@
     font-size: 11px;
     color: var(--color-muted);
     line-height: 1.5;
-  }
-  .radio-dot {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 12px;
-    border: 1px solid var(--color-muted);
-    border-radius: 50%;
-    margin-top: 3px;
-  }
-  .chosen .radio-dot {
-    border: 4px solid var(--color-accent);
   }
   .chosen {
     border-color: var(--color-accent);
@@ -343,10 +332,8 @@
     gap: 6px;
     font-size: 12px;
   }
-  .catalog-search {
-    margin: 8px 0 12px;
-  }
   .selected-material {
+    margin: 12px 0 0;
     font-size: 12px;
     color: var(--color-muted);
     line-height: 1.6;
@@ -375,7 +362,7 @@
     padding: 5px 9px 5px 6px;
     background: var(--color-option);
     border: 1px solid var(--color-option-border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     color: var(--color-text);
     font-size: 11px;
     cursor: pointer;
@@ -413,7 +400,7 @@
     gap: 6px;
     background: var(--color-option);
     border: 1px solid var(--color-option-border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 12px;
     color: var(--color-text);
     cursor: pointer;
@@ -461,9 +448,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   @media (max-width: 480px) {
-    .material-list {
-      grid-template-columns: 1fr;
-    }
     .choice {
       padding: 10px 8px;
     }

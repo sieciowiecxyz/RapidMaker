@@ -68,8 +68,8 @@
         error = `${file.name}: wybierz STL, STEP lub 3MF.`;
         return;
       }
-      if (!file.size || file.size > 32 * 1024 * 1024) {
-        error = `${file.name}: plik musi mieć od 1 B do 32 MB.`;
+      if (!file.size || file.size > 25 * 1024 * 1024) {
+        error = `${file.name}: plik musi mieć od 1 B do 25 MB.`;
         return;
       }
     }
@@ -129,7 +129,7 @@
         <span class="upload-symbol" aria-hidden="true">↑</span>
         <div class="upload-copy">
           <h2>{cart?.models.length ? 'Dodaj kolejną część' : 'Przeciągnij swoje modele'}</h2>
-          <p class="muted">STL, STEP, 3MF · do 32 MB / plik · STL w milimetrach</p>
+          <p class="muted">STL, STEP, 3MF · do 25 MB / plik · STL w milimetrach</p>
         </div>
         <label class="button primary upload-label"
           >Wybierz pliki<input
@@ -199,7 +199,7 @@
           </div>
           <div class="model-intro">
             <div class="preview">
-              <svg viewBox="0 0 120 90" role="img" aria-label="Miejsce na podgląd modelu"
+              <svg viewBox="0 0 120 90" role="img" aria-label="Wymiary części"
                 ><path
                   d="m60 12 40 22v40L60 94 20 74V34z"
                   transform="translate(0 -8)"
@@ -214,10 +214,10 @@
                 /></svg
               >
               <div>
-                <strong>Podgląd modelu</strong><span
+                <strong>Wymiary modelu</strong><span
                   >{model.analysis
                     ? model.analysis.dimensions_mm.map((v) => v.toFixed(1)).join(' × ') + ' mm'
-                    : 'Miejsce na Twój model 3D'}</span
+                    : 'Dodaj plik, aby odczytać wymiary'}</span
                 >
                 {#if model.analysis}<span
                     >{model.analysis.weight_g
@@ -281,7 +281,11 @@
         <div class="order-actions">
           <div class="total">
             <span>Wydruk i przygotowanie</span><strong
-              >{cart.quote ? money(cart.quote.subtotal) : '—'}</strong
+              >{cart.quote?.manual
+                ? 'Do wyceny'
+                : cart.quote
+                  ? money(cart.quote.subtotal)
+                  : '—'}</strong
             >
           </div>
           {#if busy || !quoteValid}<button class="button primary" disabled
@@ -297,9 +301,15 @@
             ? 'Aktualizujemy cenę…'
             : !quoteValid
               ? 'Nie udało się uzyskać aktualnej wyceny.'
-              : 'Cena testowa — docelowo zależna od parametrów.'}
+              : cart.quote?.manual
+                ? 'Cenę i zakres potwierdzi zespół.'
+                : 'Cena obliczona dla bieżących ustawień.'}
         </p>
-        <p class="guest-note">Możesz zamówić bez zakładania konta.</p>
+        <p class="guest-note">
+          {cart.quote?.manual
+            ? 'Ręczna wycena wymaga zalogowania.'
+            : 'Możesz zamówić bez zakładania konta.'}
+        </p>
       {:else}<p class="muted">Dodaj model, aby skonfigurować wydruk.</p>{/if}
     </aside>
   </div>

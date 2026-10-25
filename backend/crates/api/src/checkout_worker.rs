@@ -25,6 +25,9 @@ impl CheckoutWorker {
                     break;
                 }
                 if let Some(db) = &app.db {
+                    if db.manual_expire(now()).await.is_err() {
+                        tracing::error!(event = "manual_quote_expiry_failed", reason = "database");
+                    }
                     match db.stripe_event_lease(now()).await {
                         Ok(Some(event)) => process_event(&app, event).await,
                         Err(_) => tracing::error!(
@@ -88,11 +91,32 @@ pub(super) async fn retrieve(
         .as_deref()
         .ok_or(PaymentError::InvalidInput)?;
     let _permit = app.permit().map_err(|_| PaymentError::Unknown)?;
-    if attempt.provider_kind == "session" {
-        Ok(stripe.retrieve_checkout(id, &expected).await?.object)
+    let object = if attempt.provider_kind == "session" {
+        stripe.retrieve_checkout(id, &expected).await?.object
     } else {
-        Ok(stripe.retrieve_intent(id, &expected).await?.object)
+        stripe.retrieve_intent(id, &expected).await?.object
+    };
+    if abandoned(&attempt.provider_kind, &object, attempt.created_at, now()) {
+        // Retrieval is authoritative. A concurrent payment/cancel failure keeps the hold until retry.
+        let key = format!("expire-{}", attempt.id);
+        return if attempt.provider_kind == "session" {
+            Ok(stripe.expire_checkout(id, &key, &expected).await?.object)
+        } else {
+            Ok(stripe.cancel_intent(id, &key, &expected).await?.object)
+        };
     }
+    Ok(object)
+}
+fn abandoned(kind: &str, object: &Value, created_at: i64, at: i64) -> bool {
+    created_at <= at.saturating_sub(86400)
+        && match kind {
+            "session" => object["status"] == "open" && object["payment_status"] == "unpaid",
+            "intent" => matches!(
+                object["status"].as_str(),
+                Some("requires_payment_method" | "requires_confirmation" | "requires_action")
+            ),
+            _ => false,
+        }
 }
 async fn reconcile(app: &App, attempt: PaymentAttempt) {
     let span = tracing::info_span!("payment_reconcile", attempt_id = %attempt.id, attempt = attempt.attempts);
@@ -357,6 +381,10 @@ pub(super) async fn refresh_order(
         }
         return Ok(());
     }
+    // A published manual offer has no Stripe object until its owner starts payment.
+    if order["manual_offer"].is_object() {
+        return Ok(());
+    }
     // Pre-migration orders remain readable/payable with their original Stripe reference.
     let provider = order["provider_id"].as_str().ok_or_else(unavailable)?;
     let expected = ExpectedPayment {
@@ -454,5 +482,44 @@ mod tests {
         );
         assert_eq!(event_kind("payment_intent.payment_failed"), Some("intent"));
         assert_eq!(event_kind("customer.updated"), None);
+    }
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn abandon_only_old_unpaid_attempts_never_processing_or_paid() {
+        for state in [
+            "requires_payment_method",
+            "requires_confirmation",
+            "requires_action",
+        ] {
+            let object = json!({"status":state});
+            assert!(!abandoned("intent", &object, 100, 86499));
+            assert!(abandoned("intent", &object, 100, 86500));
+        }
+        for state in ["succeeded", "processing", "requires_capture", "canceled"] {
+            assert!(!abandoned("intent", &json!({"status":state}), 100, 999999));
+        }
+        assert!(abandoned(
+            "session",
+            &json!({"status":"open","payment_status":"unpaid"}),
+            100,
+            86500
+        ));
+        assert!(!abandoned(
+            "session",
+            &json!({"status":"complete","payment_status":"unpaid"}),
+            100,
+            86500
+        ));
+        assert!(!abandoned(
+            "session",
+            &json!({"status":"open","payment_status":"paid"}),
+            100,
+            86500
+        ));
     }
 }

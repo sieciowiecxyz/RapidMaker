@@ -10,6 +10,11 @@ pub enum Notification<'a> {
         reference: &'a str,
         amount_grosze: u64,
     },
+    ManualOffer {
+        reference: &'a str,
+        amount_grosze: u64,
+        valid_until: u64,
+    },
     StatusChanged {
         reference: &'a str,
         status: &'a str,
@@ -55,6 +60,13 @@ impl Notification<'_> {
             Self::PaymentReceived { reference, amount_grosze } => {
                 field(reference)?;
                 ("Rapidmaker — płatność otrzymana", format!("Otrzymaliśmy płatność {}.{:02} PLN za zamówienie {reference}.", amount_grosze / 100, amount_grosze % 100))
+            }
+            Self::ManualOffer { reference, amount_grosze, valid_until } => {
+                field(reference)?;
+                if !reference.bytes().all(|b|b.is_ascii_alphanumeric() || b==b'-') || !(1..=99999999).contains(&amount_grosze) || valid_until==0 {return Err(MailError::InvalidMessage);}
+                let origin=std::env::var("AUTH_ORIGIN").unwrap_or_else(|_|"http://localhost:18430".into());
+                if origin.len()>512 || (!origin.starts_with("https://") && !origin.starts_with("http://localhost:") && !origin.starts_with("http://127.0.0.1:")) || origin.chars().any(char::is_control) || origin.contains(['?','#','@']) {return Err(MailError::Configuration);}
+                ("Rapidmaker — oferta gotowa do opłacenia",format!("Oferta dla zamówienia {reference}: {}.{:02} PLN brutto, razem z uzgodnioną dostawą.\n\nSprawdź zakres, termin ważności i zapłać na naszej stronie:\n{}/konto/zamowienia/{reference}\n\nZaloguj się na konto, z którego wysłano zgłoszenie. Sam link nie daje dostępu do zamówienia. Oferta jest ważna przez 7 dni od publikacji.",amount_grosze/100,amount_grosze%100,origin.trim_end_matches('/')))
             }
             Self::StatusChanged { reference, status } => {
                 field(reference)?;
@@ -107,6 +119,11 @@ pub enum EmailNotification {
     PaymentReceived {
         reference: String,
         amount_grosze: u64,
+    },
+    ManualOffer {
+        reference: String,
+        amount_grosze: u64,
+        valid_until: u64,
     },
     StatusChanged {
         reference: String,
@@ -176,6 +193,15 @@ impl EmailNotification {
             } => Notification::PaymentReceived {
                 reference,
                 amount_grosze: *amount_grosze,
+            },
+            Self::ManualOffer {
+                reference,
+                amount_grosze,
+                valid_until,
+            } => Notification::ManualOffer {
+                reference,
+                amount_grosze: *amount_grosze,
+                valid_until: *valid_until,
             },
             Self::StatusChanged { reference, status } => {
                 Notification::StatusChanged { reference, status }

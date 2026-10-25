@@ -23,6 +23,8 @@
   import OrderStatus from './OrderStatus.svelte';
   import OrderChat from './OrderChat.svelte';
   import ParcelPlan from './ParcelPlan.svelte';
+  import ModelPreview from './ModelPreview.svelte';
+  import ManualOffer from './ManualOffer.svelte';
   let { id, adminMode = false }: { id: string; adminMode?: boolean } = $props();
   let order = $state<LiveOrder | null>(null);
   let loading = $state(true);
@@ -33,7 +35,6 @@
   let status = $state<Status>('preparing');
   let leadTime = $state('');
   let notes = $state('');
-  let showDocument = $state(false);
   function assign(value: Order) {
     order = value;
     status = value.status;
@@ -147,7 +148,7 @@
     <div class="page-heading">
       <div>
         <p class="eyebrow">{adminMode ? 'Szczegóły zlecenia' : 'Twój projekt'}</p>
-        <h1>{order.number}</h1>
+        <h1 title={order.id}>{order.number}</h1>
         <p class="muted">Złożone {date(order.createdAt)} · {order.contact.name}</p>
       </div>
       <OrderStatus status={order.status} />
@@ -167,8 +168,8 @@
       <section class="panel stack">
         <h2>Modele i ustawienia</h2>
         {#each order.models as model, index (index)}<article class="model">
-            <div class="preview" aria-label="Miejsce na podgląd 3D">
-              ◇<small>Podgląd 3D wkrótce</small>
+            <div class="preview" aria-label="Format pliku">
+              <strong>{model.format}</strong><small>Plik 3D</small>
             </div>
             <div>
               <h3>{model.name}</h3>
@@ -202,6 +203,13 @@
             <h3>Pliki zamówienia</h3>
             {#each order.files as file}<div>
                 {file.filename}
+                {#if file.available && file.preview_url?.startsWith(`/api/${adminMode ? 'admin' : 'account'}/orders/${order.id}/files/`)}
+                  <ModelPreview
+                    url={file.preview_url}
+                    name={file.filename}
+                    openInitially={order.files.length === 1}
+                  />
+                {/if}
                 {#if file.available && file.source_url?.startsWith(`/api/${adminMode ? 'admin' : 'account'}/orders/${order.id}/files/`)}<a
                     href={file.source_url}
                     download={file.filename}>Pobierz oryginał ↗</a
@@ -211,6 +219,17 @@
       </section>
       <section id="platnosc" class="panel stack">
         <h2>Płatność i dostawa</h2>
+        {#if order.manualOffer}<ManualOffer
+            orderId={order.id}
+            offer={order.manualOffer}
+            {adminMode}
+            onchange={async () => {
+              if (!adminMode && order?.serverStatus === 'awaiting_payment') {
+                await refreshOrderPayment(id);
+              }
+              await load();
+            }}
+          />{/if}
         <dl>
           <div>
             <dt>
@@ -234,9 +253,11 @@
                 · {parcels(order.quote.packages)}{/if}
             </dt>
             <dd>
-              {order.serverStatus && !order.deliveryKnown
-                ? 'Brak zapisanych danych'
-                : money(order.quote.delivery)}
+              {order.manualOffer?.shipping_grosze === null
+                ? 'Do wyceny'
+                : order.serverStatus && !order.deliveryKnown
+                  ? 'Brak zapisanych danych'
+                  : money(order.quote.delivery)}
             </dd>
           </div>
           <div class="total">
@@ -245,7 +266,7 @@
           </div>
         </dl>
         <p class="badge">{paymentStatus[order.payment]}</p>
-        {#if order.serverStatus}
+        {#if order.serverStatus && !order.manualOffer}
           <div class="payment-actions">
             {#if !adminMode && order.paymentReference && !['paid', 'refunded'].includes(order.payment) && order.status !== 'cancelled'}
               <Button disabled={busy} onclick={pay}>Przejdź do płatności ↗</Button>
@@ -258,8 +279,7 @@
               >Sprawdź płatność</Button
             >
           </div>
-          <small class="muted">Stripe — płatność testowa. Status jest sprawdzany u operatora.</small
-          >
+          <small class="muted">Status płatności potwierdza serwer.</small>
         {/if}
         <p class="muted">Termin: {order.leadTime}</p>
         {#if order.sandboxPayment}<p>
@@ -278,16 +298,6 @@
           >
             {order.label}
           </p>{/if}
-        {#if order.document}<Button
-            variant="secondary"
-            onclick={() => (showDocument = !showDocument)}>Podgląd dokumentu sprzedaży</Button
-          >{#if showDocument}<div class="alert">
-              <strong>{order.document}</strong>
-              <p>
-                Kwota: {money(order.quote.total)}. To przykładowy dokument do makiety, bez znaczenia
-                księgowego.
-              </p>
-            </div>{/if}{/if}
         {#if order.quote.checkout}
           <ParcelPlan
             packing={order.quote.checkout.packing}
@@ -295,7 +305,7 @@
             delivery={order.delivery}
           />
         {/if}
-        {#if order.serverStatus && !order.paymentReference && order.payment !== 'paid' && order.payment !== 'refunded'}<p
+        {#if order.serverStatus && !order.manualOffer && !order.paymentReference && order.payment !== 'paid' && order.payment !== 'refunded'}<p
             class="muted"
           >
             Wznowienie płatności w tym widoku nie jest jeszcze dostępne. Status płatności potwierdza
@@ -303,7 +313,7 @@
           </p>{/if}
         {#if order.quote.manual}<p class="alert">
             Zlecenie wymaga ręcznej wyceny. Ustalimy cenę oraz sposób dostawy w rozmowie.
-          </p>{/if}{#if order.offerReason}<p class="alert">
+          </p>{/if}{#if order.offerReason && !order.manualOffer}<p class="alert">
             Oferta obsługi: {order.offerReason}
           </p>{/if}
       </section>
@@ -367,6 +377,12 @@
 </div>
 
 <style>
+  .page-heading > div {
+    min-width: 0;
+  }
+  .page-heading h1 {
+    overflow-wrap: anywhere;
+  }
   .payment-actions {
     display: flex;
     flex-wrap: wrap;

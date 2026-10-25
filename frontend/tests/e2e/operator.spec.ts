@@ -39,7 +39,8 @@ test('operator color form submits valid RGBA instead of blocking native validati
   await expect(page.getByRole('heading', { name: 'Materiały i kolory' })).toBeVisible();
   await page.locator('.materials-list > details > summary').click();
   const color = page.locator('.color-row');
-  await color.getByLabel('W magazynie').check();
+  await expect(color.getByLabel('W magazynie')).toHaveCount(0);
+  await color.getByLabel('Nazwa', { exact: false }).fill('Zielony');
   const sent = page.waitForRequest(
     (request) => request.method() === 'PUT' && request.url().endsWith('/colors/10501'),
   );
@@ -48,7 +49,8 @@ test('operator color form submits valid RGBA instead of blocking native validati
   expect((await sent).postDataJSON()).toMatchObject({
     code: '10501',
     rgba: ['#00AE42FF'],
-    in_stock: true,
+    in_stock: false,
+    name: 'Zielony',
   });
   await expect(color.getByRole('status')).toHaveText('Zapisano.');
 });

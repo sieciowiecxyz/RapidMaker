@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import ModelPreview from '../components/ModelPreview.svelte';
+  import ManualOffer from '../components/ManualOffer.svelte';
   import {
     IconLayoutList,
     IconCube,
@@ -138,6 +140,8 @@
   const production: Stage[] = ['Przygotowanie', 'Drukowanie', 'Pakowanie'];
   const statusTone = (status: Stage) =>
     ({
+      'Oczekuje na wycenę': 'waiting',
+      'Oferta wygasła': 'waiting',
       Nowe: 'new',
       Przygotowanie: 'preparing',
       Drukowanie: 'printing',
@@ -293,7 +297,7 @@
         o.status,
         o.paid ? 'Opłacone' : 'Nieopłacone',
         o.due,
-        String(total(o)),
+        total(o) === null ? 'Do wyceny' : String(total(o)),
       ]),
     ];
     const url = URL.createObjectURL(
@@ -603,6 +607,12 @@
         </div>
         <div class="detail-body">
           {#if tab === 'Modele i wycena'}
+            {#if selected.manualOffer}{#key selected.id}<ManualOffer
+                  orderId={selected.id}
+                  offer={selected.manualOffer}
+                  adminMode
+                  onchange={load}
+                />{/key}{/if}
             <div class="section-title">
               <h3>Pliki do realizacji</h3>
               <span
@@ -641,6 +651,7 @@
                     >Cena / szt. (zł)<input
                       type="number"
                       value={m.price}
+                      placeholder="Indywidualnie"
                       disabled
                       title="Cena z zapisanej wyceny"
                     /></label
@@ -651,7 +662,11 @@
                       placeholder="—"
                       title="Postęp pojedynczych sztuk nie jest obsługiwany"
                     /></label
-                  ><strong>{money(m.amount)}</strong>
+                  ><strong
+                    >{m.amount === null && selected.manualOffer?.amount_grosze != null
+                      ? 'W cenie oferty'
+                      : money(m.amount)}</strong
+                  >
                 </div>
               </section>{/each}
             <div class="payment-box">
@@ -669,12 +684,12 @@
                 mode="Rozliczenie"
                 onopen={openFinance}
               />
-              <Refunds
-                orderId={selected.id}
-                amountGrosze={selected.amountGrosze}
-                paid={selected.paid}
-                onchange={load}
-              />{/key}
+              {#if selected.amountGrosze !== null}<Refunds
+                  orderId={selected.id}
+                  amountGrosze={selected.amountGrosze}
+                  paid={selected.paid}
+                  onchange={load}
+                />{/if}{/key}
           {:else if tab === 'Pliki'}
             <div class="section-title">
               <h3>Pliki zamówienia</h3>
@@ -682,6 +697,13 @@
             </div>
             {#if fileError}<p class="warning" role="alert">{fileError}</p>{/if}
             {#each selected.files as file}
+              {#if file.available && file.preview_url?.startsWith(`/api/admin/orders/${selected.id}/files/`)}
+                <ModelPreview
+                  url={file.preview_url}
+                  name={file.filename}
+                  openInitially={selected.files.length === 1}
+                />
+              {/if}
               <section class="order-file">
                 <div class="model-name">
                   <span class="file-icon"><IconCube size={24} /></span>

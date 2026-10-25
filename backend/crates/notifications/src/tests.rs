@@ -211,3 +211,31 @@ fn dispatched_email_contains_all_tracking_numbers_and_rejects_header_injection()
         .is_err()
     );
 }
+
+#[test]
+fn manual_offer_email_contains_real_price_and_protected_account_link() {
+    let mail = EmailPayload {
+        version: 1,
+        notification: EmailNotification::ManualOffer {
+            reference: "12345678-1234-1234-1234-123456789abc".into(),
+            amount_grosze: 12345,
+            valid_until: 1800000000,
+        },
+    };
+    mail.validate().unwrap();
+    let (subject, body) = mail.notification.borrowed().render().unwrap();
+    assert!(subject.contains("oferta"));
+    assert!(body.contains("123.45 PLN"));
+    assert!(body.contains("/konto/zamowienia/12345678-1234-1234-1234-123456789abc"));
+    assert!(body.contains("Zaloguj się"));
+    assert!(!body.contains("token="));
+    assert!(
+        Notification::ManualOffer {
+            reference: "bad/path",
+            amount_grosze: 12345,
+            valid_until: 1800000000
+        }
+        .render()
+        .is_err()
+    );
+}

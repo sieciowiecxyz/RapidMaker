@@ -166,6 +166,7 @@ export type PaymentScenario = 'success' | 'pending' | 'cancelled' | 'error' | 'r
 export type OrderStatus =
   | 'awaiting_payment'
   | 'review'
+  | 'quote_expired'
   | 'preparing'
   | 'printing'
   | 'shipped'
@@ -195,7 +196,8 @@ export type Order = {
   ownerId: string | null;
   contact: Contact;
   models: PrintModel[];
-  quote: Quote;
+  quote: Omit<Quote, 'total' | 'subtotal'> & { total: number | null; subtotal: number | null };
+  manualOffer?: import('./manualQuotes').ManualOffer;
   delivery: DeliveryMethod;
   status: OrderStatus;
   payment: PaymentStatus;

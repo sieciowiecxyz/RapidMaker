@@ -1,5 +1,6 @@
 import { apiRequest, ApiError } from './http';
 import { getSession } from './session';
+import type { ManualOffer } from './manualQuotes';
 import type { Cart, Contact, Order, OrderStatus, Profile, PrintModel } from './types';
 
 type RawOrder = {
@@ -7,12 +8,22 @@ type RawOrder = {
   user_id?: string | null;
   status: string;
   payment_state?: string | null;
-  amount_grosze: number;
+  amount_grosze: number | null;
+  manual_offer?: ManualOffer;
   provider_id?: string | null;
   created_at: number;
   paid_at: number | null;
-  contact: Partial<Contact> & { invoice?: { company?: string; nip?: string } };
-  lines: { model_id: string; quantity: number; unit_grosze: number; total_grosze: number }[];
+  contact: Partial<Contact> & {
+    postal_code?: string;
+    invoice?: { company?: string; nip?: string };
+  };
+  lines: {
+    model_id: string;
+    quantity: number;
+    unit_grosze?: number | null;
+    total_grosze?: number | null;
+    filename?: string;
+  }[];
   fulfillment?: {
     delivery?: string | { method?: string };
     offer?: { name?: string; price_grosze?: number };
@@ -75,6 +86,8 @@ const blankContact = (email = ''): Contact => ({
 });
 const statusMap: Record<string, OrderStatus> = {
   awaiting_payment: 'awaiting_payment',
+  awaiting_quote: 'review',
+  quote_expired: 'quote_expired',
   paid: 'preparing',
   in_production: 'printing',
   ready: 'ready',
@@ -102,7 +115,7 @@ function checkedAmount(value: number) {
 function model(line: RawOrder['lines'][number], files: FileRecord[]): PrintModel {
   const matches = files.filter((f) => f.model_id === line.model_id),
     file = matches.length === 1 ? matches[0] : undefined;
-  const name = matches[0]?.filename || 'Model ' + line.model_id;
+  const name = matches[0]?.filename || line.filename || 'Model ' + line.model_id;
   return {
     id: line.model_id,
     name,
@@ -140,12 +153,17 @@ function convert(
   page?: MessagePage,
   refunds: Refund[] = [],
 ): LiveOrder {
-  const amount = checkedAmount(raw.amount_grosze),
+  const amount =
+      raw.amount_grosze === null && raw.manual_offer ? null : checkedAmount(raw.amount_grosze!),
     fulfilled = raw.fulfillment;
   const method =
     typeof fulfilled?.delivery === 'string' ? fulfilled.delivery : fulfilled?.delivery?.method;
   const delivery = method === 'pickup' || method === 'locker' ? method : 'courier';
-  const shipping = checkedAmount(fulfilled?.offer?.price_grosze ?? 0);
+  const shipping = checkedAmount(
+    raw.manual_offer?.shipping_grosze ?? fulfilled?.offer?.price_grosze ?? 0,
+  );
+  if (amount !== null && shipping > amount)
+    throw new Error('Koszt dostawy przekracza kwotę zamówienia.');
   const succeeded = refunds
     .filter((r) => r.state === 'succeeded')
     .reduce((sum, r) => sum + checkedAmount(r.amount_grosze), 0);
@@ -159,12 +177,13 @@ function convert(
   return {
     id: raw.id,
     paymentReference: raw.provider_id ?? undefined,
-    number: raw.id,
+    number: `RM-${raw.id.slice(0, 8).toUpperCase()}`, // Display only; requests retain the full UUID.
     createdAt: instant(raw.created_at),
     ownerId: raw.user_id ?? null,
     contact: {
       ...blankContact(),
       ...raw.contact,
+      postalCode: raw.contact.postalCode ?? raw.contact.postal_code ?? '',
       company: raw.contact.invoice?.company || raw.contact.company || '',
       nip: raw.contact.invoice?.nip || raw.contact.nip || '',
     },
@@ -173,25 +192,28 @@ function convert(
       id: raw.id,
       version: 0,
       fingerprint: '',
-      total: amount / 100,
+      total: amount === null ? null : amount / 100,
       unitPrice: 0,
       leadTime: 'Do potwierdzenia',
-      subtotal: (amount - shipping) / 100,
+      subtotal: amount === null ? null : (amount - shipping) / 100,
       delivery: shipping / 100,
       packages: fulfilled?.packing?.parcels.length ?? 0,
-      lines: raw.lines.map((line) => ({
-        modelId: line.model_id,
-        name: files.find((f) => f.model_id === line.model_id)?.filename || 'Model ' + line.model_id,
-        quantity: line.quantity,
-        unitPrice: checkedAmount(line.unit_grosze) / 100,
-        total: checkedAmount(line.total_grosze) / 100,
-      })),
+      lines: raw.lines
+        .filter((line) => line.unit_grosze != null && line.total_grosze != null)
+        .map((line) => ({
+          modelId: line.model_id,
+          name:
+            files.find((f) => f.model_id === line.model_id)?.filename || 'Model ' + line.model_id,
+          quantity: line.quantity,
+          unitPrice: checkedAmount(line.unit_grosze!) / 100,
+          total: checkedAmount(line.total_grosze!) / 100,
+        })),
       manual: false,
     },
     delivery,
     status,
     payment:
-      succeeded >= amount && amount > 0
+      amount !== null && succeeded >= amount && amount > 0
         ? 'refunded'
         : confirmed
           ? 'paid'
@@ -205,7 +227,7 @@ function convert(
     label: '',
     document: '',
     notes: '',
-    needsAttention: raw.payment_state === 'manual_review',
+    needsAttention: raw.payment_state === 'manual_review' || raw.status === 'awaiting_quote',
     messages:
       page?.messages.map((m) => ({
         id: m.id,
@@ -218,12 +240,13 @@ function convert(
       { at: instant(raw.created_at), text: 'Złożono zamówienie' },
       ...(confirmed ? [{ at: instant(raw.paid_at!), text: 'Potwierdzono płatność' }] : []),
     ],
-    offerReason: '',
+    offerReason: raw.manual_offer?.scope ?? '',
+    manualOffer: raw.manual_offer,
     files,
     deliveryKnown: ['pickup', 'locker', 'courier'].includes(method ?? ''),
     serverStatus: raw.status,
     refundPending: pending,
-    refundableAmount: Math.max(0, amount - reserved) / 100,
+    refundableAmount: amount === null ? 0 : Math.max(0, amount - reserved) / 100,
     refundNotice: pending
       ? 'Zwrot został zlecony i czeka na potwierdzenie Stripe.'
       : succeeded > 0
@@ -335,6 +358,7 @@ export async function refundOrder(id: string): Promise<LiveOrder> {
     const reserved = refunds
       .filter((r) => !['failed', 'canceled'].includes(r.state))
       .reduce((sum, r) => sum + checkedAmount(r.amount_grosze), 0);
+    if (raw.amount_grosze === null) throw new Error('Zamówienie nie ma opłaconej kwoty do zwrotu.');
     const amount = checkedAmount(raw.amount_grosze) - reserved;
     if (amount <= 0)
       throw new Error('Cała kwota jest już zwrócona lub zarezerwowana na oczekujące zwroty.');

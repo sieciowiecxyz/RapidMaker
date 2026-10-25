@@ -21,7 +21,7 @@
     code: '',
     name: '',
     rgba: ['#FFFFFFFF'],
-    in_stock: false,
+    in_stock: true,
   });
   const draft = (m: OperatorMaterial): Draft => ({
     id: m.id,
@@ -161,7 +161,7 @@
     <div>
       <p class="eyebrow">Panel zespołu</p>
       <h1>Materiały i kolory</h1>
-      <p class="muted">Katalog Bambu · ceny zakupu netto · dostępność magazynowa</p>
+      <p class="muted">Katalog Bambu · ceny zakupu netto · profile i kolory</p>
     </div>
   </div>
   <label class="search"
@@ -225,9 +225,7 @@
                 >{material.id}{!hasProfile(material) ? ' · bez automatycznej wyceny' : ''}</small
               ></span
             >
-            <span class="muted"
-              >{material.colors.filter((c) => c.in_stock).length}/{material.colors.length} kolorów</span
-            >
+            <span class="muted">{material.colors.length} kolorów</span>
             <span class:approved={material.production_enabled} class="status"
               >{material.production_enabled ? 'Dopuszczony' : 'Niedopuszczony'}</span
             >
@@ -262,8 +260,8 @@
               >
               <p class="muted note">
                 Zatwierdź po sprawdzeniu profilu i wymagań sprzętowych. Dysza hardened steel nie
-                zapewnia zgodności każdego materiału. Sprzedaż wymaga ceny zakupu, dostępnego koloru
-                i obsługiwanego profilu.
+                zapewnia zgodności każdego materiału. Sprzedaż wymaga ceny zakupu, zdefiniowanego
+                koloru i obsługiwanego profilu.
               </p>
               <div><Button type="submit" disabled={busy}>Zapisz materiał</Button></div>
             </form>
@@ -290,9 +288,6 @@
                         /></label
                       >{/each}
                   </details>
-                  <label class="check"
-                    ><input type="checkbox" bind:checked={color.in_stock} />W magazynie</label
-                  >
                   <Button type="submit" variant="secondary" disabled={busy}>Zapisz kolor</Button>
                   {#if feedbackId === `${material.id}:${color.code}` && feedback}<p
                       class="row-feedback"
@@ -326,9 +321,6 @@
                     /></label
                   >
                 </div>
-                <label class="check"
-                  ><input type="checkbox" bind:checked={item.newColor.in_stock} />W magazynie</label
-                >
                 <div>
                   <Button type="submit" variant="secondary" disabled={busy}>Dodaj kolor</Button>
                 </div>
@@ -479,9 +471,6 @@
       gap: 10px;
     }
     .rgba-editor {
-      grid-column: 2;
-    }
-    .color-row > .check {
       grid-column: 2;
     }
     .color-row > :global(button) {

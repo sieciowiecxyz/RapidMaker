@@ -13,9 +13,9 @@ use tokio::sync::Semaphore;
 
 static BUSY: Semaphore = Semaphore::const_new(1);
 const PROFILES: &str = include_str!("../../../data/bambu/profiles.json");
-pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1";
+pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1-fit1";
 
-// Profile availability is separate from the operator's hardware/inventory approval.
+// Profile availability is separate from the operator's hardware approval.
 static MATERIAL_PROFILES: LazyLock<Result<BTreeMap<String, String>, String>> =
     LazyLock::new(|| {
         let catalog: Value = serde_json::from_str(include_str!("../../../data/bambu/catalog.json"))
@@ -45,6 +45,28 @@ pub fn material_supported(id: &str) -> bool {
     MATERIAL_PROFILES
         .as_ref()
         .is_ok_and(|profiles| profiles.contains_key(id))
+}
+
+/// Conservative box fit: XY arrangement may rotate; changing the model's Z orientation is manual.
+/// Limits match the trusted P1P snapshot: 256x256, Z=250 and an excluded 18x28 corner.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ModelFitError {
+    InvalidDimensions,
+    SizeLimit,
+    PrinterFit,
+}
+pub fn check_model_dimensions([x, y, z]: [f64; 3]) -> Result<(), ModelFitError> {
+    if [x, y, z].iter().any(|v| !v.is_finite() || *v <= 0.0) {
+        return Err(ModelFitError::InvalidDimensions);
+    }
+    if [x, y, z].iter().any(|v| *v > 500.0) {
+        return Err(ModelFitError::SizeLimit);
+    }
+    // At least one XY orientation must avoid the excluded corner; no invented height swap.
+    if x > 256.0 || y > 256.0 || z > 250.0 || x.min(y) > 238.0 {
+        return Err(ModelFitError::PrinterFit);
+    }
+    Ok(())
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
@@ -248,7 +270,7 @@ fn write_profiles(directory: &Path, filament: &str, options: &Options) -> Result
 }
 
 /// Only server-owned STL paths are accepted. No project settings or G-code from uploads
-/// reach the slicer. The caller must separately enforce inventory and purchase prices.
+/// reach the slicer. The caller must enforce measured geometry, approved profiles and explicit purchase prices.
 pub async fn slice(model_path: &Path, material_id: &str) -> Result<Estimate, Error> {
     let result = slice_job(model_path, material_id, &Options::default()).await?;
     Ok(Estimate {
@@ -430,6 +452,7 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
             "1",
             "--arrange",
             "1",
+            "--allow-rotations",
             "--clone-objects",
         ])
         .arg(copies.to_string())
@@ -533,6 +556,61 @@ mod tests {
         ] {
             assert!(!material_supported(id));
         }
+    }
+    #[test]
+    fn measured_geometry_respects_size_limit_build_height_and_xy_rotation() {
+        for dimensions in [[256.0, 238.0, 250.0], [238.0, 256.0, 250.0], [20.0; 3]] {
+            assert_eq!(check_model_dimensions(dimensions), Ok(()));
+        }
+        for axis in 0..3 {
+            let mut dimensions = [1.0; 3];
+            dimensions[axis] = 500.001;
+            assert_eq!(
+                check_model_dimensions(dimensions),
+                Err(ModelFitError::SizeLimit)
+            );
+            dimensions[axis] = 500.0;
+            assert_eq!(
+                check_model_dimensions(dimensions),
+                Err(ModelFitError::PrinterFit)
+            );
+        }
+        for dimensions in [
+            [256.0, 239.0, 250.0],
+            [200.0, 10.0, 250.001],
+            [256.0, 250.0, 238.0],
+        ] {
+            assert_eq!(
+                check_model_dimensions(dimensions),
+                Err(ModelFitError::PrinterFit)
+            );
+        }
+        for dimensions in [
+            [f64::NAN, 1.0, 1.0],
+            [f64::INFINITY, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ] {
+            assert_eq!(
+                check_model_dimensions(dimensions),
+                Err(ModelFitError::InvalidDimensions)
+            );
+        }
+        let snapshot: BTreeMap<String, Value> = serde_json::from_str(PROFILES).unwrap();
+        let profiles = snapshot
+            .values()
+            .filter_map(|v| Some((v.get("name")?.as_str()?, v)))
+            .collect();
+        let machine = resolve("Bambu Lab P1P 0.4 nozzle", &profiles, 0).unwrap();
+        assert_eq!(machine["printable_height"], "250");
+        assert_eq!(
+            machine["printable_area"],
+            serde_json::json!(["0x0", "256x0", "256x256", "0x256"])
+        );
+        assert_eq!(
+            machine["bed_exclude_area"],
+            serde_json::json!(["0x0", "18x0", "18x28", "0x28"])
+        );
     }
     #[test]
     fn quoted_profiles_include_automatic_supports() {

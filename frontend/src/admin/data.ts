@@ -1,4 +1,7 @@
+import type { ManualOffer } from '../lib/manualQuotes';
 export const stages = [
+  'Oczekuje na wycenę',
+  'Oferta wygasła',
   'Nowe',
   'Przygotowanie',
   'Drukowanie',
@@ -16,8 +19,8 @@ export type Model = {
   qty: number;
   quality: string;
   strength: string;
-  price: number;
-  amount: number;
+  price: number | null;
+  amount: number | null;
   done: number;
 };
 export type Message = {
@@ -32,6 +35,7 @@ export type OrderFile = {
   filename: string;
   available: boolean;
   source_url?: string;
+  preview_url?: string;
   material_id: string;
   color_code: string;
   options?: { quality?: string; wall_loops?: number; infill_percent?: number };
@@ -46,8 +50,9 @@ export type Order = {
   state: string;
   paid: boolean;
   payment: string;
-  amount: number;
-  amountGrosze: number;
+  amount: number | null;
+  amountGrosze: number | null;
+  manualOffer?: ManualOffer;
   attention: string;
   delivery: string;
   pickup: boolean;
@@ -65,7 +70,8 @@ export type ServerOrder = {
   id: string;
   status: string;
   payment_state: string | null;
-  amount_grosze: number;
+  amount_grosze: number | null;
+  manual_offer?: ManualOffer;
   created_at: number;
   paid_at: number | null;
   contact: {
@@ -73,14 +79,23 @@ export type ServerOrder = {
     email?: string;
     street?: string;
     postalCode?: string;
+    postal_code?: string;
     city?: string;
     delivery_address?: string;
   };
-  lines: { model_id: string; quantity: number; unit_grosze: number; total_grosze: number }[];
+  lines: {
+    model_id: string;
+    quantity: number;
+    unit_grosze?: number | null;
+    total_grosze?: number | null;
+    filename?: string;
+  }[];
   fulfillment?: { delivery?: string | { method?: string }; offer?: { name?: string } };
 };
 const labels: Record<string, Stage> = {
   awaiting_payment: 'Nowe',
+  awaiting_quote: 'Oczekuje na wycenę',
+  quote_expired: 'Oferta wygasła',
   paid: 'Przygotowanie',
   in_production: 'Drukowanie',
   ready: 'Pakowanie',
@@ -89,7 +104,10 @@ const labels: Record<string, Stage> = {
   cancelled: 'Anulowane',
 };
 export function orderFromServer(row: ServerOrder): Order {
-  if (!Number.isSafeInteger(row.amount_grosze) || row.amount_grosze < 0)
+  if (
+    !(row.amount_grosze === null && row.manual_offer) &&
+    (!Number.isSafeInteger(row.amount_grosze) || row.amount_grosze! < 0)
+  )
     throw new Error('Nieprawidłowa kwota zamówienia.');
   const method =
     typeof row.fulfillment?.delivery === 'string'
@@ -106,38 +124,48 @@ export function orderFromServer(row: ServerOrder): Order {
     state: row.status,
     paid,
     payment:
-      row.payment_state === 'refunded'
-        ? 'Zwrócona'
-        : row.payment_state === 'partially_refunded'
-          ? 'Częściowy zwrot'
-          : paid
-            ? 'Opłacone'
-            : row.payment_state === 'failed'
-              ? 'Nieudana'
-              : 'Oczekuje na płatność',
-    amount: row.amount_grosze / 100,
+      row.status === 'awaiting_quote'
+        ? 'Do wyceny'
+        : row.payment_state === 'refunded'
+          ? 'Zwrócona'
+          : row.payment_state === 'partially_refunded'
+            ? 'Częściowy zwrot'
+            : paid
+              ? 'Opłacone'
+              : row.payment_state === 'failed'
+                ? 'Nieudana'
+                : 'Oczekuje na płatność',
+    amount: row.amount_grosze === null ? null : row.amount_grosze / 100,
+    manualOffer: row.manual_offer,
     amountGrosze: row.amount_grosze,
     attention:
-      row.payment_state === 'manual_review'
-        ? 'Sprawdź płatność'
-        : row.status === 'ready'
-          ? 'Gotowe do odbioru lub nadania'
-          : '',
+      row.status === 'awaiting_quote'
+        ? 'Wycena indywidualna'
+        : row.payment_state === 'manual_review'
+          ? 'Sprawdź płatność'
+          : row.status === 'ready'
+            ? 'Gotowe do odbioru lub nadania'
+            : '',
     delivery: method === 'pickup' ? 'Odbiór osobisty' : row.fulfillment?.offer?.name || 'Dostawa',
     pickup: method === 'pickup',
     address:
       row.contact.delivery_address ||
-      [row.contact.street, [row.contact.postalCode, row.contact.city].filter(Boolean).join(' ')]
+      [
+        row.contact.street,
+        [row.contact.postalCode ?? row.contact.postal_code, row.contact.city]
+          .filter(Boolean)
+          .join(' '),
+      ]
         .filter(Boolean)
         .join(', '),
     models: row.lines.map((l) => ({
       id: l.model_id,
-      name: 'Model ' + l.model_id,
+      name: l.filename || 'Model ' + l.model_id,
       material: '—',
       color: '—',
       qty: l.quantity,
-      price: l.unit_grosze / 100,
-      amount: l.total_grosze / 100,
+      price: l.unit_grosze == null ? null : l.unit_grosze / 100,
+      amount: l.total_grosze == null ? null : l.total_grosze / 100,
       done: 0,
       quality: '—',
       strength: '—',
@@ -169,8 +197,10 @@ export function nextStatus(o: Order): { state: string; label: Stage } | null {
 }
 export const total = (o: Order) => o.amount;
 export const pieces = (o: Order) => o.models.reduce((s, m) => s + m.qty, 0);
-export const money = (n: number) =>
-  new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(n);
+export const money = (n: number | null) =>
+  n === null
+    ? 'Do wyceny'
+    : new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(n);
 // Prefix dangerous cells inside quotes (OWASP CSV Injection).
 export function csvCell(value: string): string {
   const text =

@@ -137,7 +137,17 @@ async fn serve() {
         }
         return;
     }
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:18432")
+    // Separate localhost test instances must never share the developer's database/storage.
+    let port = std::env::var("API_PORT")
+        .map_or(Ok(18432), |v| v.parse::<u16>())
+        .ok()
+        .filter(|port| *port != 0)
+        .unwrap_or_else(|| {
+            tracing::error!(event = "server_init_failed", reason = "invalid_API_PORT");
+            std::process::exit(1);
+        });
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap_or_else(|_| {
             tracing::error!(event = "server_bind_failed", reason = "localhost_listener");
@@ -150,7 +160,7 @@ async fn serve() {
         );
         std::process::exit(1);
     });
-    tracing::info!(event = "server_listening", address = "127.0.0.1:18432");
+    tracing::info!(event = "server_listening", address = %address);
     let result = axum::serve(
         listener,
         router.into_make_service_with_connect_info::<std::net::SocketAddr>(),

@@ -3,6 +3,7 @@
   import * as api from '../../lib/api';
   import ParcelPlan from '../../components/ParcelPlan.svelte';
   import PaymentReturn from './PaymentReturn.svelte';
+  import ManualQuoteRequest from '../../components/ManualQuoteRequest.svelte';
   import CheckoutSteps from '../../components/CheckoutSteps.svelte';
   import { money, printConfiguration, parcels } from '../../lib/format';
   import type {
@@ -229,7 +230,7 @@
       materials = await api.getMaterials();
       const user = await api.getSession();
       draftKey = 'rapidmaker.checkout-contact.v2.' + (user?.id ?? 'guest');
-      if (user && !user.id.startsWith('demo-')) contact = (await api.getProfile()).contact;
+      if (user) contact = (await api.getProfile()).contact;
       const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? 'null');
       if (saved?.contact && typeof saved.contact.email === 'string') {
         contact = { ...contact, ...saved.contact };
@@ -324,15 +325,10 @@
         stage = 2;
         throw new Error('Wycena wygasła lub dane się zmieniły. Przejdź ponownie do podsumowania.');
       }
-      if (cart.quote.manual) {
-        throw new Error(
-          'Ręczna wycena nie jest jeszcze obsługiwana online. Skontaktuj się z zespołem.',
-        );
-      }
       if (!selectedOffer) {
         throw new Error('Dane lub wycena zmieniły się. Przejdź ponownie do podsumowania.');
       }
-      if (stripeForm && cart.delivery === 'courier') {
+      if (stripeForm) {
         await stripeForm.preparePayment();
         const intent = await api.startOrderIntent(cart.quote, normalizedContact(), selectedOffer);
         const saved = {
@@ -478,6 +474,16 @@
       <p class="muted">Koszyk czeka na pierwszy projekt.</p>
       <a class="button primary" href="/wycena?restore=cart">Przejdź do wyceny →</a>
     </div>
+  {:else if cart.quote?.manual}
+    <ManualQuoteRequest
+      models={cart.models}
+      initialContact={contact}
+      initialDelivery={cart.delivery}
+      oncreated={async (id) => {
+        for (const model of cart?.models ?? []) await api.removeModel(model.id);
+        location.assign('/konto/zamowienia/' + encodeURIComponent(id));
+      }}
+    />
   {:else}
     {#if paymentMessage}<div class="alert stack" role="status">
         <span>{paymentMessage}</span>
@@ -494,12 +500,7 @@
       onsubmit={(e) => {
         e.preventDefault();
         if (stage === 2) review();
-        else if (
-          stage === 3 &&
-          !cart?.quote?.manual &&
-          stripeForm &&
-          cart?.delivery === 'courier'
-        ) {
+        else if (stage === 3 && !cart?.quote?.manual && stripeForm) {
           stage = 4;
           error = '';
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -507,10 +508,7 @@
       }}
     >
       <div class="stack">
-        <section
-          class="checkout-section stack"
-          hidden={stage === 3 || (stage === 4 && cart.delivery !== 'courier')}
-        >
+        <section class="checkout-section stack" hidden={stage === 3 || (stage === 4 && !stripeKey)}>
           <div class="section-title" hidden={stage !== 2}>
             <span>01</span>
             <h2>Dane odbiorcy</h2>
@@ -518,7 +516,7 @@
           <div class="recipient-fields">
             <div class="stack recipient-contact" hidden={stage !== 2}>
               <div class="contact-grid">
-                {#if !stripeKey}<label class="contact-name"
+                {#if !stripeKey || cart.delivery !== 'courier'}<label class="contact-name"
                     >Imię i nazwisko<input
                       required
                       autocomplete="shipping name"
@@ -558,24 +556,29 @@
               </div>
             </div>
             {#if stripeKey}<div class="stack">
-                <StripeCheckout
-                  bind:this={stripeForm}
-                  publishableKey={stripeKey}
-                  amount={Math.round((cart.quote?.total ?? 1) * 100)}
-                  {contact}
-                  paymentVisible={stage === 4}
-                  onchange={(values) => {
-                    contact = { ...contact, ...values };
-                    saveDraft();
-                  }}
-                />
+                {#key cart.delivery === 'courier'}<StripeCheckout
+                    bind:this={stripeForm}
+                    collectAddress={cart.delivery === 'courier'}
+                    publishableKey={stripeKey}
+                    amount={Math.round((cart.quote?.total ?? 1) * 100)}
+                    {contact}
+                    paymentVisible={stage === 4}
+                    onchange={(values) => {
+                      contact = { ...contact, ...values };
+                      saveDraft();
+                    }}
+                  />{/key}
                 {#if stage === 2}{#each ['name', 'street', 'postalCode', 'city'] as field}{#if fieldErrors[field as keyof Contact]}<p
                         class="field-error"
                         role="alert"
                       >
                         {fieldErrors[field as keyof Contact]}
                       </p>{/if}{/each}{/if}
-              </div>{:else}<div class="stack" hidden={stage !== 2}>
+              </div>{/if}
+            {#if (!stripeKey && cart.delivery === 'courier') || cart.delivery === 'locker'}<div
+                class="stack"
+                hidden={stage !== 2}
+              >
                 <div class="form-grid">
                   <label
                     >Kod pocztowy<input
@@ -590,31 +593,31 @@
                     />{#if fieldErrors.postalCode}<small class="field-error" id="error-postalCode"
                         >{fieldErrors.postalCode}</small
                       >{/if}</label
-                  ><label
-                    >Miejscowość<input
-                      required
-                      autocomplete="shipping address-level2"
-                      id="checkout-city"
-                      aria-invalid={!!fieldErrors.city}
-                      aria-describedby={fieldErrors.city ? 'error-city' : undefined}
-                      bind:value={contact.city}
-                    />{#if fieldErrors.city}<small class="field-error" id="error-city"
-                        >{fieldErrors.city}</small
-                      >{/if}</label
-                  >
+                  >{#if cart.delivery === 'courier'}<label
+                      >Miejscowość<input
+                        required
+                        autocomplete="shipping address-level2"
+                        id="checkout-city"
+                        aria-invalid={!!fieldErrors.city}
+                        aria-describedby={fieldErrors.city ? 'error-city' : undefined}
+                        bind:value={contact.city}
+                      />{#if fieldErrors.city}<small class="field-error" id="error-city"
+                          >{fieldErrors.city}</small
+                        >{/if}</label
+                    >{/if}
                 </div>
-                <label
-                  >Ulica, numer domu i mieszkania<input
-                    required
-                    autocomplete="shipping street-address"
-                    id="checkout-street"
-                    aria-invalid={!!fieldErrors.street}
-                    aria-describedby={fieldErrors.street ? 'error-street' : undefined}
-                    bind:value={contact.street}
-                  />{#if fieldErrors.street}<small class="field-error" id="error-street"
-                      >{fieldErrors.street}</small
-                    >{/if}</label
-                >
+                {#if cart.delivery === 'courier'}<label
+                    >Ulica, numer domu i mieszkania<input
+                      required
+                      autocomplete="shipping street-address"
+                      id="checkout-street"
+                      aria-invalid={!!fieldErrors.street}
+                      aria-describedby={fieldErrors.street ? 'error-street' : undefined}
+                      bind:value={contact.street}
+                    />{#if fieldErrors.street}<small class="field-error" id="error-street"
+                        >{fieldErrors.street}</small
+                      >{/if}</label
+                  >{/if}
               </div>{/if}
           </div>
           <div class="stack invoice-fields" hidden={stage !== 2}>
@@ -880,10 +883,7 @@
                 />
               </details>{/if}
           </section>
-        {:else if stage === 4 && !(stripeKey && cart.delivery === 'courier')}<p
-            class="muted"
-            role="status"
-          >
+        {:else if stage === 4 && !stripeKey}<p class="muted" role="status">
             Otwieramy bezpieczną stronę Stripe…
           </p>{/if}
       </div>
@@ -895,36 +895,41 @@
             ><strong>{money(line.total)}</strong>
           </div>{/each}
         {#if cart.quote}
-          <div class="line">
-            <span>Przygotowanie</span><strong
-              >{money((cart.quote.checkout?.setup_grosze ?? 0) / 100)}</strong
-            >
-          </div>
-          <div class="line">
-            <span>Opakowania</span><strong
-              >{money((cart.quote.checkout?.packaging_grosze ?? 0) / 100)}</strong
-            >
-          </div>
-          <div class="line">
-            <span>Dostawa{cart.quote.packages ? ' · ' + parcels(cart.quote.packages) : ''}</span
-            ><strong
-              >{cart.quote.deliveryPending || !quoteFresh
-                ? 'Do potwierdzenia'
-                : money(cart.quote.delivery)}</strong
-            >
-          </div>
+          {#if !cart.quote.manual}<div class="line">
+              <span>Przygotowanie</span><strong
+                >{money((cart.quote.checkout?.setup_grosze ?? 0) / 100)}</strong
+              >
+            </div>
+            <div class="line">
+              <span>Opakowania</span><strong
+                >{money((cart.quote.checkout?.packaging_grosze ?? 0) / 100)}</strong
+              >
+            </div>
+            <div class="line">
+              <span>Dostawa{cart.quote.packages ? ' · ' + parcels(cart.quote.packages) : ''}</span
+              ><strong
+                >{cart.quote.deliveryPending || !quoteFresh
+                  ? 'Do potwierdzenia'
+                  : money(cart.quote.delivery)}</strong
+              >
+            </div>
+          {/if}
           <div class="order-actions">
             <div class="total">
               <span
-                >{cart.quote.deliveryPending || !quoteFresh
-                  ? 'Suma bez dostawy'
-                  : 'Razem brutto'}</span
+                >{cart.quote.manual
+                  ? 'Cena'
+                  : cart.quote.deliveryPending || !quoteFresh
+                    ? 'Suma bez dostawy'
+                    : 'Razem brutto'}</span
               ><strong
-                >{money(
-                  quoteFresh
-                    ? cart.quote.total
-                    : cart.quote.subtotal + (cart.quote.checkout?.packaging_grosze ?? 0) / 100,
-                )}</strong
+                >{cart.quote.manual
+                  ? 'Do wyceny'
+                  : money(
+                      quoteFresh
+                        ? cart.quote.total
+                        : cart.quote.subtotal + (cart.quote.checkout?.packaging_grosze ?? 0) / 100,
+                    )}</strong
               >
             </div>
             <button
@@ -932,7 +937,7 @@
               class="button primary"
               disabled={busy ||
                 quoteBusy ||
-                (stage === 4 && !(stripeForm && cart.delivery === 'courier')) ||
+                (stage === 4 && !stripeForm) ||
                 (stage === 3 && cart.quote.manual) ||
                 (stage === 3 &&
                   !cart.quote.manual &&
@@ -944,13 +949,12 @@
                   ? 'Podsumowanie →'
                   : cart.quote.manual
                     ? 'Skontaktuj się w sprawie wyceny'
-                    : stage === 4 && stripeForm && cart.delivery === 'courier'
+                    : stage === 4 && stripeForm
                       ? `Zapłać ${money(cart.quote.total)} →`
                       : 'Przejdź do płatności →'}
             </button>
           </div>
           {#if stage !== 2 && cart.quote.reason}<p class="muted">{cart.quote.reason}</p>{/if}
-          <small class="muted">Płatność testowa · ceny wydruku wymagają kalibracji.</small>
         {/if}
         {#if stage === 4}<button
             type="button"
@@ -1119,7 +1123,6 @@
     letter-spacing: -0.03em;
   }
   .summary > p,
-  .summary > small,
   .summary > a {
     font-size: 12px;
     line-height: 1.6;
@@ -1169,7 +1172,7 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 17px 12px;
     cursor: pointer;
     background: transparent;

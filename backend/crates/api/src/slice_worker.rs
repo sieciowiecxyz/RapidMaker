@@ -128,7 +128,9 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
         .map_err(|_| unavailable)?
         .ok_or((false, "Model wygasł lub jest niedostępny."))?;
     let model = super::files::handle(record).map_err(|_| config)?;
-    if model.record.sha256 != input.model_sha256 {
+    if model.record.sha256 != input.model_sha256
+        || rapidmaker_slicer::check_model_dimensions(model.record.dimensions_mm).is_err()
+    {
         return Err(config);
     }
     let material = db
@@ -138,13 +140,9 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
         .into_iter()
         .find(|m| m.id == input.material_id)
         .ok_or(config)?;
-    if !material.production_enabled
-        || material.cost_net_grosze_per_kg != Some(i64::from(input.purchase_net_grosze_per_kg))
+    if super::quotes::approved_cost(&material) != Some(input.purchase_net_grosze_per_kg)
         || material.source["profiles_sha256"] != input.profiles_sha256
-        || !material
-            .colors
-            .iter()
-            .any(|c| c.code == input.color_code && c.in_stock)
+        || !super::quotes::known_color(&material, &input.color_code)
     {
         return Err(config);
     }

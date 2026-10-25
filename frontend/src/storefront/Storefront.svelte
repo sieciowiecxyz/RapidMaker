@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import gsap from 'gsap';
   import type { StlMesh } from './lib/stlParser';
-  import { customColors } from './lib/colors';
+  import { apiFetch } from '../lib/http';
   import { softValue } from './lib/motion';
   import PrintScene from './components/PrintScene.svelte';
   import PrintTransition from './components/PrintTransition.svelte';
@@ -48,7 +48,7 @@
   const uploadedFiles = new Map<string,File>();
   const meshCache = new Map<string,StlMesh>();
   let fileRevision = $state(0);
-  type Preview = {status:'idle'|'loading'|'ready'|'error'|'unsupported';id:string;mesh?:StlMesh;error?:string};
+  type Preview = {status:'idle'|'loading'|'ready'|'error';id:string;mesh?:StlMesh;error?:string};
   let stlPreview = $state<Preview>({status:'idle',id:''});
   let previewRetry = $state(0);
   let selectedId = $state('');
@@ -88,7 +88,8 @@
   function updateSettings(patch:Partial<PrintSettings>) {
     if(patch.strength)strengthTrigger++;
     settingsCopied='';
-    const next=normalizeSettings({...activeSettings,...patch});
+    const changedMaterial = patch.material !== undefined && patch.material !== activeSettings.material;
+    const next=normalizeSettings({...activeSettings,...patch,...(changedMaterial?{color:'',customShade:''}:{})});
     lastSettings={...next};
     if(selectedModel) models=models.map(model=>model.id===selectedId?{...model,settings:{...next}}:model);
   }
@@ -116,8 +117,7 @@
   let fileInput: HTMLInputElement;
   let revision = 0;
   const currentMaterial = $derived(materials.find(m => m.id === material));
-  const customChoice = $derived(customColors.find(item => item.id === customShade) ?? customColors[3]);
-  const currentColor = $derived(color === 'custom' ? { id:'custom', name:`Niestandardowy: ${customChoice.name} (${customChoice.hex})`, hex:customChoice.hex, available:true } : (currentMaterial ?? materials[0])?.colors.find(c => c.id === color));
+  const currentColor = $derived(currentMaterial?.colors.find(c => c.id === color));
   const canContact = $derived(models.length > 0 && !!quote && !busy && !quoteError && !validationIssues.length && completedQuoteKey === quoteKey);
   const money = (value: number) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 
@@ -181,16 +181,22 @@
 
   $effect(()=>{
     fileRevision; previewRetry;
-    const id=selectedId,file=uploadedFiles.get(id);
-    if(!file){stlPreview={status:'idle',id};return;}
-    if(!/\.stl$/i.test(file.name)){stlPreview={status:'unsupported',id};return;}
+    const id=selectedId, model=selectedModel, file=uploadedFiles.get(id);
+    if (!model || model.sample) { stlPreview={status:'idle',id}; return; }
+    if (model.status === 'error') { stlPreview={status:'error',id,error:model.error}; return; }
+    const analysisId=model.analysis?.id;
+    if (!analysisId && (!file || !/\.stl$/i.test(file.name))) {
+      stlPreview={status:model.status==='analyzing'?'loading':'error',id,error:'Brakuje prywatnego podglądu. Dodaj plik ponownie.'};
+      return;
+    }
     const cached=meshCache.get(id);
     if(cached){meshCache.delete(id);meshCache.set(id,cached);stlPreview={status:'ready',id,mesh:cached};return;}
     stlPreview={status:'loading',id};
     let cancelled=false;
+    const controller=new AbortController();
     let worker:Worker;
     try{worker=new Worker(new URL('./lib/stl.worker.ts',import.meta.url),{type:'module'});}
-    catch{stlPreview={status:'error',id,error:'Odczyt STL w tle jest niedostępny w tej przeglądarce.'};return;}
+    catch{stlPreview={status:'error',id,error:'Odczyt modelu w tle jest niedostępny w tej przeglądarce.'};return;}
     worker.onmessage=(event:MessageEvent<{ok:boolean;mesh:StlMesh;error?:string}>)=>{
       if(cancelled)return;
       if(event.data.ok){
@@ -202,12 +208,24 @@
           size-=meshCache.get(oldest)!.vertices.byteLength+(meshCache.get(oldest)!.sectionMask?.byteLength ?? 0);meshCache.delete(oldest);
         }
         meshCache.set(id,mesh);stlPreview={status:'ready',id,mesh};
-      }else stlPreview={status:'error',id,error:event.data.error ?? 'Nie udało się odczytać STL.'};
+      }else stlPreview={status:'error',id,error:event.data.error ?? 'Nie udało się odczytać modelu.'};
       worker.terminate();
     };
-    worker.onerror=()=>{if(!cancelled)stlPreview={status:'error',id,error:'Nie udało się uruchomić odczytu STL. Spróbuj ponownie.'};worker.terminate();};
-    worker.postMessage({file});
-    return ()=>{cancelled=true;worker.terminate();};
+    worker.onerror=()=>{if(!cancelled)stlPreview={status:'error',id,error:'Nie udało się uruchomić odczytu modelu. Spróbuj ponownie.'};worker.terminate();};
+    if (analysisId) {
+      void (async()=>{
+        try {
+          const response=await apiFetch(`/api/models/${encodeURIComponent(analysisId)}/preview.glb`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20_000)])});
+          if (!response.ok) throw new Error(response.status===401 || response.status===403 ? 'Zaloguj się ponownie, aby otworzyć prywatny podgląd.' : response.status===404 ? 'Podgląd wygasł. Dodaj plik ponownie.' : 'Nie udało się pobrać podglądu. Spróbuj ponownie.');
+          const buffer=await response.arrayBuffer();
+          if (!cancelled) worker.postMessage({buffer,format:'glb'},[buffer]);
+        } catch(error) {
+          if (!cancelled) stlPreview={status:'error',id,error:error instanceof Error?error.message:'Nie udało się pobrać podglądu.'};
+          worker.terminate();
+        }
+      })();
+    } else worker.postMessage({file});
+    return ()=>{cancelled=true;controller.abort();worker.terminate();};
   });
 
   function changeTheme() {
@@ -215,7 +233,7 @@
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('rapidmaker-concept-theme', theme); } catch { /* Optional preference only. */ }
   }
-  async function useSample(count = 1) { uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied=''; models = (await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings}})); selectModel(models[0]?.id ?? ''); fileError = ''; simulateError = false; }
+  async function useSample(count = 1) { if (models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.')) return; uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied=''; models = (await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings}})); selectModel(models[0]?.id ?? ''); fileError = ''; simulateError = false; }
   function addFiles(files: FileList | File[] | null) {
     if (!files?.length) return;
     const incoming = Array.from(files);
@@ -267,24 +285,17 @@
 
 {#snippet scenePreview()}
   {#if selectedModel?.status === 'analyzing'}<p role="status">Analizuję model na serwerze…</p>{/if}
-  {#if selectedModel?.error}<p class="error" role="alert">{selectedModel.error}</p>{/if}
-  {#if selectedModel && uploadedFiles.has(selectedId) && stlPreview.id===selectedId}
-    {#if stlPreview.status==='ready' && stlPreview.mesh}
-      <PrintScene {theme} material={material || 'unselected'} color={currentColor?.hex ?? '#87908a'} colorName={color === 'custom' ? (customShade ? customChoice.name : 'Wybierz odcień') : currentColor?.name ?? 'Nie wybrano'} {quality} {strength} {strengthTrigger} mesh={stlPreview.mesh} meshKey={selectedId} fileName={selectedModel.name}/>
+  {#if selectedModel && !selectedModel.sample}
+    {#if stlPreview.id === selectedId && stlPreview.status === 'ready' && stlPreview.mesh}
+      <PrintScene {theme} material={currentMaterial?.family?.toLowerCase() ?? 'unselected'} color={currentColor?.hex ?? '#f4f4f0'} colorName={currentColor?.name ?? 'Biały podgląd'} {quality} {strength} {strengthTrigger} mesh={stlPreview.mesh} meshKey={selectedId} fileName={selectedModel.name}/>
     {:else}
-      <div class="print-scene chamber empty-model-preview"><div class="chamber-top"><span><i></i> Podgląd</span><span>STL / plik klienta</span></div><div class="empty-preview-content" aria-live="polite"><IconCube size={54} stroke={1}/>
-        {#if stlPreview.status==='loading'}<h3>Przygotowuję model…</h3><p>{selectedModel.name}</p><p>Możesz w tym czasie wybrać ustawienia wydruku.</p>
-        {:else if stlPreview.status==='error'}<h3>Nie można wyświetlić modelu</h3><p>{stlPreview.error}</p><Button variant="secondary" onclick={()=>{previewRetry++;}}>Spróbuj ponownie</Button>
-        {:else if stlPreview.status==='unsupported'}<h3>Podgląd dostępny dla STL</h3><p>Ten plik możesz skonfigurować, ale podgląd STEP i 3MF wymaga konwersji. Do podglądu dodaj eksport STL.</p>
-        {:else}<h3>Przygotowuję podgląd…</h3>{/if}
+      <div class="print-scene chamber empty-model-preview"><div class="chamber-top"><span><i></i> Twój model</span><span>{selectedModel.name}</span></div><div class="empty-preview-content" aria-live="polite"><IconCube size={54} stroke={1}/>
+        {#if selectedModel.status === 'error' || stlPreview.status === 'error'}<h3>Nie można wyświetlić modelu</h3><p>{selectedModel.error ?? stlPreview.error}</p>{#if selectedModel.status !== 'error'}<Button variant="secondary" onclick={()=>{previewRetry++;}}>Spróbuj ponownie</Button>{/if}
+        {:else}<h3>Przygotowuję podgląd…</h3><p>Możesz w tym czasie wybrać ustawienia wydruku.</p>{/if}
       </div></div>
     {/if}
-  {:else if selectedModel && !selectedModel.sample}
-    <div class="print-scene chamber empty-model-preview"><div class="chamber-top"><span><i></i> Twój model</span><span>{selectedModel.name}</span></div><div class="empty-preview-content"><IconCube size={54} stroke={1}/><h3>Konfiguracja zapisana</h3><p>{selectedModel.analysis?.dimensions_mm.map(value => value.toFixed(1)).join(' × ')} mm</p><p>Plik nie pozostaje w pamięci przeglądarki po przejściu na inną stronę. Aby ponownie obejrzeć model, dodaj go jeszcze raz.</p></div></div>
-  {:else if models.length && !material}
-    <div class="print-scene chamber empty-model-preview"><div class="chamber-top"><span><i></i> Podgląd</span><span>FDM / próbka</span></div><div class="empty-preview-content"><IconCube size={54} stroke={1}/><h3>Wybierz materiał</h3><p>Podgląd próbki pojawi się po wybraniu materiału dla tego modelu.</p></div></div>
   {:else}
-    <PrintScene {theme} material={material || 'pla'} color={currentColor?.hex ?? '#626861'} colorName={color === 'custom' ? (customShade ? customChoice.name : 'Wybierz odcień') : currentColor?.name ?? 'Nie wybrano'} {quality} {strength} {strengthTrigger} />
+    <PrintScene {theme} material={currentMaterial?.family?.toLowerCase() ?? 'pla'} color={currentColor?.hex ?? '#f4f4f0'} colorName={currentColor?.name ?? 'Biały podgląd'} {quality} {strength} {strengthTrigger} />
   {/if}
 {/snippet}
 {#snippet mobilePreview()}{#if isMobile}{@render scenePreview()}{/if}{/snippet}
@@ -305,7 +316,7 @@
         <button type="button" class:dragging class="dropzone" onclick={() => fileInput.click()} ondragover={event => { event.preventDefault(); dragging = true; }} ondragleave={() => { dragging = false; }} ondrop={event => { event.preventDefault(); dragging = false; addFiles(event.dataTransfer?.files ?? null); }}>
           <span class="drop-title"><IconUpload size={19} stroke={1.7} /> Dodaj modele lub przeciągnij pliki</span><p>STL, STEP, 3MF / do 25 MB na plik</p>
         </button>
-        <div class="sample-link"><Button variant="text" onclick={() => useSample()}>{models.length ? 'Wczytaj ponownie przykład' : 'Nie masz pliku? Wypróbuj przykład'}<IconArrowRight size={15} stroke={1.7} /></Button><Button variant="text" onclick={() => useSample(10)}>Pokaż przykład: 10 STL</Button></div>
+        <div class="sample-link"><Button variant="text" onclick={() => useSample()}>{models.length ? 'Wczytaj ponownie przykład' : 'Nie masz pliku? Wypróbuj przykład'}<IconArrowRight size={15} stroke={1.7} /></Button></div>
         {#if fileError}<p class="error" role="alert">{fileError}</p>{/if}
         {#if models.length}
           <div class="models-summary"><strong>Modele ({models.length}/10)</strong><span>{models.reduce((sum, model) => sum + (model.quantity || 0), 0)} szt. łącznie</span></div>
@@ -351,7 +362,7 @@
           </div>
           <Button class="quote-contact" disabled={!canContact || preparing} onclick={prepareContact}>{preparing ? 'Przygotowuję…' : 'Przejdź do dostawy'}<IconArrowUpRight size={17} stroke={1.7} /></Button>
           <Button variant="text" disabled={!canContact || preparing} onclick={(event) => prepareContact(event, true)}>Opcje zaawansowane: podpory, wypełnienie i wykończenie</Button>
-          <p class="estimate-note">Wycena testowa z serwera; obejmuje przygotowanie. Dostawę i opakowanie doliczymy w następnym kroku. Koszty druku wymagają kalibracji.</p>
+          <p class="estimate-note">Cena obejmuje przygotowanie wydruków. Dostawę i opakowanie poznasz w następnym kroku.</p>
         </div>
       </Card>
     </div>
@@ -360,14 +371,14 @@
 
   <section id="oferta" class="content-section" aria-labelledby="services-title">
     <div class="section-head"><h2 id="services-title">Części, które mają zadanie.</h2><p>Od pierwszego prototypu po serię gotową do wykorzystania.</p></div>
-    <div class="services"><div class="services-main service"><h3>Druk FDM i krótkie serie</h3><p>Prototypy, obudowy, uchwyty i części zamienne. Dobieramy materiał oraz sposób wykonania do zastosowania elementu.</p><div class="material-list"><span>PLA</span><span>PETG</span><span>ASA</span><span>TPU</span></div></div><div><div class="service"><h3>Projektowanie i skanowanie 3D</h3><p>Nie masz gotowego pliku? Opowiedz, co część ma robić. Pomożemy przygotować model i dostosować go do druku.</p></div><div class="service"><h3>Więcej technologii</h3><p>Projekty w MJF i SLA realizujemy przez partnerów. Skontaktuj się z nami, żeby ustalić odpowiedni proces.</p></div></div></div>
+    <div class="services"><div class="services-main service"><h3>Druk FDM i krótkie serie</h3><p>Prototypy, obudowy, uchwyty i części zamienne. Dobieramy materiał oraz sposób wykonania do zastosowania elementu.</p><div class="material-list"><span>PLA</span><span>ABS</span><span>TPU</span></div></div><div><div class="service"><h3>Projektowanie i skanowanie 3D</h3><p>Nie masz gotowego pliku? Opowiedz, co część ma robić. Pomożemy przygotować model i dostosować go do druku.</p></div><div class="service"><h3>Więcej technologii</h3><p>Projekty w MJF i SLA realizujemy przez partnerów. Skontaktuj się z nami, żeby ustalić odpowiedni proces.</p></div></div></div>
   </section>
 
   <section id="kontakt" class="content-section" aria-labelledby="contact-title"><div class="contact-grid"><div><h2 id="contact-title" tabindex="-1">Porozmawiajmy<br />o Twojej części.</h2><p class="contact-lead">Prześlij model lub opisz, czego potrzebujesz. Ustalimy materiał, cenę i termin realizacji.</p>{#if contactContext}<p class="contact-context">{contactContext}</p>{/if}<div class="contact-links" class:contact-glow={contactGlow}><a class="contact-link" href="tel:+48537320816"><IconPhone size={21} stroke={1.6} />537 320 816<IconArrowUpRight size={16} /></a><a class="contact-link" href="mailto:rapidmaker@rapidmaker.pl?subject=Wycena%20druku%203D"><IconMail size={21} stroke={1.6} />rapidmaker@rapidmaker.pl<IconArrowUpRight size={16} /></a></div><div class="address"><p><strong>Pracownia RapidMaker</strong></p><p>Zielony Krąg 1, 05-500 Piaseczno</p><small>Pon.-pt. 9:00-17:00. Wizyty po umówieniu.</small></div></div><div class="map"><iframe title="Mapa dojazdu do RapidMaker w Piasecznie" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2452.44230244811!2d20.994547177129274!3d52.07167776932459!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47192fc6e84dd8ff%3A0xf49d7b6dd1af3606!2sRapid%20Maker!5e0!3m2!1spl!2spl!4v1687527970408!5m2!1spl!2spl" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe><div class="map-footer"><span>Odbiór osobisty po umówieniu</span><a href="https://www.google.com/maps/dir/?api=1&destination=ul.+Zielony+Kr%C4%85g+1,+05-500+Piaseczno" target="_blank" rel="noreferrer">Wyznacz trasę</a></div></div></div></section>
 
   <details hidden class="prototype-tools"><summary>Narzędzia podglądu</summary><div class="specimen-tools"><Button variant="text" onclick={changeTheme}>Zmień motyw</Button><Button variant="text" onclick={async () => { if (!models.length) await useSample(); simulateError = true; document.getElementById('wycena')?.scrollIntoView(); }}>Symuluj błąd wyceny</Button></div></details>
 </main>
-<footer class="shell"><span>RapidMaker / Piaseczno</span><span>Konfiguracja, dostawa i płatność testowa.</span><a href="#main">Wróć na górę</a></footer>
+<footer class="shell"><span>RapidMaker / Piaseczno</span><span>Od projektu do gotowego wydruku.</span><a href="#main">Wróć na górę</a></footer>
 
 </div>
 

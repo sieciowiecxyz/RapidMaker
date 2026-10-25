@@ -5,18 +5,44 @@ import { validateModel } from './modelSettings';
 import type { Material, Model, Quote, QuoteOptions } from './types';
 
 export async function getMaterials(): Promise<Material[]> {
-  return (await checkout.getMaterials()).map((material) => ({
-    id: material.id,
-    name: material.name,
-    description: material.description,
-    compatible: true,
-    colors: material.colors.map((color) => ({
-      id: color.code ?? color.hex,
-      name: color.name,
-      hex: color.hex,
-      available: color.inStock,
-    })),
-  }));
+  const catalog = await checkout.getMaterials();
+  const families = [
+    {
+      id: 'GFA00',
+      family: 'PLA' as const,
+      description: 'Prototypy, dekoracje i codzienne części.',
+    },
+    {
+      id: 'GFB00',
+      family: 'ABS' as const,
+      description: 'Sztywne części techniczne, odporniejsze na temperaturę.',
+    },
+    {
+      id: 'GFU01',
+      family: 'TPU' as const,
+      description: 'Elastyczne elementy, osłony i amortyzacja.',
+    },
+  ];
+  return families.flatMap(({ id, family, description }) => {
+    const material = catalog.find((item) => item.id === id);
+    return material
+      ? [
+          {
+            id,
+            family,
+            name: family,
+            description,
+            compatible: material.compatible,
+            colors: material.colors.map((color) => ({
+              id: color.code ?? color.hex,
+              name: color.name,
+              hex: color.hex,
+              available: true,
+            })),
+          },
+        ]
+      : [];
+  });
 }
 
 export const getSampleModels = samples;
@@ -58,7 +84,7 @@ function productionModel(
     units: 'mm',
     options: {
       materialId: settings.material,
-      color: color.name,
+      color: color.id,
       quantity: model.quantity,
       quality: settings.quality as 'standard' | 'fine',
     },

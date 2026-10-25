@@ -53,7 +53,7 @@
         <li class="order-row" aria-labelledby={`number-${order.id}`} aria-busy={busy === order.id}>
           <div class="order-info">
             <div class="identity">
-              <strong id={`number-${order.id}`}>{order.number}</strong><OrderStatus
+              <strong id={`number-${order.id}`} title={order.id}>{order.number}</strong><OrderStatus
                 status={order.status}
               />
             </div>

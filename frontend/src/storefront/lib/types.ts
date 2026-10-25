@@ -19,6 +19,7 @@ export type Model = {
   checkoutOptions?: Pick<PrintModel, 'advanced' | 'notes' | 'strength'>;
 };
 export type Material = {
+  family?: 'PLA' | 'ABS' | 'TPU';
   id: string;
   name: string;
   description: string;

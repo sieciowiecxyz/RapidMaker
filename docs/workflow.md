@@ -1,6 +1,6 @@
 # Workflow
 
-Obecnie POC: priorytetem jest implementacja i wygląd, a nie rozbudowana walidacja.
+Obecnie finalizacja według PLAN/MILESTONES: implementacja i test całego przepływu. Krótkie regresje w iteracjach, rzeczywiste E2E/integracje przy zamknięciu etapu zgodnie z bieżącą prośbą użytkownika.
 
 Czytaj `PLAN.md`, `MILESTONES.md` i tylko potrzebne fragmenty kodu/docs. Sprawdź Git; chroń cudze zmiany.
 

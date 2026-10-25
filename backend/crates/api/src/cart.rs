@@ -127,22 +127,26 @@ pub async fn validate(
             .ok_or_else(stale)?;
         if request["slicer_profile_version"] != rapidmaker_slicer::PROFILE_VERSION
             || request["rates"] != policy
-            || !material.production_enabled
-            || material.cost_net_grosze_per_kg != request["purchase_net_grosze_per_kg"].as_i64()
+            || super::quotes::approved_cost(material).is_none_or(|cost| {
+                request["purchase_net_grosze_per_kg"].as_i64() != Some(i64::from(cost))
+            })
             || material.source["profiles_sha256"] != request["profiles_sha256"]
-            || !material
-                .colors
-                .iter()
-                .any(|c| c.in_stock && request["color_code"] == c.code)
+            || !request["color_code"]
+                .as_str()
+                .is_some_and(|code| super::quotes::known_color(material, code))
         {
             return Err(stale());
         }
         let model_id = request["model_id"].as_str().ok_or_else(stale)?;
-        if storage
+        let model = storage
             .model(model_id, owner, now())
             .await
             .map_err(|_| stale())?
-            .is_none()
+            .ok_or_else(stale)?;
+        if rapidmaker_slicer::check_model_dimensions(model.dimensions_mm).is_err()
+            || serde_json::from_value::<[f64; 3]>(request["dimensions_mm"].clone())
+                .map_err(|_| stale())?
+                != model.dimensions_mm
         {
             return Err(stale());
         }

@@ -14,6 +14,7 @@ pub use chat::{InboxLease, InboxOutcome, MessagePage, ReplyRoute};
 pub use checkout::{AttemptInput, CheckoutDraft, PaymentAttempt, StripeEvent};
 mod email;
 mod jobs;
+mod manual_quotes;
 mod models;
 pub use jobs::SlicerJob;
 mod passkeys;

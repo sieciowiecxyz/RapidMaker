@@ -19,7 +19,7 @@ export {
 } from './mock';
 
 import * as mock from './mock';
-import { apiFetch } from './http';
+import { apiFetch, ApiError } from './http';
 export { getSession, requestLogin, confirmLogin, logout, claimGuest } from './session';
 export {
   getOrders,
@@ -57,8 +57,12 @@ async function request<T>(path: string, body?: unknown, signal?: AbortSignal): P
   const data = await response.json();
   if (!response.ok)
     throw Object.assign(
-      new Error(data.message ?? data.error ?? 'Usługa wyceny jest niedostępna.'),
-      { status: response.status },
+      new ApiError(
+        response.status,
+        data.message ?? data.error ?? 'Usługa wyceny jest niedostępna.',
+        data.code,
+      ),
+      { reason: data.reason, field_errors: data.field_errors },
     );
   return data as T;
 }
@@ -91,7 +95,7 @@ export async function getMaterials(): Promise<Material[]> {
       code: color.code,
       name: color.name,
       hex: color.rgba[0]?.slice(0, 7) ?? '#808080',
-      inStock: color.in_stock,
+      inStock: true,
     })),
   }));
 }
@@ -167,6 +171,28 @@ async function estimateModel(body: unknown, signal?: AbortSignal): Promise<Engin
   }
 }
 
+function manualQuote(
+  reason = 'Zespół sprawdzi możliwość wydruku, zakres wykonania i dostawę, a następnie przedstawi ofertę.',
+): { checkout: CheckoutQuote; manual: boolean } {
+  return {
+    manual: true,
+    checkout: {
+      id: crypto.randomUUID(),
+      expires_at: Math.floor(Date.now() / 1000) + 600,
+      packing: { status: 'manual_review', parcels: [], packaging_grosze: 0 },
+      offers: [],
+      print_grosze: 0,
+      print_lines: [],
+      setup_grosze: 0,
+      packaging_grosze: 0,
+      production_demo: true,
+      stripe_configured: false,
+      furgonetka_configured: false,
+      reason,
+    },
+  };
+}
+
 const engineQuotes = new Map<string, EngineQuote>();
 export async function quoteModels(
   models: PrintModel[],
@@ -181,34 +207,15 @@ export async function quoteModels(
     const material = materials.find((item) => item.id === model.options.materialId);
     return (
       !model.analysis ||
+      model.analysis.dimensions_mm.some((axis) => axis > 500) ||
       !material?.compatible ||
       !material.colors.some(
-        (color) =>
-          (color.code === model.options.color || color.name === model.options.color) &&
-          color.inStock,
+        (color) => color.code === model.options.color || color.name === model.options.color,
       ) ||
       needsManualReview(model)
     );
   });
-  if (manual)
-    return {
-      manual: true,
-      checkout: {
-        id: crypto.randomUUID(),
-        expires_at: Math.floor(Date.now() / 1000) + 600,
-        packing: { status: 'manual_review', parcels: [], packaging_grosze: 0 },
-        offers: [],
-        print_grosze: 0,
-        print_lines: [],
-        setup_grosze: 0,
-        packaging_grosze: 0,
-        production_demo: true,
-        stripe_configured: false,
-        furgonetka_configured: false,
-        reason:
-          'Wymagania, materiał lub dostępność wymagają indywidualnej wyceny. Prześlij plik i wybierz dostępny materiał, aby otrzymać cenę automatycznie.',
-      },
-    };
+  if (manual) return manualQuote();
   const parts = [];
   for (const model of models) {
     let quoteId: string | undefined;
@@ -231,7 +238,17 @@ export async function quoteModels(
       const key = JSON.stringify(body);
       let estimate = engineQuotes.get(key);
       if (!estimate || estimate.expires_at <= Date.now() / 1000 + 30) {
-        estimate = await estimateModel(body, signal);
+        try {
+          estimate = await estimateModel(body, signal);
+        } catch (error) {
+          if (
+            error instanceof ApiError &&
+            error.status === 422 &&
+            error.code === 'manual_quote_required'
+          )
+            return manualQuote(error.message);
+          throw error;
+        }
         if (engineQuotes.size >= 64) engineQuotes.delete(engineQuotes.keys().next().value!);
         engineQuotes.set(key, estimate);
       }

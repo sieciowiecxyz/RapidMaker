@@ -3,9 +3,17 @@
   let Page = $state<Component | null>(null);
   let error = $state(false);
   onMount(() => {
-    const storefront = location.pathname === '/' || location.pathname.replace(/\/$/, '') === '/wycena';
-    const load = storefront ? import('./storefront/Storefront.svelte') : import('./Workspace.svelte');
-    load.then(module => { Page = module.default; }).catch(() => { error = true; });
+    const storefront =
+      location.pathname === '/' || location.pathname.replace(/\/$/, '') === '/wycena';
+    const show = (module: { default: Component }) => {
+      Page = module.default;
+    };
+    const failed = () => {
+      error = true;
+    };
+    // Keep imports in separate branches: Vite must preload each page's own CSS.
+    if (storefront) void import('./storefront/Storefront.svelte').then(show, failed);
+    else void import('./Workspace.svelte').then(show, failed);
   });
 </script>
 

@@ -10,6 +10,7 @@ mod email;
 mod files;
 mod logging;
 mod mail_inbound;
+mod manual_quotes;
 mod metrics;
 mod metrics_server;
 mod models;

@@ -11,7 +11,6 @@
     busy: boolean;
     onchange: (patch: Partial<PrintModel>) => void;
   } = $props();
-  let fileError = $state('');
   let selections = $derived<
     {
       key: 'orientation' | 'supports' | 'finish' | 'fit' | 'turnaround';
@@ -27,15 +26,6 @@
   ]);
   function change(patch: Partial<PrintSettings>) {
     onchange({ advanced: { ...model.advanced, ...patch } });
-  }
-  function drawing(file?: File) {
-    fileError = '';
-    if (!file) return;
-    if (!/\.pdf$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024) {
-      fileError = 'Wybierz rysunek PDF do 10 MB.';
-      return;
-    }
-    change({ drawing: { name: file.name, size: file.size } });
   }
 </script>
 
@@ -107,27 +97,16 @@
         onchange={(e) => onchange({ notes: e.currentTarget.value })}></textarea></label
     >
     <label
-      >Rysunek techniczny · PDF do 10 MB<input
-        type="file"
-        accept=".pdf,application/pdf"
-        disabled={busy}
-        onchange={(e) => {
-          drawing(e.currentTarget.files?.[0]);
-          e.currentTarget.value = '';
-        }}
-      /></label
+      >Rysunek techniczny · PDF<input type="file" accept=".pdf,application/pdf" disabled /></label
     >
+    <small class="muted">Dodawanie rysunków PDF nie jest jeszcze dostępne.</small>
     {#if model.advanced.drawing}<div class="drawing">
-        <span>{model.advanced.drawing.name}</span><button
+        <span>{model.advanced.drawing.name} · plik nie został wysłany</span><button
           class="button ghost"
           disabled={busy}
           onclick={() => change({ drawing: null })}>Usuń rysunek</button
         >
       </div>{/if}
-    {#if fileError}<p class="alert error" role="alert">{fileError}</p>{/if}
-    <small class="muted"
-      >Zapisujemy tylko nazwę i rozmiar PDF. Zawartość pliku nie jest odczytywana ani wysyłana.</small
-    >
   </div>
 </details>
 

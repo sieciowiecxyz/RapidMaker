@@ -172,7 +172,7 @@ test('password plus email code connects customer orders, files, chat and notific
   await page.getByRole('button', { name: 'Potwierdź i zaloguj', exact: true }).click();
   await expect(page).toHaveURL(/\/konto\/zamowienia$/);
   await expect(page.locator('.price')).toContainText('145,55');
-  await page.getByRole('link', { name: `Szczegóły zamówienia ${id}` }).click();
+  await page.locator(`a[href="/konto/zamowienia/${id}"]`).click();
   await expect(page.getByRole('heading', { name: 'Rozmowa o zamówieniu' })).toBeVisible();
   await expect(page.getByRole('link', { name: /Pobierz/ })).toHaveAttribute(
     'href',

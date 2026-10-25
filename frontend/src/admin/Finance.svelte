@@ -52,13 +52,17 @@
   <div class="finance-summary">
     <span
       >Oczekuje na płatność <strong
-        >{money(orders.filter((o) => !o.paid).reduce((s, o) => s + total(o), 0))}</strong
+        >{money(
+          orders.filter((o) => !o.paid && o.amount !== null).reduce((s, o) => s + total(o)!, 0),
+        )}</strong
       ></span
     ><span
       >Potwierdzone płatności <strong
-        >{money(orders.filter((o) => o.paid).reduce((s, o) => s + total(o), 0))}</strong
+        >{money(
+          orders.filter((o) => o.paid && o.amount !== null).reduce((s, o) => s + total(o)!, 0),
+        )}</strong
       ></span
-    ><span class="muted">Kwoty całych zamówień · PLN</span>
+    ><span class="muted">Znane kwoty zamówień · PLN</span>
   </div>
   <div class="list-tools">
     <div class="filters" aria-label="Filtr płatności">

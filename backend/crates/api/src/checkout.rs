@@ -800,6 +800,7 @@ pub fn router(
         .routes(routes!(payment))
         .merge(super::checkout_legacy::router())
         .merge(super::refunds::router())
+        .merge(super::manual_quotes::router())
         .merge(super::shipments::router())
         .merge(super::shipment_actions::router())
         .with_state(app.clone());

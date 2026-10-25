@@ -249,6 +249,16 @@ mod tests {
             assert!(db.order_paid(id, &provider, 100, 1003).await.unwrap());
             assert!(db.order_status(id, "in_production", 1004).await.unwrap());
             assert!(db.order_status(id, "ready", 1005).await.unwrap());
+            assert!(
+                !db.order_status(id, "completed", 1006).await.unwrap(),
+                "unknown delivery cannot be completed as pickup"
+            );
+            sqlx::query("UPDATE orders SET fulfillment=$2 WHERE id=$1")
+                .bind(id)
+                .bind(json!({"delivery":{"method":"pickup"}}))
+                .execute(&db.pool)
+                .await
+                .unwrap();
         }
         assert!(db.order_status(&first, "completed", 1006).await.unwrap());
         let end = 1006 + COMPLETED_FILE_RETENTION;

@@ -75,6 +75,17 @@ fn validate(input: &EmailInput) -> Result<(), StorageError> {
                             .and_then(Value::as_i64)
                             .is_some_and(|v| v > 0))
             }
+            "manual_offer" => {
+                data.len() == 4
+                    && data
+                        .get("amount_grosze")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|v| (1..=99999999).contains(&v))
+                    && data
+                        .get("valid_until")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|v| v > 0)
+            }
             "payment_received" => {
                 data.len() == 3 && data.get("amount_grosze").and_then(Value::as_u64).is_some()
             }

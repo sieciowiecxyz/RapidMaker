@@ -60,7 +60,7 @@ Linux + bubblewrap + prlimit są wymagane dla parsera i slicera. Slicer korzysta
 
 ## Nowe API
 
-- `GET /api/catalog/materials`: katalog PostgreSQL, kolory i dostępność. Bez kosztów zakupu i surowych presetów.
+- `GET /api/catalog/materials`: PLA/ABS/TPU z PostgreSQL, kolory bez bramki magazynu i dopuszczenie automatycznej wyceny. Bez kosztów zakupu i surowych presetów.
 - `POST /api/models`: surowy STL, STEP/STP lub 3MF do 32 MiB; `X-Model-Filename` = nazwa zakodowana przez `encodeURIComponent`. Zwraca 201, ID, wymiary i termin wygaśnięcia; ustawia prywatną sesję cookie.
 - `GET /api/models/{id}` i `/api/models/{id}/source`: metadane i pobranie oryginału, tylko z cookie właściciela. Brak sesji → 401, obcy/wygasły model → 404.
 - `POST /api/quotes/estimate`: JSON `{"model_id":"ID z uploadu","material_id":"GFA00","color_code":"10300","options":{"quantity":1,"quality":"standard","wall_loops":2,"infill_percent":15}}`. Wymaga cookie właściciela. Ilość 1–1000, jakość draft/standard/fine, 2–8 ścian, 5–100% wypełnienia. Odpowiedź 202: ID i status trwałego zadania; wynik/snapshot pobierany przez `GET /api/quotes/jobs/{id}`. Nie uruchamia płatności.
@@ -86,11 +86,11 @@ Import aktualizuje źródłowe metadane materiału, zachowując konfigurację op
 
 ## Checkout
 
-`POST /api/checkout/quote`: JSON `{parts:[{id,quantity,analysis_id,quote_id}],delivery,contact,manual}`. `analysis_id` to ID prywatnego modelu, `quote_id` to snapshot slicera; `id` identyfikuje pozycję koszyka. Cookie właściciela jest wymagane. Wymiary i masa klienta nie są akceptowane. Cena zakupu, dostępność, wersja stawek/profilu, model i ilość muszą nadal odpowiadać snapshotowi, ważnemu 10 min; inaczej 409 i ponowna wycena. Zmienione ustawienia wymagają nowego ID wyceny.
+`POST /api/checkout/quote`: JSON `{parts:[{id,quantity,analysis_id,quote_id}],delivery,contact,manual}`. `analysis_id` to ID prywatnego modelu, `quote_id` to snapshot slicera; `id` identyfikuje pozycję koszyka. Cookie właściciela jest wymagane. Wymiary i masa klienta nie są akceptowane. Cena zakupu, dopuszczenie profilu, wersja stawek/profilu, model i ilość muszą nadal odpowiadać snapshotowi, ważnemu 10 min; inaczej 409 i ponowna wycena. Zmienione ustawienia wymagają nowego ID wyceny.
 
 Koszty części sumowane przed naliczeniem jednej opłaty przygotowania, marży, minimum i VAT. Podział brutto między pozycje zachowuje dokładną sumę groszy. Pakowanie bierze wymiary modelu i masę slicera na sztukę, łącznie z odpadami/podporami (konserwatywny szacunek). Różne modele mają oddzielne partie; brak optymalizacji wspólnej płyty. Nieobsługiwane wymagania/brak snapshotu → ręczna ocena bez płatnej oferty.
 
-Checkout ma trwały szkic, ofertę i próbę płatności w PostgreSQL. Przed Stripe atomowo zapisuje zamówienie, kwotę, wybraną dostawę/paczki i ochronę plików. Worker obsługuje podpisane webhooki, retry i odczyt po restarcie; zapłata i outbox zapisują się raz. Stare trasy są adapterami wspólnego silnika. Nowe DTO, kody błędów, lokalny listener i odzyskiwanie: [kontrakt checkoutu](../docs/checkout.md). Integracja pozostaje testowa; frontend kont/auth wymaga podłączenia.
+Checkout ma trwały szkic, ofertę i próbę płatności w PostgreSQL. Przed Stripe atomowo zapisuje zamówienie, kwotę, wybraną dostawę/paczki i ochronę plików. Worker obsługuje podpisane webhooki, retry i odczyt po restarcie; zapłata i outbox zapisują się raz. Stare trasy są adapterami wspólnego silnika. Nowe DTO, kody błędów, lokalny listener i odzyskiwanie: [kontrakt checkoutu](../docs/checkout.md). Integracja pozostaje testowa; frontend kont/auth jest podłączony.
 
 ## Spis API
 
@@ -106,7 +106,7 @@ Upload STL/STEP/3MF tworzy oryginał, `canonical.stl` i `preview.glb` w jednym p
 
 `POST /api/models` oraz `GET /api/models/{id}` zwracają `preview_url` i `preview_bytes`. Właściciel pobiera binarny podgląd przez `GET /api/models/{id}/preview.glb`: `model/gltf-binary`, `no-store`, `nosniff`. Obcy/wygasły model: 404; starszy upload bez podglądu: 409 i prośba o ponowne przesłanie (`preview_url:null`). Brak/uszkodzenie pliku nie powoduje zwrócenia zastępczego modelu. Pobranie nie uruchamia konwersji.
 
-GLB maks. 25 MiB; rozmiar oryginału + siatki + GLB liczy się do wspólnych limitów. Zapis i pobieranie są prywatne, retencja i ochrona aktywnych zadań wspólne dla całego katalogu. Oryginał i STL nadal służą produkcji, GLB wyłącznie podglądowi. Backend jest gotowy; frontend GLTFLoader/Three.js wymaga osobnego podłączenia.
+GLB maks. 25 MiB; rozmiar oryginału + siatki + GLB liczy się do wspólnych limitów. Zapis i pobieranie są prywatne, retencja i ochrona aktywnych zadań wspólne dla całego katalogu. Oryginał i STL nadal służą produkcji, GLB wyłącznie podglądowi. Frontend odczytuje wyłącznie nasz GLB przez ograniczony parser w workerze i natywny WebGL; biały podgląd nie wymaga koloru.
 
 ## Pliki zamówień
 
@@ -130,7 +130,7 @@ Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie n
 
 ## Rozmowy i email
 
-[Kontrakt i diagnostyka](../docs/chat-email.md): wspólna historia przez API/SMTP/IMAP, kopie treści, grupowanie 60 s, paginacja i read cursor. `MAIL_INBOUND_MODE=test`, `MAIL_IMAP_MAILBOX=void@sieciowiec.xyz`, osobny `MAIL_REPLY_KEY` w SOPS. Domyślnie odbiór disabled; worker startuje razem z API, odczytuje folder bez zmiany flag/usuwania. CLI `--mail-receive` odbiera jedną partię, `--mail-operator EMAIL on|off` nadaje/cofa wąską zgodę istniejącemu operatorowi. Frontend rozmów nadal wymaga podłączenia.
+[Kontrakt i diagnostyka](../docs/chat-email.md): wspólna historia przez API/SMTP/IMAP, kopie treści, grupowanie 60 s, paginacja i read cursor. `MAIL_INBOUND_MODE=test`, `MAIL_IMAP_MAILBOX=void@sieciowiec.xyz`, osobny `MAIL_REPLY_KEY` w SOPS. Domyślnie odbiór disabled; worker startuje razem z API, odczytuje folder bez zmiany flag/usuwania. CLI `--mail-receive` odbiera jedną partię, `--mail-operator EMAIL on|off` nadaje/cofa wąską zgodę istniejącemu operatorowi. Frontend rozmów używa tego API; ostatni stan rzeczywistego doręczenia opisuje [checkpoint](../docs/MILESTONES.md#checkpoint-2026-10-25).
 
 
 ## Nadawanie przesyłek
@@ -174,3 +174,11 @@ Sprawdzono rzeczywisty adapter Rust: sześciu kurierów i cztery sieci automató
 `METRICS_TOKEN` w `.env`/SOPS włącza prywatne `127.0.0.1:18435/metrics` z Bearer auth; brak zmiennej wyłącza zbieranie. HTTP: liczniki/klasy statusu, histogram opóźnienia, in-flight i uptime; bez danych klienta i surowych URL. Osobny listener, bez trasy w publicznym API. [Konfiguracja Prometheusa/Grafany i granice](../docs/metrics.md).
 
 Uprawnienia i aktualne wyniki audytu: [security.md](../docs/security.md). Izolowany test API obejmuje dwóch klientów, gościa, admina/MFA, CSRF i własność plików.
+
+## Ręczna oferta
+
+`api/manual_quotes.rs` orkiestruje `storage/manual_quotes.rs` (migracja 0019), istniejące płatności i outbox. Zalogowany klient: `POST /api/account/manual-quotes`; admin: `POST /api/admin/orders/{id}/quote`; klient: `POST /api/account/orders/{id}/payment`. Kontrakty i typy w OpenAPI `/api/`. Oferta i status są w `manual_offer` własnego zamówienia.
+
+Brak automatycznego profilu/ceny, przekroczenie 500 mm lub niepasująca P1P kierują do ręcznej oceny. Admin podaje całkowite brutto i zawartą w nim dostawę, zakres oraz uzgodnioną metodę; nie udajemy automatycznej oferty Furgonetki. Prośba ma 14 dni, oferta 7 dni. Jedna próba płatności na zamówienie; po rozpoczęciu nie można zmienić ceny, po definitywnym wygaśnięciu potrzebne nowe zgłoszenie. Publikacja/email i zapłata/email są atomowe.
+
+Worker uzgadnia próby ze Stripe. Po 24 h zamyka tylko potwierdzone nieopłacone Session/Intent; processing, succeeded i requires_capture zachowują ochronę plików. Awaria Stripe nie zwalnia hold. Sprzątanie usuwa cały katalog modelu dopiero po utracie wszystkich aktywnych hold.

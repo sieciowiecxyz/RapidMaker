@@ -14,14 +14,16 @@
     contact,
     onchange,
     paymentVisible = false,
+    collectAddress = true,
   }: {
     paymentVisible?: boolean;
+    collectAddress?: boolean;
     publishableKey: string;
     amount: number;
     contact: Contact;
     onchange: (address: Partial<Contact>) => void;
   } = $props();
-  let addressHost: HTMLDivElement;
+  let addressHost = $state<HTMLDivElement>();
   let paymentHost: HTMLDivElement;
   let ready = $state(false),
     error = $state('');
@@ -46,7 +48,6 @@
           mode: 'payment',
           amount: Math.max(100, amount),
           currency: 'pln',
-          allowedPaymentMethodTypes: ['card'],
           locale: 'pl',
           appearance: {
             theme: 'night',
@@ -74,32 +75,34 @@
           },
         });
         payment = elements.create('payment', { layout: 'tabs', wallets: { link: 'never' } });
-        address = elements.create('address', {
-          mode: 'shipping',
-          allowedCountries: ['PL'],
-          autocomplete: { mode: 'automatic' },
-          fields: { phone: 'never' },
-          defaultValues: {
-            name: contact.name,
-            address: {
-              line1: contact.street,
-              city: contact.city,
-              postal_code: contact.postalCode,
-              country: 'PL',
+        if (collectAddress) {
+          address = elements.create('address', {
+            mode: 'shipping',
+            allowedCountries: ['PL'],
+            autocomplete: { mode: 'automatic' },
+            fields: { phone: 'never' },
+            defaultValues: {
+              name: contact.name,
+              address: {
+                line1: contact.street,
+                city: contact.city,
+                postal_code: contact.postalCode,
+                country: 'PL',
+              },
             },
-          },
-        });
-        address.on('change', (event) => {
-          const a = event.value.address;
-          onchange({
-            name: event.value.name,
-            street: [a.line1, a.line2].filter(Boolean).join(', '),
-            city: a.city,
-            postalCode: a.postal_code,
           });
-        });
+          address.on('change', (event) => {
+            const a = event.value.address;
+            onchange({
+              name: event.value.name,
+              street: [a.line1, a.line2].filter(Boolean).join(', '),
+              city: a.city,
+              postalCode: a.postal_code,
+            });
+          });
+          address.mount(addressHost!);
+        }
         payment.mount(paymentHost);
-        address.mount(addressHost);
         ready = true;
       } catch (e) {
         error = (e as Error).message;
@@ -117,6 +120,7 @@
   });
   export async function validateAddress() {
     if (!ready) throw new Error(error || 'Poczekaj na formularz Stripe.');
+    if (!collectAddress) return;
     const result = await address.getValue();
     if (!result.complete) {
       address.focus();
@@ -143,12 +147,12 @@
 </script>
 
 <section class="stripe-fields">
-  <div class="stripe-fields" hidden={paymentVisible}>
-    <div bind:this={addressHost}></div>
-  </div>
+  {#if collectAddress}<div class="stripe-fields" hidden={paymentVisible}>
+      <div bind:this={addressHost}></div>
+    </div>{/if}
   <div class="stripe-fields" hidden={!paymentVisible}>
-    <h3>Płatność kartą · Stripe test</h3>
-    <p>Dane karty obsługuje Stripe. Przycisk „Zapłać” zatwierdza podaną kwotę.</p>
+    <h3>Płatność</h3>
+    <p>Dane płatności obsługuje Stripe. Przycisk „Zapłać” zatwierdza podaną kwotę.</p>
     <div bind:this={paymentHost}></div>
   </div>
   {#if !ready && !error}<p role="status">Wczytujemy bezpieczny formularz…</p>{/if}

@@ -65,7 +65,7 @@ fn draft(row: PgRow) -> Result<CheckoutDraft, StorageError> {
         locked: row.try_get("locked")?,
     })
 }
-fn attempt(row: PgRow) -> Result<PaymentAttempt, StorageError> {
+pub(crate) fn attempt(row: PgRow) -> Result<PaymentAttempt, StorageError> {
     Ok(PaymentAttempt {
         id: row.try_get("id")?,
         draft_id: row.try_get("draft_id")?,
@@ -272,14 +272,13 @@ impl Storage {
             sqlx::query_scalar("SELECT value FROM pricing_config WHERE id=true FOR SHARE")
                 .fetch_optional(&mut *tx)
                 .await?;
-        let rows=sqlx::query("SELECT q.request,m.production_enabled,m.cost_net_grosze_per_kg,c.in_stock FROM quotes q JOIN catalog_materials m ON m.id=q.request->>'material_id' JOIN catalog_colors c ON c.material_id=m.id AND c.code=q.request->>'color_code' WHERE q.id=ANY($1) ORDER BY m.id,c.code FOR SHARE OF m,c")
+        let rows=sqlx::query("SELECT q.request,m.production_enabled,m.cost_net_grosze_per_kg FROM quotes q JOIN catalog_materials m ON m.id=q.request->>'material_id' JOIN catalog_colors c ON c.material_id=m.id AND c.code=q.request->>'color_code' WHERE q.id=ANY($1) ORDER BY m.id,c.code FOR SHARE OF m,c")
             .bind(&ids).fetch_all(&mut *tx).await?;
         let mut valid = 0;
         for row in rows {
             let snapshot: Value = row.try_get("request")?;
             let cost: Option<i64> = row.try_get("cost_net_grosze_per_kg")?;
             if row.get::<bool, _>("production_enabled")
-                && row.get::<bool, _>("in_stock")
                 && cost.is_some_and(|v| v > 0)
                 && snapshot["purchase_net_grosze_per_kg"].as_i64() == cost
                 && policy.as_ref().is_none_or(|p| snapshot["rates"] == *p)
@@ -663,7 +662,7 @@ mod tests {
         let owner = crate::account_owner(&id);
         let material = uuid::Uuid::new_v4().to_string();
         sqlx::query("INSERT INTO catalog_materials(id,name,density_g_cm3,cost_net_grosze_per_kg,production_enabled,source) VALUES($1,'Test',1.2,5000,true,'{}')").bind(&material).execute(&db.pool).await.unwrap();
-        sqlx::query("INSERT INTO catalog_colors(material_id,code,name,rgba,in_stock) VALUES($1,'test','Test','[\"#FFFFFFFF\"]',true)").bind(&material).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO catalog_colors(material_id,code,name,rgba,in_stock) VALUES($1,'test','Test','[\"#FFFFFFFF\"]',false)").bind(&material).execute(&db.pool).await.unwrap();
         let model = crate::StoredModel {
             id: uuid::Uuid::new_v4().to_string(),
             owner_hash: owner.clone(),
