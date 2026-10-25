@@ -70,16 +70,30 @@
     if (!session) throw new Error(sessionError || 'Nie udało się potwierdzić sesji.');
     if (session.role === 'admin' && !session.adminVerified) return;
     await claimGuest();
-    const next = new URLSearchParams(location.search).get('next');
+    const next =
+      new URLSearchParams(location.search).get('next') ??
+      (protectedArea ? path + location.hash : null);
+    // Email links and a guest checkout survive login; never accept arbitrary redirect URLs.
+    const fixed = [
+      '/zamowienie',
+      '/konto/zamowienia',
+      '/konto/ustawienia',
+      ...(session.role === 'admin'
+        ? [
+            '/admin.html',
+            '/admin/materialy',
+            '/admin/ustawienia',
+            '/admin/zamowienia',
+            '/admin/produkcja',
+          ]
+        : []),
+    ];
+    const orderLink =
+      /^\/(?:konto|admin)\/zamowienia\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:#(?:platnosc|rozmowa))?$/;
     const destination =
       next &&
-      [
-        '/admin.html',
-        '/admin/materialy',
-        '/admin/ustawienia',
-        '/konto/zamowienia',
-        '/konto/ustawienia',
-      ].includes(next)
+      (fixed.includes(next) ||
+        (orderLink.test(next) && (!next.startsWith('/admin/') || session.role === 'admin')))
         ? next
         : null;
     navigate(destination ?? (session.role === 'admin' ? '/admin.html' : '/konto/zamowienia'));

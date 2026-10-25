@@ -2,7 +2,7 @@
 """Read only fresh test mail in the configured iCloud folder; stdout is private JSON."""
 import email
 from email.policy import default
-from email.utils import parseaddr
+from email.utils import parseaddr, formatdate, make_msgid
 import imaplib
 import json
 from pathlib import Path
@@ -27,6 +27,8 @@ if request['mode'] == 'reply':
     message['From'] = 'void@sieciowiec.xyz'
     message['To'] = 'void@sieciowiec.xyz'
     message['Subject'] = 'Re: Rapidmaker — test rozmowy'
+    message['Date'] = formatdate(localtime=False)
+    message['Message-ID'] = make_msgid(domain='sieciowiec.xyz')
     reference = request['message_id']
     if len(reference) > 512 or any(ord(c) < 32 for c in reference): raise SystemExit('Invalid test reference')
     message['In-Reply-To'] = reference

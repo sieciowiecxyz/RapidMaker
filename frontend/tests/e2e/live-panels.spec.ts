@@ -67,7 +67,7 @@ async function fixture(page: Page, role = 'client', verified = true) {
         user: { id: 'client-1', email: 'client@example.invalid', role },
         stage,
         second_factor: 'email',
-        admin_verified: false,
+        admin_verified: role === 'admin',
         csrf_token: 'csrf-contract',
       };
     } else if (path === '/api/auth/start') data = { challenge_id: 'challenge-1' };
@@ -138,7 +138,9 @@ async function fixture(page: Page, role = 'client', verified = true) {
         }
         data = refunds[0];
       } else data = refunds;
-    } else throw new Error('Unexpected API ' + method + ' ' + path);
+    } else if (path === '/api/checkout/config') data = { publishable_key: null };
+    else if (path === '/api/catalog/materials') data = { materials: [] };
+    else throw new Error('Unexpected API ' + method + ' ' + path);
     return route.fulfill({
       status: method === 'POST' && path.endsWith('/refunds') ? 202 : 200,
       json: data,
@@ -249,3 +251,51 @@ test('refund retry after lost response reuses request id and remains pending', a
     api.writes.filter((w) => w.path.endsWith('/refunds')).every((w) => w.csrf === 'csrf-contract'),
   ).toBe(true);
 });
+
+for (const scenario of [
+  {
+    name: 'admin email link',
+    start: `/admin/zamowienia/${id}#rozmowa`,
+    target: `/admin/zamowienia/${id}#rozmowa`,
+    role: 'admin',
+  },
+  {
+    name: 'client rejection of admin return',
+    start: `/logowanie?next=${encodeURIComponent(`/admin/zamowienia/${id}`)}`,
+    target: '/konto/zamowienia',
+    role: 'client',
+  },
+  {
+    name: 'email order link',
+    start: `/konto/zamowienia/${id}#platnosc`,
+    target: `/konto/zamowienia/${id}#platnosc`,
+  },
+  {
+    name: 'explicit order return',
+    start: `/logowanie?next=${encodeURIComponent(`/konto/zamowienia/${id}`)}`,
+    target: `/konto/zamowienia/${id}`,
+  },
+  { name: 'guest checkout return', start: '/logowanie?next=%2Fzamowienie', target: '/zamowienie' },
+  {
+    name: 'external redirect rejection',
+    start: '/logowanie?next=https%3A%2F%2Fexample.invalid%2Fsteal',
+    target: '/konto/zamowienia',
+  },
+]) {
+  test(`login preserves ${scenario.name} without accepting arbitrary destinations`, async ({
+    page,
+  }) => {
+    const api = await fixture(page, scenario.role ?? 'client');
+    api.signOut();
+    await page.goto(scenario.start);
+    await page.getByLabel('Adres email').fill('client@example.invalid');
+    await page.getByLabel('Hasło', { exact: true }).fill('correct horse battery');
+    await page.getByRole('button', { name: 'Zaloguj hasłem', exact: true }).click();
+    await page.getByLabel('Kod z emaila').fill('12345678');
+    await page.getByRole('button', { name: 'Potwierdź i zaloguj', exact: true }).click();
+    await expect(page).toHaveURL(new URL(scenario.target, 'http://127.0.0.1:18431').href);
+    if (scenario.target.includes(id))
+      await expect(page.getByRole('heading', { name: 'Rozmowa o zamówieniu' })).toBeVisible();
+    expect(api.writes.find((w) => w.path.endsWith('/claim-guest'))).toBeDefined();
+  });
+}
