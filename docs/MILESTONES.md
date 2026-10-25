@@ -1,6 +1,6 @@
 # Finalizacja — kolejność i kryteria
 
-Active: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 gotowa; pełny cel nadal otwarty. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
+Blocked: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 gotowa; pełny cel nadal otwarty. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
 
 ## F0 — Stan i uruchomienie
 
@@ -52,7 +52,7 @@ Active: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 go
 - [x] Rzeczywiste hasło+email, passkey+email i admin hasło+TOTP; uprawnienia dwóch kont i admina. Nowsze ponowienia emailowego logowania blokuje brak doręczeń poniżej.
 - [x] Cztery niezależne konwersje/klienci, responsywne HTTP i ograniczone workery; PostgreSQL lease/retry/fencing po utracie workera, brak pomieszania wyników.
 - [ ] Najnowsza oferta/chat → doręczony email → odpowiedź SMTP → ta sama rozmowa. Test istnieje i raportuje FAIL, gdy wiadomość nie dotarła.
-- Przejście: cały rzeczywisty zestaw PASS. **Goal pozostaje aktywny; nie zamykać na buildzie ani samej płatności.**
+- Przejście: cały rzeczywisty zestaw PASS. **Goal nie jest ukończony; blokada doręczenia nie oznacza PASS.**
 
 ## Checkpoint 2026-10-25
 
@@ -67,3 +67,5 @@ Ostatnie wiadomości testowe odczytane w folderze iCloud: 24.10 23:57 UTC. Kolej
 Rust 26219 → 27651 (+1432): backend/crates/**/*.rs, kod bez pustych/komentarzy/generowanych, łącznie z testami inline i przykładem fixture (bez wiarygodnego podziału production/test). Nowe moduły: manual_quotes API/storage, migracja i podgląd/oferta/płatność UI oraz izolowany runner. Brak nowych zależności produkcyjnych.
 
 Kontynuacja: wykryto i poprawiono pomijany powrót z logowania do konkretnego zamówienia z emaila oraz `next=/zamowienie`. Allowlista obejmuje konkretne lokalne trasy i pełny UUID; klient nie może wracać do admina, adresy zewnętrzne są odrzucane. PASS build i 6 regresji Playwright UI (5 od razu, checkout po uzupełnieniu odpowiedzi fixture o config/katalog). Testowa odpowiedź SMTP dostaje poprawne Date i unikalny Message-ID; py_compile PASS, odbioru nadal nie deklarujemy. Odczyt iCloud nadal kończy się na UID 343; bez kolejnego wysyłania kodów. Rust i zależności bez zmian w tej poprawce.
+
+Audyt blokady: trzeci kolejny obrót celu nadal potwierdza ten sam warunek — świeży odczyt IMAP kończy się na UID 343. Brak czynnego procesu testowego, na który należy czekać; zakończony journey pozostaje FAIL na doręczeniach. Po poprawce powrotu po logowaniu nie pozostała niezależna implementacja F0–F5 do wykonania. Nie ponawiamy tych samych wysyłek. Wznowienie: potwierdzić, gdzie trafiają nowe testy do void, lub przywrócić doręczenie/konfigurację odbioru; następnie uruchomić rzeczywisty journey i dopiero po PASS zamknąć F3/F6. Pytanie do użytkownika o odbiór nowych wiadomości pozostaje bez odpowiedzi.
