@@ -4,7 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use flate2::read::DeflateDecoder;
 use lib3mf::{Model as ThreeMfModel, ParserConfig, SpecConformance};
 use ply_rs_bw::{
     parser::Parser as PlyParser,
@@ -507,65 +506,60 @@ fn gltf_has_external_uri(value: &serde_json::Value) -> bool {
 }
 
 fn validate_3mf_container(input: &[u8], limits: &ThreeMfLimits) -> Result<(), PreviewError> {
-    if input.len() < 22 {
-        return Err(PreviewError::MalformedInput);
-    }
-    let eocd = find_zip_eocd(input).ok_or(PreviewError::MalformedInput)?;
-    let entry_count = read_u16_le(input, eocd + 10)? as usize;
-    let central_size = read_u32_le(input, eocd + 12)? as usize;
-    let central_offset = read_u32_le(input, eocd + 16)? as usize;
-    if entry_count > limits.max_entry_count {
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
+    if archive.len() > limits.max_entry_count {
         return Err(PreviewError::TooManyContainerEntries);
     }
-    if central_offset
-        .checked_add(central_size)
-        .is_none_or(|end| end > input.len())
-    {
-        return Err(PreviewError::MalformedInput);
-    }
     let mut seen = std::collections::BTreeSet::new();
-    let mut cursor = central_offset;
-    let mut total_uncompressed = 0_u64;
+    let mut total = 0_u64;
     let mut saw_model = false;
-    for _ in 0..entry_count {
-        if input.get(cursor..cursor + 4) != Some(b"PK\x01\x02") {
-            return Err(PreviewError::MalformedInput);
-        }
-        let method = read_u16_le(input, cursor + 10)?;
-        let compressed = read_u32_le(input, cursor + 20)? as u64;
-        let uncompressed = read_u32_le(input, cursor + 24)? as u64;
-        let name_len = read_u16_le(input, cursor + 28)? as usize;
-        let extra_len = read_u16_le(input, cursor + 30)? as usize;
-        let comment_len = read_u16_le(input, cursor + 32)? as usize;
-        let local_offset = read_u32_le(input, cursor + 42)? as usize;
-        let name_start = cursor + 46;
-        let name_end = name_start + name_len;
-        let name = std::str::from_utf8(
-            input
-                .get(name_start..name_end)
-                .ok_or(PreviewError::MalformedInput)?,
-        )
-        .map_err(|_| PreviewError::UnsafeContainer)?;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|_| PreviewError::MalformedInput)?;
+        let name = entry.name().map_err(|_| PreviewError::UnsafeContainer)?;
+        let name = if entry.is_dir() {
+            name.trim_end_matches('/')
+        } else {
+            name.as_ref()
+        };
         let normalized = normalize_container_path(name)?;
         if !seen.insert(normalized.clone()) {
             return Err(PreviewError::DuplicateContainerPath);
         }
-        total_uncompressed = total_uncompressed
-            .checked_add(uncompressed)
+        if entry.encrypted() {
+            return Err(PreviewError::UnsafeContainer);
+        }
+        total = total
+            .checked_add(entry.size())
             .ok_or(PreviewError::ContainerTooLarge)?;
-        if uncompressed > limits.max_entry_bytes
-            || total_uncompressed > limits.max_uncompressed_bytes
-        {
+        if entry.size() > limits.max_entry_bytes || total > limits.max_uncompressed_bytes {
             return Err(PreviewError::ContainerTooLarge);
         }
-        if normalized == "3D/3dmodel.model" {
-            saw_model = true;
-        }
+        saw_model |= normalized == "3D/3dmodel.model";
         if normalized.ends_with(".rels") {
-            inspect_relationship_entry(input, local_offset, method, compressed as usize)?;
+            let mut text = String::new();
+            (&mut entry)
+                .take(limits.max_entry_bytes.saturating_add(1))
+                .read_to_string(&mut text)
+                .map_err(|_| PreviewError::MalformedInput)?;
+            if text.len() as u64 > limits.max_entry_bytes {
+                return Err(PreviewError::ContainerTooLarge);
+            }
+            inspect_relationships(&text)?;
         }
-        cursor = name_end + extra_len + comment_len;
     }
+    archive
+        .validate_header_consistency()
+        .map_err(|error| match error {
+            zip::result::ZipError::InvalidArchive(message)
+                if message.contains("duplicate file names") =>
+            {
+                PreviewError::DuplicateContainerPath
+            }
+            _ => PreviewError::MalformedInput,
+        })?;
     if saw_model {
         Ok(())
     } else {
@@ -589,34 +583,7 @@ fn normalize_container_path(name: &str) -> Result<String, PreviewError> {
     }
 }
 
-fn inspect_relationship_entry(
-    input: &[u8],
-    local_offset: usize,
-    method: u16,
-    compressed_len: usize,
-) -> Result<(), PreviewError> {
-    if input.get(local_offset..local_offset + 4) != Some(b"PK\x03\x04") {
-        return Err(PreviewError::MalformedInput);
-    }
-    let name_len = read_u16_le(input, local_offset + 26)? as usize;
-    let extra_len = read_u16_le(input, local_offset + 28)? as usize;
-    let data_start = local_offset + 30 + name_len + extra_len;
-    let data = input
-        .get(data_start..data_start + compressed_len)
-        .ok_or(PreviewError::MalformedInput)?;
-    let text = match method {
-        0 => std::str::from_utf8(data)
-            .map_err(|_| PreviewError::MalformedInput)?
-            .to_owned(),
-        8 => {
-            let mut text = String::new();
-            DeflateDecoder::new(data)
-                .read_to_string(&mut text)
-                .map_err(|_| PreviewError::MalformedInput)?;
-            text
-        }
-        _ => return Err(PreviewError::ExternalReferenceDisabled),
-    };
+fn inspect_relationships(text: &str) -> Result<(), PreviewError> {
     if text.contains("TargetMode=\"External\"")
         || text.contains("TargetMode='External'")
         || text.contains("Target=\"http://")
@@ -630,24 +597,6 @@ fn inspect_relationship_entry(
     } else {
         Ok(())
     }
-}
-
-fn find_zip_eocd(input: &[u8]) -> Option<usize> {
-    input.windows(4).rposition(|window| window == b"PK\x05\x06")
-}
-
-fn read_u16_le(input: &[u8], offset: usize) -> Result<u16, PreviewError> {
-    let bytes = input
-        .get(offset..offset + 2)
-        .ok_or(PreviewError::MalformedInput)?;
-    Ok(u16::from_le_bytes(bytes.try_into().expect("slice length")))
-}
-
-fn read_u32_le(input: &[u8], offset: usize) -> Result<u32, PreviewError> {
-    let bytes = input
-        .get(offset..offset + 4)
-        .ok_or(PreviewError::MalformedInput)?;
-    Ok(u32::from_le_bytes(bytes.try_into().expect("slice length")))
 }
 
 pub fn parse_stl(
@@ -890,35 +839,53 @@ fn scene_from_3mf(
         ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient);
     let model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
         .map_err(|_| PreviewError::MalformedInput)?;
-    let scale = three_mf_unit_scale_mm(model.unit.as_str())?;
-    let mut object_index_by_id = HashMap::new();
-    for (index, object) in model.resources.objects.iter().enumerate() {
-        object_index_by_id.insert(object.id, index);
+    // Production-extension parts live inside the same already-validated ZIP.
+    // IDs are local to each .model file, not global across the package.
+    let mut package = lib3mf::opc::Package::open_lenient(Cursor::new(input), true)
+        .map_err(|_| PreviewError::MalformedInput)?;
+    let mut models = HashMap::from([("3D/3dmodel.model".to_owned(), model)]);
+    for path in package.file_names() {
+        if path.ends_with(".model") && !models.contains_key(&path) {
+            check_timeout(started, limits)?;
+            let xml = package
+                .get_file(&path)
+                .map_err(|_| PreviewError::MalformedInput)?;
+            let part = lib3mf::parser::parse_model_xml_with_config(
+                &xml,
+                ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
+            )
+            .map_err(|_| PreviewError::MalformedInput)?;
+            models.insert(path, part);
+        }
     }
-
+    let model = &models["3D/3dmodel.model"];
+    let scale = three_mf_unit_scale_mm(&model.unit)?;
     let mut walker = ThreeMfObjectWalker {
-        model: &model,
-        object_index_by_id: &object_index_by_id,
+        models: &models,
         stack: Vec::new(),
         builder: MeshSceneBuilder::default(),
         limits,
         started,
     };
     let root_transform = mat4_scale(scale);
-
     if model.build.items.is_empty() {
         for object in &model.resources.objects {
-            walker.emit_object(object.id, root_transform)?;
+            walker.emit_object("3D/3dmodel.model", object.id, root_transform)?;
         }
     } else {
         for item in &model.build.items {
+            let path = three_mf_part_path(item.production_path.as_deref(), "3D/3dmodel.model")?;
+            let part = models.get(path).ok_or(PreviewError::MalformedInput)?;
             let transform = mat4_mul(
                 root_transform,
-                item.transform
-                    .map(mat4_from_3mf_transform)
-                    .unwrap_or_else(mat4_identity),
+                mat4_mul(
+                    item.transform
+                        .map(mat4_from_3mf_transform)
+                        .unwrap_or_else(mat4_identity),
+                    mat4_scale(three_mf_unit_scale_mm(&part.unit)? / scale),
+                ),
             );
-            walker.emit_object(item.objectid, transform)?;
+            walker.emit_object(path, item.objectid, transform)?;
         }
     }
 
@@ -1112,10 +1079,25 @@ fn collect_gltf_indices(
     Ok(out)
 }
 
+fn three_mf_part_path<'a>(
+    path: Option<&'a str>,
+    current: &'a str,
+) -> Result<&'a str, PreviewError> {
+    let Some(path) = path else {
+        return Ok(current);
+    };
+    // A leading slash denotes the ZIP root in 3MF; it never names a host file.
+    let path = path.strip_prefix('/').unwrap_or(path);
+    normalize_container_path(path)?;
+    if !path.ends_with(".model") {
+        return Err(PreviewError::UnsafeContainer);
+    }
+    Ok(path)
+}
+
 struct ThreeMfObjectWalker<'a> {
-    model: &'a ThreeMfModel,
-    object_index_by_id: &'a HashMap<usize, usize>,
-    stack: Vec<usize>,
+    models: &'a HashMap<String, ThreeMfModel>,
+    stack: Vec<(String, usize)>,
     builder: MeshSceneBuilder,
     limits: &'a ConversionLimits,
     started: Instant,
@@ -1124,17 +1106,27 @@ struct ThreeMfObjectWalker<'a> {
 impl<'a> ThreeMfObjectWalker<'a> {
     fn emit_object(
         &mut self,
+        path: &str,
         object_id: usize,
         transform: [[f32; 4]; 4],
     ) -> Result<(), PreviewError> {
-        if self.stack.contains(&object_id) {
+        check_timeout(self.started, self.limits)?;
+        if self.stack.len() >= 64
+            || self
+                .stack
+                .iter()
+                .any(|(p, id)| p == path && *id == object_id)
+        {
             return Err(PreviewError::MalformedInput);
         }
-        let Some(&object_index) = self.object_index_by_id.get(&object_id) else {
-            return Err(PreviewError::MalformedInput);
-        };
-        self.stack.push(object_id);
-        let object = &self.model.resources.objects[object_index];
+        let model = self.models.get(path).ok_or(PreviewError::MalformedInput)?;
+        let object = model
+            .resources
+            .objects
+            .iter()
+            .find(|object| object.id == object_id)
+            .ok_or(PreviewError::MalformedInput)?;
+        self.stack.push((path.to_owned(), object_id));
         if let Some(mesh) = &object.mesh {
             for triangle in &mesh.triangles {
                 check_timeout(self.started, self.limits)?;
@@ -1166,7 +1158,25 @@ impl<'a> ThreeMfObjectWalker<'a> {
                 .transform
                 .map(mat4_from_3mf_transform)
                 .unwrap_or_else(mat4_identity);
-            self.emit_object(component.objectid, mat4_mul(transform, component_transform))?;
+            let child_path = three_mf_part_path(
+                component
+                    .production
+                    .as_ref()
+                    .and_then(|production| production.path.as_deref()),
+                path,
+            )?;
+            let child = self
+                .models
+                .get(child_path)
+                .ok_or(PreviewError::MalformedInput)?;
+            let units = mat4_scale(
+                three_mf_unit_scale_mm(&child.unit)? / three_mf_unit_scale_mm(&model.unit)?,
+            );
+            self.emit_object(
+                child_path,
+                component.objectid,
+                mat4_mul(transform, mat4_mul(component_transform, units)),
+            )?;
         }
         self.stack.pop();
         Ok(())
@@ -1546,7 +1556,6 @@ fn gltf_number(value: f32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::{Compression, write::DeflateEncoder};
     use std::io::Write;
 
     const CUBE_BINARY: &[u8] = include_bytes!("../tests/fixtures/cube_20mm.stl");
@@ -1575,6 +1584,83 @@ mod tests {
     const STEP_CYLINDER: &[u8] = include_bytes!("../tests/fixtures/step_cylinder.step");
     const STEP_UNSUPPORTED_NURBS: &[u8] =
         include_bytes!("../tests/fixtures/step_unsupported_nurbs.step");
+
+    #[test]
+    fn zip64_small_export_preserves_geometry_and_container_limits() {
+        let input = include_bytes!("../tests/fixtures/zip64_model.3mf");
+        let ordinary = source_to_production(
+            "ordinary.3mf",
+            THREEMF_SIMPLE,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        let zip64 = source_to_production(
+            "export.3mf",
+            input,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(zip64.dimensions_mm, ordinary.dimensions_mm);
+        assert_eq!(zip64.stl, ordinary.stl);
+        assert_eq!(
+            gate_source_format(
+                "export.3mf",
+                input,
+                &ThreeMfLimits {
+                    max_entry_bytes: 100,
+                    ..ThreeMfLimits::default()
+                }
+            )
+            .unwrap_err(),
+            PreviewError::ContainerTooLarge
+        );
+    }
+
+    #[test]
+    fn production_parts_resolve_scoped_ids_units_and_transform() {
+        let input = include_bytes!("../tests/fixtures/production_parts.3mf");
+        let out = source_to_production(
+            "part.3mf",
+            input,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        assert!((out.dimensions_mm[0] - 200.0).abs() < 0.001);
+        assert!((out.dimensions_mm[2] - 200.0).abs() < 0.001);
+        let (scene, _) = parse_stl(&out.stl, &ConversionLimits::default(), Instant::now()).unwrap();
+        let min = scene
+            .positions_mm
+            .iter()
+            .map(|p| p[0])
+            .fold(f32::INFINITY, f32::min);
+        assert!((min - 30.0).abs() < 0.001);
+        assert_eq!(
+            three_mf_part_path(Some("/../outside.model"), "3D/3dmodel.model"),
+            Err(PreviewError::UnsafeContainer)
+        );
+        assert_eq!(
+            three_mf_part_path(Some("https://host/part.model"), "3D/3dmodel.model"),
+            Err(PreviewError::UnsafeContainer)
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a local real-world 3MF path"]
+    fn local_real_3mf() {
+        let input = std::fs::read(std::env::var("TEST_3MF_PATH").expect("TEST_3MF_PATH")).unwrap();
+        let out = source_to_production(
+            "real.3mf",
+            &input,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        assert!(out.dimensions_mm.iter().all(|v| v.is_finite() && *v > 0.0));
+        assert_eq!(&out.glb[..4], b"glTF");
+    }
 
     fn signed_volume(scene: &MeshScene) -> f64 {
         scene
@@ -1936,28 +2022,17 @@ mod tests {
 
     #[test]
     fn compressed_3mf_relationship_entries_are_scanned_for_external_targets() {
-        let body = br#"<Relationships><Relationship TargetMode="External" Target="http://example.com"/></Relationships>"#;
-        let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
-        encoder.write_all(body).unwrap();
-        let compressed = encoder.finish().unwrap();
-        let name = b"_rels/.rels";
-        let mut entry = Vec::new();
-        entry.extend_from_slice(b"PK\x03\x04");
-        entry.extend_from_slice(&20_u16.to_le_bytes());
-        entry.extend_from_slice(&0_u16.to_le_bytes());
-        entry.extend_from_slice(&8_u16.to_le_bytes());
-        entry.extend_from_slice(&0_u16.to_le_bytes());
-        entry.extend_from_slice(&0_u16.to_le_bytes());
-        entry.extend_from_slice(&0_u32.to_le_bytes());
-        entry.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
-        entry.extend_from_slice(&(body.len() as u32).to_le_bytes());
-        entry.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        entry.extend_from_slice(&0_u16.to_le_bytes());
-        entry.extend_from_slice(name);
-        entry.extend_from_slice(&compressed);
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        archive.start_file("3D/3dmodel.model", options).unwrap();
+        archive.write_all(b"unused").unwrap();
+        archive.start_file("_rels/.rels", options).unwrap();
+        archive.write_all(br#"<Relationships><Relationship TargetMode="External" Target="http://example.com"/></Relationships>"#).unwrap();
+        let bytes = archive.finish().unwrap().into_inner();
         assert_eq!(
-            inspect_relationship_entry(&entry, 0, 8, compressed.len()).unwrap_err(),
-            PreviewError::ExternalReferenceDisabled
+            validate_3mf_container(&bytes, &ThreeMfLimits::default()),
+            Err(PreviewError::ExternalReferenceDisabled)
         );
     }
 

@@ -2160,13 +2160,13 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "cxx-build",
- "flate2",
  "gltf",
  "lib3mf",
  "ply-rs-bw",
  "serde_json",
  "tobj",
  "tracing",
+ "zip",
 ]
 
 [[package]]

@@ -9,6 +9,16 @@ pub struct PrintLine {
     pub total_grosze: u32,
 }
 
+/// Convert foreign currency minor units to PLN grosze; round up once to avoid understating cost.
+/// The caller must provide an explicit currency/tax basis and a dated rate (PLN/unit × 10000).
+pub fn foreign_cost_pln_grosze(price_minor: u32, rate_x10000: u32) -> Result<u32, &'static str> {
+    if price_minor == 0 || rate_x10000 == 0 {
+        return Err("Price and exchange rate must be positive");
+    }
+    u32::try_from((u64::from(price_minor) * u64::from(rate_x10000)).div_ceil(10_000))
+        .map_err(|_| "Converted purchase cost overflow")
+}
+
 /// All rates are net PLN grosze. No guessed purchase prices or implicit defaults.
 #[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -356,5 +366,19 @@ mod tests {
             )
             .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod currency_tests {
+    use super::foreign_cost_pln_grosze;
+    #[test]
+    fn exchange_conversion_preserves_minor_units_and_rejects_invalid_or_overflowing_costs() {
+        assert_eq!(foreign_cost_pln_grosze(1999, 43917), Ok(8780));
+        assert_eq!(foreign_cost_pln_grosze(100, 10000), Ok(100));
+        assert_eq!(foreign_cost_pln_grosze(1, 1), Ok(1));
+        assert!(foreign_cost_pln_grosze(0, 43917).is_err());
+        assert!(foreign_cost_pln_grosze(1999, 0).is_err());
+        assert!(foreign_cost_pln_grosze(u32::MAX, u32::MAX).is_err());
     }
 }

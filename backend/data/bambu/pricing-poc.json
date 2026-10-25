@@ -1,0 +1,24 @@
+{
+  "mode": "localhost-poc",
+  "currency": "EUR",
+  "currency_basis": "POC assumption only; Bambu filament_cost does not specify currency",
+  "tax_basis": "net budget assumption; not a verified invoice or supplier net price",
+  "source": "backend/data/bambu/catalog.json#slicer_default_cost",
+  "materials": {
+    "GFA00": "19.99",
+    "GFB00": "19.99",
+    "GFU01": "41.99"
+  },
+  "rates": {
+    "version": "poc-bambu-eur",
+    "setup_grosze": 1200,
+    "handling_per_plate_grosze": 500,
+    "machine_per_hour_grosze": 500,
+    "energy_per_kwh_grosze": 120,
+    "printer_watts": 150,
+    "loss_bps": 1000,
+    "margin_bps": 3000,
+    "vat_bps": 2300,
+    "minimum_net_grosze": 2000
+  }
+}

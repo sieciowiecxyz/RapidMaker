@@ -28,4 +28,7 @@ for name in (".env",):
 
 os.chdir(root)
 binary = root / "backend/target/debug/rapidmaker-api"
+if sys.argv[1:] == ["--pricing-poc"]:
+    binary = root / "backend/target/debug/examples/configure_pricing_poc"
+    os.execv(binary, [str(binary)])
 os.execv(binary, [str(binary), *sys.argv[1:]])

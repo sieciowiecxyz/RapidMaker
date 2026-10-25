@@ -1,6 +1,6 @@
 # Finalizacja — kolejność i kryteria
 
-Stan: **NIEUKOŃCZONE — F2: automatyczna wycena w zwykłym formularzu localhost**. Poprzednie zamknięcie celu było błędne: testy z osobną bazą nie potwierdziły gotowości używanej strony. iCloud i journey ręcznej wyceny mają PASS. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
+Stan: **POC wyceny i poprawka rzeczywistych 3MF sprawdzone na zwykłym localhost**. Poprzednie zamknięcie przed konfiguracją strony było błędne; aktualne dowody poniżej. Docelowy cennik nadal wymaga potwierdzonych danych handlowych. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
 
 ## F0 — Stan i uruchomienie
 
@@ -17,7 +17,7 @@ Stan: **NIEUKOŃCZONE — F2: automatyczna wycena w zwykłym formularzu localhos
 
 ## F2 — Wycena i dostawa
 
-- [ ] Zwykłe localhost:18430 i jego rzeczywista baza mają jawny cennik, koszt filamentu i dopuszczony profil; poprawny model w formularzu otrzymuje automatyczną cenę, bez seedowania wyłącznie tymczasowej bazy testowej.
+- [x] W zatwierdzonym przez użytkownika POC zwykłe localhost:18430 i jego rzeczywista baza mają jawny cennik, roboczy koszt filamentu i dopuszczony profil do kalkulacji; poprawny model w formularzu otrzymuje automatyczną cenę, bez seedowania wyłącznie tymczasowej bazy testowej.
 
 - [x] Headless slicer 1/2/10/100/1000 sztuk, partie/płyty, jakość/ściany/wypełnienie; zmiana parametrów unieważnia cenę.
 - [x] Grosze, VAT/minimum, jeden koszt przygotowania, energia/filament, granice liczb; wyłącznie jawne stawki.
@@ -83,3 +83,15 @@ Audyt zamknięcia: jedyne otwarte kryteria F3/F6 dotyczyły doręczeń i email �
 Po uwadze użytkownika odtworzono problem przez Chromium na zwykłym `http://localhost:18430/wycena`: cube_20mm.stl → PLA/kolor/standard/wytrzymałość → „Wymagana ręczna wycena”, bez ceny automatycznej. Odczyt normalnej DB: GFA00/GFB00/GFU01 mają cost_net_grosze_per_kg=NULL i production_enabled=false; pricing_config ma 0 rekordów, PRICING_RATES_JSON nie jest ustawione. Wcześniejsze PASS wyceny dotyczyły osobnej bazy z jawnymi stawkami fixture. To nie spełniało wymagania działającego formularza użytkownika. Poprzednie ogłoszenie osiągnięcia całego celu jest wycofane.
 
 Do domknięcia: ustalić rzeczywiste koszty albo jawny lokalny cennik orientacyjny POC, zweryfikować/dopuścić wspierane profile i uruchomić wycenę przez normalny formularz. Nie wyłączać kontroli kwot/profili ani nie wpisywać fikcyjnych kosztów jako produkcyjnych. Pytanie o wariant konfiguracji wysłane użytkownikowi. Kod Rust i zależności w tej diagnozie bez zmian.
+
+## Rzeczywisty localhost — cennik POC i 3MF
+
+Na prośbę użytkownika „na razie zrób POC” skonfigurowano normalną bazę, bez podstawiania API/bazy testowej: jawne założenie EUR/kg netto dla kosztów presetów, rzeczywisty kurs NBP z 23.10.2026 (4,3917), datowane źródło ceny i cennik `poc-*`. Nie jest to potwierdzenie waluty/VAT presetów. Koszty PLN/kg: PLA/ABS 87,80; TPU 184,41. Backend odmawia użycia tego cennika w production, importer nie nadpisuje istniejących cen.
+
+PASS zwykły Chromium localhost:18430: cube_20mm.stl → PLA 37,19 zł, ABS 38,09 zł, TPU 38,60 zł; wszystkie z rzeczywistym slicerem i aktywnym przejściem do dostawy. PASS dokładny lokalny plik użytkownika „Ania Legitymacja.3mf”: upload201, biały podgląd, prywatny GLB, wymiary79×119×4 mm, automatyczna cena PLA52,38 zł. PASS drugi rzeczywisty Bambu3MF 2,2MB: podgląd/GLB, model645 mm nadal kwalifikuje się do manual zgodnie z limitem. Prywatne modele nie trafiają do Git.
+
+Naprawiono ZIP64 z eksportu Fusion oraz ProductionExtension z częściami w wewnętrznych plikach archiwum. Zamiast własnego niepełnego parsera ZIP używany jest istniejący w lockfile zip9 z minimalnym deflate; kontrole zasobów/ścieżek/relacji pozostają. W Git dwa własne minimalne fixture ZIP64/Production. Testy geometrii19 PASS +2 rzeczywiste konwersje; pricing5 PASS; PG zachowania cen i źródła FX PASS; build/Clippy/fmt PASS, audit0 podatności/ostrzeżeń. Rzeczywiste Playwright models.spec.ts z nowymi 3MF:4 PASS. Normalny backend przebudowany i uruchomiony ponownie. To dowody POC, nie obietnica rentowności lub kwalifikacja sprzętu do rzeczywistego ABS/TPU.
+
+Kontrola dostawy ze zgłoszenia użytkownika: zapis oferty normalnego checkoutu ma DPD price_grosze=274 (2,74 PLN), InPost1931 i FedEx2631; opakowanie600 osobno, jedna paczka. Adapter używa wyłącznie api.sandbox.furgonetka.pl i pola price_gross. To taryfa testowa dostawcy, a nie błędne dzielenie ceny przez100 ani potwierdzona cena realnego przewozu. Nie przełączano konta na produkcję.
+
+Zakres pomiaru tej poprawki: Rust 27651 → 27865 (+214) LOC w backend/crates, łącznie z testami inline i przykładem CLI, bez komentarzy/pustych/generowanych; brak wiarygodnego podziału prod/test całości. Nowe pliki: importer POC, jego jawny JSON i dwa minimalne fixture 3MF. zip9 zastępuje bezpośrednią zależność flate2 i już był w lockfile; bez nowych pakietów/wersji.

@@ -113,7 +113,7 @@ impl Storage {
             });
             sqlx::query(
                 "INSERT INTO catalog_materials (id,name,density_g_cm3,source) VALUES ($1,$2,$3,$4)
-                 ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source",
+                 ON CONFLICT (id) DO UPDATE SET source=catalog_materials.source||EXCLUDED.source",
             )
             .bind(&material.id)
             .bind(material.name)
@@ -266,7 +266,7 @@ mod tests {
             .await
             .unwrap();
         storage.import_bambu().await.unwrap();
-        sqlx::query("UPDATE catalog_materials SET cost_net_grosze_per_kg=12345, production_enabled=true WHERE id='GFB00'")
+        sqlx::query("UPDATE catalog_materials SET cost_net_grosze_per_kg=12345, production_enabled=true,source=source||'{\"poc_pricing\":{\"currency\":\"EUR\",\"rate_x10000\":43917}}'::jsonb WHERE id='GFB00'")
             .execute(&storage.pool).await.unwrap();
         sqlx::query(
             "UPDATE catalog_colors SET in_stock=true WHERE material_id='GFB00' AND code='40300'",
@@ -282,6 +282,8 @@ mod tests {
         let abs = materials.iter().find(|m| m.id == "GFB00").unwrap();
         assert_eq!(materials.len(), 49);
         assert_eq!(abs.cost_net_grosze_per_kg, Some(12345));
+        assert_eq!(abs.source["poc_pricing"]["currency"], "EUR");
+        assert_eq!(abs.source["poc_pricing"]["rate_x10000"], 43917);
         assert!(abs.production_enabled);
         assert!(
             abs.colors

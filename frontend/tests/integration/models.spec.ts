@@ -14,7 +14,13 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
   await expect(page.locator('input[name=material]')).toHaveCount(3);
   const outsider = await browser.newContext();
   try {
-    for (const name of ['cube_20mm.stl', 'step_block.step', 'simple_model.3mf']) {
+    for (const name of [
+      'cube_20mm.stl',
+      'step_block.step',
+      'simple_model.3mf',
+      'zip64_model.3mf',
+      'production_parts.3mf',
+    ]) {
       const uploaded = page.waitForResponse(
         (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',
       );

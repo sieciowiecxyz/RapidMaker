@@ -84,6 +84,16 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let storage = if let Ok(url) = std::env::var("DATABASE_URL") {
         let storage = rapidmaker_storage::Storage::connect(&url).await?;
         storage.import_bambu().await?;
+        if std::env::var("AUTH_MODE").as_deref() == Ok("production")
+            && storage
+                .pricing_config()
+                .await?
+                .is_some_and(|v| v["version"].as_str().is_some_and(|s| s.starts_with("poc-")))
+        {
+            return Err(
+                "POC pricing cannot run in production; configure verified costs and rates".into(),
+            );
+        }
         Some(storage)
     } else {
         None
