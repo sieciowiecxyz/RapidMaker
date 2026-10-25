@@ -1,6 +1,6 @@
 # Finalizacja — kolejność i kryteria
 
-Stan: **F0–F6 PASS w localhost/sandbox**. Blokada iCloud rozwiązana; pełny rzeczywisty journey potwierdzony. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
+Stan: **NIEUKOŃCZONE — F2: automatyczna wycena w zwykłym formularzu localhost**. Poprzednie zamknięcie celu było błędne: testy z osobną bazą nie potwierdziły gotowości używanej strony. iCloud i journey ręcznej wyceny mają PASS. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
 
 ## F0 — Stan i uruchomienie
 
@@ -16,6 +16,8 @@ Stan: **F0–F6 PASS w localhost/sandbox**. Blokada iCloud rozwiązana; pełny r
 - Przejście: rzeczywiste fixture trzech formatów, desktop/mobile, build i regresje PASS.
 
 ## F2 — Wycena i dostawa
+
+- [ ] Zwykłe localhost:18430 i jego rzeczywista baza mają jawny cennik, koszt filamentu i dopuszczony profil; poprawny model w formularzu otrzymuje automatyczną cenę, bez seedowania wyłącznie tymczasowej bazy testowej.
 
 - [x] Headless slicer 1/2/10/100/1000 sztuk, partie/płyty, jakość/ściany/wypełnienie; zmiana parametrów unieważnia cenę.
 - [x] Grosze, VAT/minimum, jeden koszt przygotowania, energia/filament, granice liczb; wyłącznie jawne stawki.
@@ -75,3 +77,9 @@ Audyt blokady: trzeci kolejny obrót celu nadal potwierdza ten sam warunek — �
 Na prośbę „sprawdź czy działa teraz” ponowiono `python frontend/tests/run-integration.py --sandbox journey.spec.ts` (bez TOTP obejścia emailowego wariantu fixture): **1 PASS, 2,4 min**. Prawdziwe hasło+kod z iCloud → upload/model manual → admin+TOTP → publikacja → email oferty → klient/podgląd/własność → Stripe test paid → wiadomość admina → kopia odebrana w iCloud → odpowiedź SMTP → dokładnie jeden wpis w tej samej rozmowie i widoczność na stronie. Świeży odczyt skrzynki wzrósł z UID 343 do 345 już na początku przebiegu. Baza i pliki testowe usunięte przez runner; bez rzeczywistych obciążeń/nadań i bez zmiany sekretów. Przyczyny wcześniejszej przerwy nie ustalono; obecny odbiór jest potwierdzony.
 
 Audyt zamknięcia: jedyne otwarte kryteria F3/F6 dotyczyły doręczeń i email → chat; powyższy aktualny wynik je potwierdza. Pozostałe dowody F0–F5 (Rust/PG, modele/wycena, izolacja, retencja, sandboxy, wygląd i bezpieczny powrót po logowaniu) pozostają zapisane wyżej; nie powtarzano zielonych zestawów bez zmiany ich zakresu. To finalizacja lokalna/testowa: koszty i dopuszczenie profili normalnej bazy nadal ustala operator, publiczny deployment/live i kalibracja sprzedażowa są poza tym zakończeniem. Zmiany tej weryfikacji: tylko dokumentacja; Rust LOC i zależności bez zmian.
+
+## Korekta błędnego zamknięcia — 2026-10-25
+
+Po uwadze użytkownika odtworzono problem przez Chromium na zwykłym `http://localhost:18430/wycena`: cube_20mm.stl → PLA/kolor/standard/wytrzymałość → „Wymagana ręczna wycena”, bez ceny automatycznej. Odczyt normalnej DB: GFA00/GFB00/GFU01 mają cost_net_grosze_per_kg=NULL i production_enabled=false; pricing_config ma 0 rekordów, PRICING_RATES_JSON nie jest ustawione. Wcześniejsze PASS wyceny dotyczyły osobnej bazy z jawnymi stawkami fixture. To nie spełniało wymagania działającego formularza użytkownika. Poprzednie ogłoszenie osiągnięcia całego celu jest wycofane.
+
+Do domknięcia: ustalić rzeczywiste koszty albo jawny lokalny cennik orientacyjny POC, zweryfikować/dopuścić wspierane profile i uruchomić wycenę przez normalny formularz. Nie wyłączać kontroli kwot/profili ani nie wpisywać fikcyjnych kosztów jako produkcyjnych. Pytanie o wariant konfiguracji wysłane użytkownikowi. Kod Rust i zależności w tej diagnozie bez zmian.
