@@ -1,6 +1,6 @@
 # Finalizacja — kolejność i kryteria
 
-Blocked: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 gotowa; pełny cel nadal otwarty. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
+Stan: **F0–F6 PASS w localhost/sandbox**. Blokada iCloud rozwiązana; pełny rzeczywisty journey potwierdzony. Kontrakt: [PLAN.md](PLAN.md). PASS oznacza rzeczywiste sprawdzenie; testy mock i sandbox opisujemy osobno.
 
 ## F0 — Stan i uruchomienie
 
@@ -28,7 +28,7 @@ Blocked: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 g
 - [x] Trwałe zgłoszenie i własne pliki, cena NULL do wyceny; admin ustala całość brutto, zawartą dostawę i zakres/termin wykonania.
 - [x] Publikacja + outbox atomowo; link do chronionego zamówienia, Payment Element na naszej stronie. Rzeczywista płatność Stripe test potwierdzona.
 - [x] Wersje, ważność 7 dni, ponowienia/idempotencja, własność i kwoty. Jedna próba na ręczne zamówienie; po starcie brak zmiany ceny, po zamknięciu nowa prośba.
-- [ ] Cały przebieg z ponownie potwierdzonym doręczeniem emaila — zależy od F6. Nie uznajemy SMTP accepted za doręczenie.
+- [x] Cały przebieg z rzeczywistym odbiorem kodu/oferty w iCloud i potwierdzoną płatnością; nie tylko SMTP accepted.
 - Przejście: klient → admin → doręczony email → klient → paid, bez dubli zapłaty/outboxa.
 
 ## F4 — Retencja i bezpieczeństwo
@@ -49,10 +49,10 @@ Blocked: **F6 — doręczenie iCloud / email → chat**. Implementacja F1–F5 g
 
 - [x] Powtarzalny Playwright: [testing.md](testing.md#finalizacja-f0f6-rzeczywisty-backend), osobna DB/storage, testowi użytkownicy i stawki; bez sekretów w repo/trace.
 - [x] Upload → podgląd → slicer → checkout → Stripe paid; ręczne zgłoszenie/admin/oferta → Stripe paid. Furgonetka wycenia, test nie nadaje przesyłek.
-- [x] Rzeczywiste hasło+email, passkey+email i admin hasło+TOTP; uprawnienia dwóch kont i admina. Nowsze ponowienia emailowego logowania blokuje brak doręczeń poniżej.
+- [x] Rzeczywiste hasło+email, passkey+email i admin hasło+TOTP; uprawnienia dwóch kont i admina. Po przywróceniu doręczeń ponownie potwierdzone hasło+email w pełnym journey.
 - [x] Cztery niezależne konwersje/klienci, responsywne HTTP i ograniczone workery; PostgreSQL lease/retry/fencing po utracie workera, brak pomieszania wyników.
-- [ ] Najnowsza oferta/chat → doręczony email → odpowiedź SMTP → ta sama rozmowa. Test istnieje i raportuje FAIL, gdy wiadomość nie dotarła.
-- Przejście: cały rzeczywisty zestaw PASS. **Goal nie jest ukończony; blokada doręczenia nie oznacza PASS.**
+- [x] Najnowsza oferta/chat → doręczony email → odpowiedź SMTP → ta sama rozmowa, dokładnie jedna odpowiedź i widoczność w UI.
+- Przejście: cały rzeczywisty zestaw PASS. **Pełny journey PASS po rozwiązaniu blokady; wcześniejsze FAIL pozostają historią poniżej.**
 
 ## Checkpoint 2026-10-25
 
@@ -69,3 +69,9 @@ Rust 26219 → 27651 (+1432): backend/crates/**/*.rs, kod bez pustych/komentarzy
 Kontynuacja: wykryto i poprawiono pomijany powrót z logowania do konkretnego zamówienia z emaila oraz `next=/zamowienie`. Allowlista obejmuje konkretne lokalne trasy i pełny UUID; klient nie może wracać do admina, adresy zewnętrzne są odrzucane. PASS build i 6 regresji Playwright UI (5 od razu, checkout po uzupełnieniu odpowiedzi fixture o config/katalog). Testowa odpowiedź SMTP dostaje poprawne Date i unikalny Message-ID; py_compile PASS, odbioru nadal nie deklarujemy. Odczyt iCloud nadal kończy się na UID 343; bez kolejnego wysyłania kodów. Rust i zależności bez zmian w tej poprawce.
 
 Audyt blokady: trzeci kolejny obrót celu nadal potwierdza ten sam warunek — świeży odczyt IMAP kończy się na UID 343. Brak czynnego procesu testowego, na który należy czekać; zakończony journey pozostaje FAIL na doręczeniach. Po poprawce powrotu po logowaniu nie pozostała niezależna implementacja F0–F5 do wykonania. Nie ponawiamy tych samych wysyłek. Wznowienie: potwierdzić, gdzie trafiają nowe testy do void, lub przywrócić doręczenie/konfigurację odbioru; następnie uruchomić rzeczywisty journey i dopiero po PASS zamknąć F3/F6. Pytanie do użytkownika o odbiór nowych wiadomości pozostaje bez odpowiedzi.
+
+## Zamknięcie F3/F6 — 2026-10-25
+
+Na prośbę „sprawdź czy działa teraz” ponowiono `python frontend/tests/run-integration.py --sandbox journey.spec.ts` (bez TOTP obejścia emailowego wariantu fixture): **1 PASS, 2,4 min**. Prawdziwe hasło+kod z iCloud → upload/model manual → admin+TOTP → publikacja → email oferty → klient/podgląd/własność → Stripe test paid → wiadomość admina → kopia odebrana w iCloud → odpowiedź SMTP → dokładnie jeden wpis w tej samej rozmowie i widoczność na stronie. Świeży odczyt skrzynki wzrósł z UID 343 do 345 już na początku przebiegu. Baza i pliki testowe usunięte przez runner; bez rzeczywistych obciążeń/nadań i bez zmiany sekretów. Przyczyny wcześniejszej przerwy nie ustalono; obecny odbiór jest potwierdzony.
+
+Audyt zamknięcia: jedyne otwarte kryteria F3/F6 dotyczyły doręczeń i email → chat; powyższy aktualny wynik je potwierdza. Pozostałe dowody F0–F5 (Rust/PG, modele/wycena, izolacja, retencja, sandboxy, wygląd i bezpieczny powrót po logowaniu) pozostają zapisane wyżej; nie powtarzano zielonych zestawów bez zmiany ich zakresu. To finalizacja lokalna/testowa: koszty i dopuszczenie profili normalnej bazy nadal ustala operator, publiczny deployment/live i kalibracja sprzedażowa są poza tym zakończeniem. Zmiany tej weryfikacji: tylko dokumentacja; Rust LOC i zależności bez zmian.
