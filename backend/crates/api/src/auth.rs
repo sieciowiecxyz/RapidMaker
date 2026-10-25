@@ -397,6 +397,9 @@ pub fn router(auth: Arc<Auth>) -> Router {
 #[serde(deny_unknown_fields)]
 struct Start {
     email: String,
+    #[serde(default)]
+    #[schema(required = true, example = "2026-10-25")]
+    legal_version: String,
 }
 #[utoipa::path(
     operation_id = "auth_start",
@@ -415,6 +418,7 @@ async fn start(
     Json(input): Json<Start>,
 ) -> Result<Response, Error> {
     auth.check_origin(&headers)?;
+    super::legal::validate(&input.legal_version)?;
     let key = auth.key()?;
     let email = input.email.trim().to_lowercase();
     if !email.is_ascii() || !rapidmaker_notifications::valid_address(&email) {
@@ -448,6 +452,7 @@ async fn start(
             &verifier,
             &hash_token(&auth.client_ip(peer, &headers)?.to_string()),
             now(),
+            &input.legal_version,
         )
         .await
         .map_err(|_| unavailable())?

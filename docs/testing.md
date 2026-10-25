@@ -57,3 +57,14 @@ Sandboxy (jawnie, tylko test): `python frontend/tests/run-integration.py --sandb
 Podstawowy rzeczywisty zestaw uploadów i wyceny: 6 PASS na osobnej bazie, obejrzane screenshoty produkcyjne i poprawiony błąd ładowania CSS. Pełny `--sandbox journey.spec.ts` ponownie sprawdzony 2026-10-25: 1 PASS (2,4 min), z rzeczywistym iCloud → Stripe test → chat → iCloud → odpowiedź w UI. Szczegóły i wcześniejsze FAIL doręczeń: MILESTONES.md. Sam kod testu nie jest dowodem PASS.
 
 Do diagnozy niezależnej od emailowego logowania: `... --sandbox --client-totp journey.spec.ts`. Tworzy testowego klienta z prawdziwym TOTP (bez obchodzenia auth); odmawia uruchomienia tak `auth.spec.ts`. Test nadal wymaga doręczenia oferty i odpowiedzi email, więc awaria iCloud pozostaje FAIL, nawet gdy płatność przejdzie.
+
+
+## Dokumenty i akceptacja — 2026-10-25
+
+PASS: Rust build/fmt; Clippy api/storage/notifications all-targets z `-D warnings`; 11 testów notifications, w tym pełna wersjonowana kopia MIME i limity. Trzy rzeczywiste regresje na osobnej, usuniętej bazie PostgreSQL: konkurencyjna rejestracja zapisuje jedną akceptację/kopię; checkout zachowuje wersję/czas i jeden kontrakt po ponowieniach zapłaty; ręczna oferta zapisuje warunki przed płatnością. Brak zmian w normalnych kontach.
+
+PASS: svelte-check 0 błędów/ostrzeżeń i Vite build; 2 kontrakty UI `tests/e2e/legal.spec.ts`; `python frontend/tests/run-integration.py --sandbox legal.spec.ts checkout.spec.ts`: 2 PASS, rzeczywiste dokumenty/API oraz upload → slicer → checkout gościa → Stripe test paid. Stara/brakująca wersja rejestracji daje 409. Strony dokumentów nie wysyłają zapytań zewnętrznych; obejrzano desktop/mobile, brak poziomego overflow. Screenshoty w ignorowanym `frontend/tests/artifacts/integration/`.
+
+NOT RUN: nowy test odbioru kopii prawnej przez IMAP, pełny zestaw przeglądarkowy, produkcja, audyt prawny i weryfikacja umów/transferów dostawców. Istniejące ostrzeżenie kompilatora C++ w generowanym mostku OCCT pozostaje; Clippy nie zgłosił błędów. Granice: [legal.md](legal.md).
+
+Rust: 27865 → 28140 (+275) linii kodu w backend/crates, bez pustych/komentarzy/generowanych; łącznie z testami inline i przykładami, bez niezależnego podziału production/test. Bez nowych zależności. Nowe moduły tylko dla wspólnej treści dokumentów i publicznego endpointu; jedna migracja rozszerza istniejące konto, zamówienie i outbox.

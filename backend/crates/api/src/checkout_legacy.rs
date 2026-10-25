@@ -59,6 +59,9 @@ struct QuoteInput {
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Start {
+    #[serde(default)]
+    #[schema(required = true, example = "2026-10-25")]
+    legal_version: String,
     quote_id: String,
     offer_id: String,
 }
@@ -170,6 +173,7 @@ async fn start(
         headers,
         &input.quote_id,
         PaymentInput {
+            legal_version: input.legal_version,
             version: draft.version,
             offer_id: input.offer_id,
         },

@@ -8,6 +8,7 @@ mod checkout_worker;
 mod docs;
 mod email;
 mod files;
+mod legal;
 mod logging;
 mod mail_inbound;
 mod manual_quotes;
@@ -102,6 +103,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
     let (checkout, webhook, checkout_worker, shipping_worker) = checkout::router(storage.clone())?;
     let api = utoipa_axum::router::OpenApiRouter::new()
+        .merge(legal::router())
         .merge(packing::router())
         .merge(checkout)
         .merge(models::router())

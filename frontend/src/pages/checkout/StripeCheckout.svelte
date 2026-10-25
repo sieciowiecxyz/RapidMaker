@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import {
-    loadStripe,
-    type Stripe,
-    type StripeElements,
-    type StripeAddressElement,
-    type StripePaymentElement,
+  import { loadStripe } from '@stripe/stripe-js/pure';
+  import type {
+    Stripe,
+    StripeElements,
+    StripeAddressElement,
+    StripePaymentElement,
   } from '@stripe/stripe-js';
   import type { Contact } from '../../lib/types';
   let {

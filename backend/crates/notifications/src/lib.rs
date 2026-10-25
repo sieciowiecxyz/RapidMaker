@@ -1,5 +1,6 @@
 //! Small SMTP sender. Callers own authorization, rate limits and delivery policy.
 mod inbound;
+pub mod legal;
 mod messages;
 mod replies;
 pub use inbound::{Imap, ImapBatch, ImapCursor, InboundDisposition, InboundMail};
@@ -254,8 +255,13 @@ impl Sender {
         if self.test_mode && self.test_to.as_ref().map(|v| &v.email) != Some(&to.email) {
             return Err(MailError::TestRecipient);
         }
+        let max = if matches!(&notification, Notification::LegalDocuments { .. }) {
+            128 * 1024
+        } else {
+            32 * 1024
+        };
         let (subject, body) = notification.render()?;
-        if body.len() > 32 * 1024 {
+        if body.len() > max {
             return Err(MailError::InvalidMessage);
         }
         Message::builder()

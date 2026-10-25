@@ -3,6 +3,7 @@
   import './app.css';
   import Header from './components/Header.svelte';
   import Login from './pages/Login.svelte';
+  import Legal from './pages/Legal.svelte';
   import Checkout from './pages/checkout/Checkout.svelte';
   import Configure from './pages/configure/Configure.svelte';
   import AccountOrders from './pages/account/Orders.svelte';
@@ -45,6 +46,9 @@
     '/wycena/zaawansowana': 'Opcje zaawansowane druku',
     '/logowanie': 'Logowanie',
     '/zamowienie': 'Zamówienie',
+    '/regulaminy': 'Dokumenty i zasady',
+    '/regulamin': 'Regulamin',
+    '/prywatnosc': 'Polityka prywatności',
   };
   const pageTitle = $derived(
     protectedArea && !session
@@ -182,6 +186,7 @@
           <a class="button primary" href="/logowanie?operator=1">Zaloguj się jako administrator</a>
           <a class="button ghost" href="/konto/zamowienia">Moje zamówienia</a>
         </section>
+      {:else if ['/regulaminy', '/regulamin', '/prywatnosc'].includes(path)}<Legal {path} />
       {:else if path === '/logowanie'}<Login onSession={signedIn} />
       {:else if path === '/wycena/zaawansowana'}<Configure />
       {:else if path === '/zamowienie'}<Checkout />
@@ -207,5 +212,6 @@
     <a class="brand footer-brand" href="/">rapidmaker<span class="brand-dot">.</span></a><span
       >Pomysły mają kształt. Nadajmy im formę.</span
     >
+    <a href="/regulaminy">Regulaminy i prywatność</a>
   </footer>
 </div>

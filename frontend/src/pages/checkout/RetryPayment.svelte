@@ -1,12 +1,10 @@
 <script lang="ts">
+  import LegalNotice from '../../components/LegalNotice.svelte';
+  import { money } from '../../lib/format';
   import { apiFetch } from '../../lib/http';
   import { onMount } from 'svelte';
-  import {
-    loadStripe,
-    type Stripe,
-    type StripeElements,
-    type StripePaymentElement,
-  } from '@stripe/stripe-js';
+  import { loadStripe } from '@stripe/stripe-js/pure';
+  import type { Stripe, StripeElements, StripePaymentElement } from '@stripe/stripe-js';
   import { getStripeConfig, verifyCheckout } from '../../lib/api';
   import type { StripeStatus } from '../../lib/types';
   let {
@@ -104,8 +102,9 @@
       Wczytujemy bezpieczny formularz Stripe…
     </p>{/if}
   {#if error}<p role="alert" class="error">{error}</p>{/if}
+  <LegalNotice />
   <button class="button primary" disabled={!ready || busy} onclick={confirm}
-    >{busy ? 'Potwierdzamy…' : 'Zapłać za zamówienie →'}</button
+    >{busy ? 'Potwierdzamy…' : `Zamawiam i płacę ${money(amountGrosze / 100)} →`}</button
   >
 </section>
 

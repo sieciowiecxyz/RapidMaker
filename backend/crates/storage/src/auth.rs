@@ -33,7 +33,14 @@ impl Storage {
         verifier: &[u8],
         ip_hash: &[u8],
         now: i64,
+        legal_version: &str,
     ) -> Result<bool, StorageError> {
+        if legal_version.is_empty()
+            || legal_version.len() > 32
+            || legal_version.chars().any(char::is_control)
+        {
+            return Err("invalid legal version".into());
+        }
         if !email.is_ascii()
             || email.len() > 254
             || email.len() < 3
@@ -68,8 +75,8 @@ impl Storage {
         }
         sqlx::query("UPDATE auth_challenges SET consumed_at=$3 WHERE email=$1 AND browser_hash=$2 AND consumed_at IS NULL")
             .bind(email).bind(browser_hash).bind(now).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO auth_challenges(id,email,browser_hash,verifier,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6)")
-            .bind(id).bind(email).bind(browser_hash).bind(verifier).bind(now).bind(now+600)
+        sqlx::query("INSERT INTO auth_challenges(id,email,browser_hash,verifier,created_at,expires_at,legal_version) VALUES($1,$2,$3,$4,$5,$6,$7)")
+            .bind(id).bind(email).bind(browser_hash).bind(verifier).bind(now).bind(now+600).bind(legal_version)
             .execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(true)
@@ -112,10 +119,13 @@ impl Storage {
             tx.commit().await?;
             return Ok(None);
         }
-        let row = sqlx::query("SELECT email,browser_hash,verifier,attempts,expires_at,consumed_at FROM auth_challenges WHERE id=$1 FOR UPDATE")
+        let row = sqlx::query("SELECT email,browser_hash,verifier,attempts,expires_at,consumed_at,legal_version FROM auth_challenges WHERE id=$1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             tx.commit().await?;
+            return Ok(None);
+        };
+        let Some(legal_version): Option<String> = row.try_get("legal_version")? else {
             return Ok(None);
         };
         let email: String = row.try_get("email")?;
@@ -164,7 +174,7 @@ impl Storage {
         .bind(now)
         .execute(&mut *tx)
         .await?;
-        let row = sqlx::query("SELECT id,email,role,email_order_updates,email_chat_messages FROM users WHERE email=$1 AND disabled_at IS NULL FOR UPDATE")
+        let row = sqlx::query("SELECT id,email,role,email_order_updates,email_chat_messages,legal_version FROM users WHERE email=$1 AND disabled_at IS NULL FOR UPDATE")
             .bind(email).fetch_optional(&mut *tx).await?;
         let Some(row) = row else {
             tx.commit().await?;
@@ -176,6 +186,16 @@ impl Storage {
         if credentialed {
             tx.commit().await?;
             return Ok(None);
+        }
+        if row.try_get::<Option<String>, _>("legal_version")?.is_none() {
+            sqlx::query("UPDATE users SET legal_version=$2,legal_accepted_at=$3 WHERE id=$1")
+                .bind(&user.id)
+                .bind(&legal_version)
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+            crate::orders::enqueue(&mut tx, &user.id, "account-terms", Some(&user.id), &user.email,
+                "legal_documents", serde_json::json!({"reference":user.id,"legal_version":legal_version,"details":"Utworzono bezpłatne konto RapidMaker. Poniżej warunki zaakceptowane przy rejestracji i informacja o prywatności."}), true, now).await?;
         }
         if let Some(previous) = previous_session {
             sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
@@ -365,9 +385,17 @@ mod tests {
         let now = 1_800_000_000;
         let verifier = key.verifier(&id, &email, &hash_token(&browser), "00000001");
         assert!(
-            db.auth_start(&id, &email, &hash_token(&browser), &verifier, &ip, now)
-                .await
-                .unwrap()
+            db.auth_start(
+                &id,
+                &email,
+                &hash_token(&browser),
+                &verifier,
+                &ip,
+                now,
+                "2026-10-25"
+            )
+            .await
+            .unwrap()
         );
         assert!(
             !db.auth_start(
@@ -376,7 +404,8 @@ mod tests {
                 &hash_token(&browser),
                 &verifier,
                 &ip,
-                now + 1
+                now + 1,
+                "2026-10-25"
             )
             .await
             .unwrap()
@@ -426,7 +455,8 @@ mod tests {
                 &hash_token(&browser),
                 &verifier,
                 &ip,
-                now + 61
+                now + 61,
+                "2026-10-25"
             )
             .await
             .unwrap()
@@ -452,6 +482,16 @@ mod tests {
             .unwrap()
             .unwrap()
             .user;
+        let acceptance: (String, i64) =
+            sqlx::query_as("SELECT legal_version,legal_accepted_at FROM users WHERE id=$1")
+                .bind(&user.id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(acceptance, ("2026-10-25".into(), now + 62));
+        let copies: i64 = sqlx::query_scalar("SELECT count(*) FROM email_outbox WHERE user_id=$1 AND kind='legal_documents' AND payload->'notification'->>'legal_version'='2026-10-25'")
+            .bind(&user.id).fetch_one(&db.pool).await.unwrap();
+        assert_eq!(copies, 1); // concurrent verification must not duplicate the agreement or its copy
         let preferences = db
             .auth_preferences(&user.id, false, true)
             .await
@@ -483,6 +523,11 @@ mod tests {
         assert!(db.auth_pending(&session, now + 66).await.unwrap().is_none());
         db.auth_logout_all(&user.id).await.unwrap();
         assert!(db.auth_pending(&session, now + 66).await.unwrap().is_none());
+        sqlx::query("DELETE FROM email_outbox WHERE user_id=$1")
+            .bind(&user.id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM users WHERE id=$1")
             .bind(&user.id)
             .execute(&db.pool)

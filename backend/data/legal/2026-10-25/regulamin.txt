@@ -1,0 +1,57 @@
+Regulamin RapidMaker
+
+Wersja 2026-10-25. Przeczytaj przed utworzeniem konta lub złożeniem zamówienia. Dokument możesz pobrać i zachować.
+
+1. Kto sprzedaje i jak się skontaktować
+
+Sprzedawcą i usługodawcą jest Piotr Grudniak Rapid Maker, przedsiębiorca wpisany do CEIDG, ul. Zielony Krąg 1, 05-500 Piaseczno, NIP 1231537290, REGON 525918817. Kontakt: piotr@rapidmaker.pl, telefon +48 537 320 816. Na ten adres pocztowy i email możesz kierować reklamacje oraz sprawy dotyczące konta. Serwis działa pod adresem rapidmaker.pl.
+
+Sprzedajemy w Polsce, w PLN, konsumentom i firmom. Przepisy chroniące konsumentów stosujemy także do osoby fizycznej prowadzącej działalność gospodarczą, gdy wynika to z przepisów dotyczących umów, które nie mają dla niej charakteru zawodowego.
+
+2. Co zamawiasz
+
+Wykonujemy fizyczne wydruki 3D według pliku i specyfikacji klienta. Przed zamówieniem wybierasz model, liczbę sztuk, materiał, kolor i parametry. Obsługujemy pliki STL, STEP/STP i 3MF; bieżące limity pliku podaje formularz. Podgląd pomaga sprawdzić model, ale sam nie zastępuje uzgodnionej specyfikacji ani próbki koloru. Cechy wynikające z technologii nie wyłączają odpowiedzialności za zgodność towaru z umową.
+
+Przesyłaj pliki, z których masz prawo korzystać. Udostępniasz je nam wyłącznie w celu analizy, wyceny i wykonania zamówienia oraz obsługi związanych z nim spraw. Nie nabywamy praw do Twojego projektu i nie wykorzystujemy go do reklamy bez odrębnego uzgodnienia. Nie przesyłaj treści bezprawnych. Istotne wymagania dotyczące zastosowania lub bezpieczeństwa części uzgodnij przed zakupem; sam wybór materiału nie stanowi potwierdzenia przydatności np. do kontaktu z żywnością lub zastosowań medycznych.
+
+3. Wycena i zawarcie umowy
+
+Sam upload, konfiguracja i prośba o ręczną wycenę są bezpłatne i nie zobowiązują do zakupu. Przed złożeniem zamówienia pokazujemy specyfikację, łączną cenę brutto, koszty opakowania i dostawy oraz termin wykonania. Przy ręcznej wycenie najpierw otrzymujesz ofertę z zakresem, ceną i terminem ważności. Możesz ją przyjąć albo zrezygnować bez opłat.
+
+Przyciskiem „Zamawiam i płacę” składasz zamówienie z obowiązkiem zapłaty i akceptujesz tę wersję regulaminu. Umowa sprzedaży zostaje zawarta z chwilą skutecznej płatności potwierdzonej przez operatora płatności. Samo rozpoczęcie płatności albo zarejestrowanie zamówienia nie oznacza zawarcia umowy. Potwierdzenie płatności i warunki umowy otrzymasz emailem. Nie zmieniamy jednostronnie zapłaconej ceny ani specyfikacji.
+
+W przypadku niewykonalnego modelu lub nietypowego zamówienia stosujemy ręczną wycenę przed płatnością. Zmiana opłaconego zamówienia wymaga uzgodnienia obu stron; jeżeli realizacja okaże się niemożliwa, kontaktujemy się z Tobą i rozliczamy należny zwrot zgodnie z prawem.
+
+4. Płatność i dostawa
+
+Płatność obsługuje Stripe. Dostępne metody pokazuje formularz płatności. Dane karty wpisujesz do formularza operatora; nie przechowujemy numeru karty ani kodu CVC. Dane do faktury podaj przed zapłatą, jeśli chcesz otrzymać fakturę na wskazane dane.
+
+Wykonujemy zamówienie i przekazujemy je przewoźnikowi albo przygotowujemy do odbioru osobistego w ciągu 14 dni kalendarzowych od potwierdzenia płatności, chyba że przed zakupem wyraźnie uzgodniono inny termin. Czas przewozu jest podawany osobno przy wyborze dostawy. Odbiór osobisty w pracowni następuje po zawiadomieniu o gotowości i umówieniu terminu.
+
+Dostawę organizujemy z wykorzystaniem Furgonetki i wybranego przewoźnika. Dostępne metody, punkty odbioru i pełny koszt pokazujemy przed zamówieniem. Pakowanie i liczba paczek są szacowane przez serwis; klient nie musi ich obliczać. Błąd naszego oszacowania nie powoduje automatycznej dopłaty po zakupie. Przy opóźnieniu informujemy Cię o sytuacji; zachowujesz ustawowe uprawnienia, w tym związane z niedotrzymaniem terminu.
+
+5. Odstąpienie od zakupu i reklamacje
+
+Wydruki wykonujemy według Twojej specyfikacji lub dla Twoich zindywidualizowanych potrzeb. Dla takich towarów nie przysługuje zwykłe 14-dniowe prawo odstąpienia bez przyczyny, zgodnie z art. 38 ust. 1 pkt 3 ustawy o prawach konsumenta. Nie ogranicza to reklamacji ani prawa do odstąpienia z powodu niezgodności towaru z umową lub innych ustawowych przyczyn. Jeżeli chcesz zatrzymać produkcję, skontaktuj się z nami; ewentualne anulowanie uzgadniamy indywidualnie, z zachowaniem Twoich praw.
+
+Odpowiadamy wobec konsumenta za niezgodność towaru z umową ujawnioną w ciągu dwóch lat od dostarczenia, na zasadach ustawy o prawach konsumenta. Możesz żądać naprawy lub wymiany, a w sytuacjach przewidzianych prawem obniżenia ceny albo odstąpienia od umowy. Niezbędne koszty uzasadnionej reklamacji ponosi sprzedawca. Regulamin nie wyłącza odpowiedzialności wobec pozostałych kupujących wynikającej z prawa.
+
+Reklamację możesz złożyć w dowolnej prawnie dopuszczalnej formie, np. na piotr@rapidmaker.pl lub pocztą na adres pracowni. Podaj opis problemu, swoje żądanie i dane pozwalające rozpoznać zakup; zdjęcia mogą pomóc, ale nie są obowiązkowe. Nie wymagamy konta ani paragonu jako jedynego dowodu zakupu. Na reklamację konsumenta odpowiadamy w ciągu 14 dni od otrzymania; brak odpowiedzi ma skutki określone ustawą. Zwroty wykonujemy w terminach i na zasadach przewidzianych prawem, co do zasady tą samą metodą płatności, chyba że uzgodnisz inną bez dodatkowych kosztów.
+
+Konsument może skorzystać z pomocy miejskiego lub powiatowego rzecznika konsumentów oraz pozasądowego rozwiązywania sporów przy Inspekcji Handlowej. Informacje znajdują się na polubowne.uokik.gov.pl. Po nierozwiązanej reklamacji przekazujemy wymagane prawem stanowisko dotyczące postępowania pozasądowego. Nie ograniczamy prawa do sądu.
+
+6. Dobrowolne konto i usługi elektroniczne
+
+Możesz kupować bez konta. Konto jest bezpłatne i dobrowolne; służy m.in. do historii zamówień, rozmów i zarządzania ustawieniami. Nie tworzymy go automatycznie przy zakupie. Rejestrując się, akceptujesz regulamin widoczny przy formularzu; po potwierdzeniu emaila możesz ustawić hasło lub passkey. Do logowania wymagany jest także drugi składnik: kod email albo skonfigurowana aplikacja uwierzytelniająca.
+
+Do korzystania ze strony potrzebujesz aktualnej przeglądarki z JavaScript, połączenia z internetem i adresu email. Pliki cookie niezbędne do sesji muszą być dostępne; podgląd może wymagać WebGL. Chroń dane logowania i nie udostępniaj konta osobom nieupoważnionym. Nie dostarczaj treści bezprawnych przez pliki ani wiadomości. Reklamacje działania konta i serwisu przyjmujemy tak samo jak pozostałe reklamacje.
+
+Możesz w każdej chwili bez opłat zakończyć korzystanie z konta, pisząc na piotr@rapidmaker.pl. Możesz też odstąpić od umowy o bezpłatne konto w ciągu 14 dni od jej zawarcia; wystarczy jednoznaczny email, bez specjalnego formularza. W razie potrzeby proporcjonalnie potwierdzamy Twoją tożsamość. Zamknięcie konta nie anuluje zamówień i nie usuwa danych, które musimy zachować z innej podstawy prawnej. Szczegóły opisuje polityka prywatności.
+
+7. Dane i wersje regulaminu
+
+Informacje o danych osobowych, plikach, cookie i prawach klienta znajdują się w Polityce prywatności. Nie wymagamy zgody marketingowej do zakupu ani konta.
+
+Do zamówienia stosujemy wersję zaakceptowaną przy jego złożeniu. Nowa wersja opublikowana na stronie nie zmienia wcześniejszych umów ani nie stanowi automatycznej akceptacji nowych warunków konta. O istotnych zmianach dotyczących istniejącego konta informujemy z wyprzedzeniem, z zachowaniem wymaganej prawem procedury i możliwości zakończenia korzystania z niego.
+
+Stosujemy prawo polskie z zachowaniem bezwzględnie obowiązujących praw kupującego. Regulamin nie wyłącza ani nie ogranicza praw, których nie można wyłączyć umową.

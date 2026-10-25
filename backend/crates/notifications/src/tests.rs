@@ -239,3 +239,43 @@ fn manual_offer_email_contains_real_price_and_protected_account_link() {
         .is_err()
     );
 }
+
+#[test]
+fn legal_copy_is_complete_versioned_and_bounded() {
+    let mailer = configured(&[]).unwrap();
+    let sender = mailer.enabled.as_ref().unwrap();
+    let mail = Notification::LegalDocuments {
+        reference: "order-123",
+        legal_version: crate::legal::VERSION,
+        details: "Potwierdzamy płatność 25.00 PLN. Produkcja: do 14 dni kalendarzowych.",
+    };
+    let message = sender.message("void@sieciowiec.xyz", mail).unwrap();
+    assert!(message.formatted().len() < 128 * 1024);
+    let (_, body) = Notification::LegalDocuments {
+        reference: "order-123",
+        legal_version: crate::legal::VERSION,
+        details: "Umowa",
+    }
+    .render()
+    .unwrap();
+    assert!(body.contains(crate::legal::TERMS));
+    assert!(body.contains(crate::legal::PRIVACY));
+    assert!(
+        Notification::LegalDocuments {
+            reference: "order-123",
+            legal_version: "unknown",
+            details: "Umowa"
+        }
+        .render()
+        .is_err()
+    );
+    assert!(
+        Notification::LegalDocuments {
+            reference: "order-123",
+            legal_version: crate::legal::VERSION,
+            details: &"x".repeat(96 * 1024 + 1)
+        }
+        .render()
+        .is_err()
+    );
+}

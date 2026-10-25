@@ -1,5 +1,9 @@
 # Dokumentacja Rapidmaker
 
+- [Regulamin i prywatność](legal.md)
+  - przeczytaj gdy: zmieniasz warunki, akceptację lub prawa klienta.
+  - opis: podstrony, wersje, kopie email i braki przed publikacją.
+
 Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, trackingiem i wysyłką emaila. Anulowanie L2 sprawdzone w sandboxie; podjazdy L1 zaimplementowane, potwierdzenie rezerwacji blokuje `carrierConnectionError` DPD. Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
 - [Plan finalizacji](PLAN.md)

@@ -193,6 +193,9 @@ struct Version {
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PaymentInput {
+    #[serde(default)]
+    #[schema(required = true, example = "2026-10-25")]
+    pub legal_version: String,
     pub version: i64,
     pub offer_id: String,
 }
@@ -692,6 +695,7 @@ pub(super) async fn start_payment(
     key: &str,
     kind: &str,
 ) -> Result<PaymentAttempt> {
+    super::legal::validate(&input.legal_version)?;
     if key.is_empty() || key.len() > 128 || !key.bytes().all(|b| b.is_ascii_graphic()) {
         return Err(error(
             StatusCode::BAD_REQUEST,
@@ -715,7 +719,7 @@ pub(super) async fn start_payment(
     }
     let attempt_id = uuid::Uuid::new_v4().to_string();
     let fingerprint = hash(
-        &json!({"draft":id,"version":input.version,"offer":input.offer_id,"kind":kind}).to_string(),
+        &json!({"draft":id,"version":input.version,"offer":input.offer_id,"kind":kind,"legal_version":input.legal_version}).to_string(),
     );
     let mut form = provider_form(app, &attempt_id, id, kind, total);
     if kind == "session" {
@@ -741,6 +745,8 @@ pub(super) async fn start_payment(
                 fingerprint: &fingerprint,
                 provider_kind: kind,
                 provider_request: &form,
+                legal_version: &input.legal_version,
+                production_days: rapidmaker_notifications::legal::PRODUCTION_DAYS as i32,
             },
             now(),
         )

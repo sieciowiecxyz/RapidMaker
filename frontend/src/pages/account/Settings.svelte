@@ -111,6 +111,16 @@
       bootstrapMode={new URLSearchParams(location.search).get('bootstrap') === '1'}
       {onSession}
     />
+    <section class="panel stack">
+      <h2>Usunięcie konta</h2>
+      <p class="muted">
+        Napisz z adresu swojego konta na
+        <a href="mailto:piotr@rapidmaker.pl?subject=Usuni%C4%99cie%20konta%20RapidMaker"
+          >piotr@rapidmaker.pl</a
+        >. Zamknięcie konta nie anuluje zamówień. Dane wymagane do rozliczeń lub trwających spraw
+        zachowamy zgodnie z <a href="/prywatnosc">polityką prywatności</a>.
+      </p>
+    </section>
   {/if}
 </div>
 

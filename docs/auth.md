@@ -1,5 +1,7 @@
 # Logowanie i zabezpieczenia konta
 
+Rejestracja przekazuje `legal_version`; backend sprawdza aktualną wersję, zapisuje akceptację po potwierdzeniu emaila i kolejkuje kopię warunków w tej samej transakcji. Brak/stara wersja: 409. Istniejące logowanie nie jest ponowną rejestracją. [Dokumenty i ograniczenia](legal.md).
+
 Klient i admin: **hasło albo passkey → obowiązkowo drugi składnik**. Domyślnie kod email; po włączeniu aplikacji uwierzytelniającej TOTP zastępuje email. Role i uprawnienia nadaje wyłącznie backend.
 
 ## Przepływ

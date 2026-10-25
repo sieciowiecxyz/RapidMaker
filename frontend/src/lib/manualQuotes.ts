@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from './legal';
 import { apiRequest, apiFetch, ApiError } from './http';
 import type { Contact, DeliveryMethod, PrintModel, Material } from './types';
 export type ManualOffer = {
@@ -107,7 +108,7 @@ export function manualPayment(id: string, version: number, requestId: string) {
   return apiRequest<ManualPayment>(
     `/api/account/orders/${encodeURIComponent(id)}/payment`,
     'POST',
-    { version, request_id: requestId },
+    { version, request_id: requestId, legal_version: LEGAL_VERSION },
   );
 }
 export function validOfferAmount(offer: ManualOffer): number | null {

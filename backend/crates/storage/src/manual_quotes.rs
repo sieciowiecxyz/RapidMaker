@@ -207,7 +207,11 @@ impl Storage {
         version: i64,
         request: &str,
         now: i64,
+        legal_version: &str,
     ) -> Result<Option<PaymentAttempt>, StorageError> {
+        if legal_version.is_empty() || legal_version.len() > 32 {
+            return Err("invalid legal version".into());
+        }
         if uuid::Uuid::parse_str(request).is_err() {
             return Ok(None);
         }
@@ -257,8 +261,8 @@ impl Storage {
         sqlx::query("INSERT INTO checkout_drafts(id,owner_hash,user_id,input,expires_at,locked,created_at) VALUES($1,$2,$3,$4,$5,true,$6)").bind(id).bind(&owner).bind(user).bind(json!({"kind":"manual","order_id":id})).bind(now+86400).bind(now).execute(&mut *tx).await?;
         let attempt=sqlx::query("INSERT INTO payment_attempts(id,draft_id,owner_hash,client_key_hash,fingerprint,state,provider_kind,amount_grosze,idempotency_key,provider_request,next_attempt,created_at,updated_at) VALUES($1,$1,$2,$3,$4,'creating','intent',$5,$6,$7,$8,$8,$8) RETURNING *")
             .bind(id).bind(&owner).bind(key).bind(digest(&format!("manual:{id}:{version}:{amount}"))).bind(amount).bind(format!("rapidmaker-manual:{id}")).bind(form).bind(now).fetch_one(&mut *tx).await?;
-        sqlx::query("UPDATE orders SET payment_attempt_id=$1 WHERE id=$1")
-            .bind(id)
+        sqlx::query("UPDATE orders SET payment_attempt_id=$1,legal_version=$2,legal_accepted_at=$3,production_days=14 WHERE id=$1")
+            .bind(id).bind(legal_version).bind(now)
             .execute(&mut *tx)
             .await?;
         sqlx::query("UPDATE order_files SET retain_until=NULL WHERE order_id=$1")
@@ -427,13 +431,13 @@ mod tests {
         assert_eq!(offered["amount_grosze"], 23456);
         assert_eq!(offered["valid_until"], now + 3 + 7 * 86400);
         assert!(
-            db.manual_payment(&id, &other, 3, &request, now + 4)
+            db.manual_payment(&id, &other, 3, &request, now + 4, "2026-10-25")
                 .await
                 .unwrap()
                 .is_none()
         );
         assert!(
-            db.manual_payment(&id, &user, 2, &request, now + 4)
+            db.manual_payment(&id, &user, 2, &request, now + 4, "2026-10-25")
                 .await
                 .unwrap()
                 .is_none()
@@ -441,8 +445,8 @@ mod tests {
         let a = uuid::Uuid::new_v4().to_string();
         let b = uuid::Uuid::new_v4().to_string();
         let (a, b) = tokio::join!(
-            db.manual_payment(&id, &user, 3, &a, now + 4),
-            db.manual_payment(&id, &user, 3, &b, now + 4)
+            db.manual_payment(&id, &user, 3, &a, now + 4, "2026-10-25"),
+            db.manual_payment(&id, &user, 3, &b, now + 4, "2026-10-25")
         );
         assert_eq!(a.unwrap().unwrap().id, id);
         assert_eq!(b.unwrap().unwrap().id, id);
@@ -465,6 +469,14 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(hold, None);
+        let legal: (String, i64, i32) = sqlx::query_as(
+            "SELECT legal_version,legal_accepted_at,production_days FROM orders WHERE id=$1",
+        )
+        .bind(&id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(legal, ("2026-10-25".into(), now + 4, 14));
         let pending = db.manual_offer(&id).await.unwrap().unwrap();
         assert_eq!(pending["state"], "payment_started");
         assert_eq!(pending["payment_started"], true);
@@ -554,10 +566,17 @@ mod tests {
             "expired"
         );
         assert!(
-            db.manual_payment(&expiry, &user, 2, &request, now + 11 + 7 * 86400)
-                .await
-                .unwrap()
-                .is_none()
+            db.manual_payment(
+                &expiry,
+                &user,
+                2,
+                &request,
+                now + 11 + 7 * 86400,
+                "2026-10-25"
+            )
+            .await
+            .unwrap()
+            .is_none()
         );
         // Explicit terminal failure keeps the old immutable attempt; it never creates another.
         let failed = db
@@ -568,7 +587,7 @@ mod tests {
         db.manual_publish(&failed, &admin, 1, 2000, 0, "Will be cancelled", now + 12)
             .await
             .unwrap();
-        db.manual_payment(&failed, &user, 2, &request, now + 13)
+        db.manual_payment(&failed, &user, 2, &request, now + 13, "2026-10-25")
             .await
             .unwrap()
             .unwrap();
@@ -585,6 +604,7 @@ mod tests {
                 2,
                 &uuid::Uuid::new_v4().to_string(),
                 now + 15,
+                "2026-10-25",
             )
             .await
             .unwrap()

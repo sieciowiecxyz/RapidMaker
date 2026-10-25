@@ -181,7 +181,9 @@
     </ul>{/if}
   {#if loading}<p role="status">Sprawdzamy konto…</p>
   {:else if !user}<p>
-      Zaloguj się, aby bezpiecznie przypisać pliki do swojego konta i otrzymać ofertę.
+      Możesz poprosić o bezpłatną wycenę bez konta, pisząc na
+      <a href="mailto:piotr@rapidmaker.pl?subject=Wycena%20druku%203D">piotr@rapidmaker.pl</a>.
+      Jeśli chcesz otrzymać i opłacić ofertę w panelu, zaloguj się, aby przypisać pliki do konta.
     </p>
     <div>
       <a class="button primary" href="/logowanie?next=%2Fzamowienie"

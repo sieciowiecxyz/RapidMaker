@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import LegalNotice from '../components/LegalNotice.svelte';
   import Passkeys from '../components/Passkeys.svelte';
   import * as auth from '../lib/session';
   import { apiRequest } from '../lib/http';
@@ -258,7 +259,8 @@
             disabled={busy}
           /></label
         >
-        <button class="button primary" disabled={busy}>Potwierdź email</button>
+        <LegalNotice account />
+        <button class="button primary" disabled={busy}>Utwórz konto — potwierdź email</button>
       </form>
       <p class="muted">
         Najpierw potwierdzisz email, potem ustawisz hasło lub passkey. Jeśli konto ma już metodę

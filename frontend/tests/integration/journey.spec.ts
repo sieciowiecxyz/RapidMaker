@@ -95,7 +95,7 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment and em
         r.url().endsWith(`/api/account/orders/${id}/payment-status`) &&
         r.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: /Zapłać 25/ }).click();
+    await page.getByRole('button', { name: /Zamawiam i płacę 25/ }).click();
     expect((await refreshed).status()).toBe(200);
     await expect
       .poll(

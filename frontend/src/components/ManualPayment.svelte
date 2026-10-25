@@ -1,11 +1,8 @@
 <script lang="ts">
+  import LegalNotice from './LegalNotice.svelte';
   import { onMount } from 'svelte';
-  import {
-    loadStripe,
-    type Stripe,
-    type StripeElements,
-    type StripePaymentElement,
-  } from '@stripe/stripe-js';
+  import { loadStripe } from '@stripe/stripe-js/pure';
+  import type { Stripe, StripeElements, StripePaymentElement } from '@stripe/stripe-js';
   import { getStripeConfig } from '../lib/api';
   import type { ManualPayment } from '../lib/manualQuotes';
   import { money } from '../lib/format';
@@ -102,8 +99,9 @@
   <div bind:this={host}></div>
   {#if !ready && !error}<p role="status">Wczytujemy formularz Stripe…</p>{/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
+  <LegalNotice />
   <button class="button primary" disabled={!ready || busy} onclick={confirm}
-    >{busy ? 'Potwierdzamy…' : `Zapłać ${money(payment.total_grosze / 100)}`}</button
+    >{busy ? 'Potwierdzamy…' : `Zamawiam i płacę ${money(payment.total_grosze / 100)}`}</button
   >
   <small>Dane karty obsługuje Stripe. Zapłatę potwierdza serwer.</small>
 </div>

@@ -18,6 +18,7 @@ export {
   resetDemo,
 } from './mock';
 
+import { LEGAL_VERSION } from './legal';
 import * as mock from './mock';
 import { apiFetch, ApiError } from './http';
 export { getSession, requestLogin, confirmLogin, logout, claimGuest } from './session';
@@ -322,6 +323,7 @@ export function startCheckout(quoteId: string, offerId: string) {
   return request<{ url: string; session_id: string }>('/api/checkout/session', {
     quote_id: quoteId,
     offer_id: offerId,
+    legal_version: LEGAL_VERSION,
   });
 }
 export async function verifyCheckout(sessionId: string) {
@@ -391,7 +393,11 @@ export async function startOrderIntent(quote: Quote, contact: Contact, offerId: 
     client_secret: string;
     payment_intent_id: string;
     total_grosze: number;
-  }>('/api/checkout/intent', { quote_id: checkout.id, offer_id: offerId });
+  }>('/api/checkout/intent', {
+    quote_id: checkout.id,
+    offer_id: offerId,
+    legal_version: LEGAL_VERSION,
+  });
   const expected = checkout.print_grosze + checkout.packaging_grosze + offer.price_grosze;
   if (result.total_grosze !== expected) throw new Error('Kwota płatności różni się od wyceny.');
   const snapshot = { ...quote, delivery: offer.price_grosze / 100, total: expected / 100 };

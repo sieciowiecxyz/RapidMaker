@@ -48,6 +48,9 @@ struct Offer {
 #[serde(deny_unknown_fields)]
 #[schema(as = ManualQuotePayment)]
 struct Payment {
+    #[serde(default)]
+    #[schema(required = true, example = "2026-10-25")]
+    legal_version: String,
     version: i64,
     request_id: String,
 }
@@ -190,6 +193,7 @@ async fn payment(
     Json(input): Json<Payment>,
 ) -> Result<(StatusCode, Json<Value>)> {
     let session = auth.mutation(&headers).await?;
+    super::legal::validate(&input.legal_version)?;
     app.stripe()?;
     if input.version < 1 || uuid::Uuid::parse_str(&input.request_id).is_err() {
         return Err(error(
@@ -210,6 +214,7 @@ async fn payment(
             input.version,
             &input.request_id,
             now(),
+            &input.legal_version,
         )
         .await
         .map_err(|_| unavailable())?

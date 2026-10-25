@@ -3,6 +3,11 @@ use crate::MailError;
 pub enum Notification<'a> {
     Test,
     LoginCode(&'a str),
+    LegalDocuments {
+        reference: &'a str,
+        legal_version: &'a str,
+        details: &'a str,
+    },
     OrderConfirmed {
         reference: &'a str,
     },
@@ -52,6 +57,11 @@ impl Notification<'_> {
                     return Err(MailError::InvalidMessage);
                 }
                 ("Rapidmaker — kod logowania", format!("Twój kod logowania: {code}\n\nKod jest jednorazowy i ważny przez 10 minut. Jeśli nie prosisz o logowanie, zignoruj tę wiadomość."))
+            }
+            Self::LegalDocuments { reference, legal_version, details } => {
+                field(reference)?;
+                if details.len() > 96 * 1024 || details.chars().any(|c| c.is_control() && !matches!(c, '\n' | '\t')) { return Err(MailError::InvalidMessage); }
+                ("Rapidmaker — warunki umowy", format!("Sprawa: {reference}\n\n{details}\n\n{}", crate::legal::documents(legal_version)?))
             }
             Self::OrderConfirmed { reference } => {
                 field(reference)?;
@@ -113,6 +123,11 @@ pub struct EmailPayload {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum EmailNotification {
+    LegalDocuments {
+        reference: String,
+        legal_version: String,
+        details: String,
+    },
     OrderConfirmed {
         reference: String,
     },
@@ -186,6 +201,15 @@ impl EmailPayload {
 impl EmailNotification {
     pub(crate) fn borrowed(&self) -> Notification<'_> {
         match self {
+            Self::LegalDocuments {
+                reference,
+                legal_version,
+                details,
+            } => Notification::LegalDocuments {
+                reference,
+                legal_version,
+                details,
+            },
             Self::OrderConfirmed { reference } => Notification::OrderConfirmed { reference },
             Self::PaymentReceived {
                 reference,

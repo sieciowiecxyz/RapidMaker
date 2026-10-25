@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import * as api from '../../lib/api';
+  import LegalNotice from '../../components/LegalNotice.svelte';
   import ParcelPlan from '../../components/ParcelPlan.svelte';
   import PaymentReturn from './PaymentReturn.svelte';
   import ManualQuoteRequest from '../../components/ManualQuoteRequest.svelte';
@@ -932,6 +933,7 @@
                     )}</strong
               >
             </div>
+            {#if stage === 4}<LegalNotice />{/if}
             <button
               type="submit"
               class="button primary"
@@ -950,7 +952,7 @@
                   : cart.quote.manual
                     ? 'Skontaktuj się w sprawie wyceny'
                     : stage === 4 && stripeForm
-                      ? `Zapłać ${money(cart.quote.total)} →`
+                      ? `Zamawiam i płacę ${money(cart.quote.total)} →`
                       : 'Przejdź do płatności →'}
             </button>
           </div>

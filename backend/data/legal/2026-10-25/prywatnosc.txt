@@ -1,0 +1,59 @@
+Polityka prywatności RapidMaker
+
+Wersja 2026-10-25. Ten dokument wyjaśnia przetwarzanie danych; nie jest prośbą o ogólną zgodę na ich używanie.
+
+1. Administrator i kontakt
+
+Administratorem Twoich danych jest Piotr Grudniak Rapid Maker, ul. Zielony Krąg 1, 05-500 Piaseczno, NIP 1231537290, REGON 525918817. W sprawach prywatności i usunięcia konta napisz na piotr@rapidmaker.pl. Możesz też skontaktować się pocztą lub telefonicznie: +48 537 320 816.
+
+2. Jakie dane i po co
+
+Wycena i zamówienie: przetwarzamy przesłane modele, ustawienia wydruku, ilości, dane kontaktowe i dostawy, ewentualne dane do faktury, korespondencję oraz informacje o płatności. Podstawą jest podjęcie działań na Twoje żądanie przed umową i jej wykonanie — art. 6 ust. 1 lit. b RODO. Dane wymagane dla konkretnej metody zakupu oznacza formularz. Bez niezbędnych danych nie przygotujemy wyceny, nie wykonamy lub nie dostarczymy zamówienia. Nie podawaj w modelach i wiadomościach zbędnych danych osobowych ani danych szczególnych kategorii.
+
+Dobrowolne konto: używamy adresu email, zabezpieczonych danych uwierzytelniania, preferencji i historii powiązanych zamówień, aby świadczyć usługę konta — art. 6 ust. 1 lit. b RODO. Hasło jest hashowane. Passkey nie przekazuje nam odcisku palca ani obrazu twarzy; otrzymujemy dane klucza publicznego i potwierdzenie uwierzytelnienia. Zakup nie wymaga założenia konta.
+
+Księgowość i obowiązki prawne: przetwarzamy dokumenty rozliczeniowe i niezbędne dane transakcji na podstawie art. 6 ust. 1 lit. c RODO, w szczególności przepisów podatkowych i rachunkowych.
+
+Bezpieczeństwo, rozpatrywanie spraw i roszczenia: przetwarzamy niezbędne dane sesji, zdarzeń technicznych, kontaktów i transakcji na podstawie art. 6 ust. 1 lit. f RODO. Naszym uzasadnionym interesem jest ochrona serwisu przed nadużyciami, wyjaśnianie problemów i ustalenie, dochodzenie lub obrona roszczeń. Obowiązki prawne dotyczące reklamacji realizujemy także na podstawie art. 6 ust. 1 lit. c RODO.
+
+Wyliczamy cenę i plan pakowania automatycznie z parametrów modelu i zamówienia. Możesz poprosić o wyjaśnienie wyniku i ocenę człowieka na piotr@rapidmaker.pl. Nie stosujemy tych obliczeń do profilowania marketingowego ani oceny Twojej sytuacji osobistej.
+
+3. Komu przekazujemy dane
+
+Dostęp mają upoważnione osoby obsługujące serwis, produkcję i klienta, w zakresie potrzebnym do ich pracy. Płatności obsługuje Stripe; dostawę — Furgonetka i wybrany przewoźnik; pocztę — Apple/iCloud. Dokumentację może otrzymać obsługa księgowa oraz uprawnione organy, gdy wymagają tego przepisy. Dostawcom przekazujemy dane potrzebne do ich zadania; modelu 3D nie przekazujemy operatorowi płatności ani przewoźnikowi jako elementu zwykłej płatności lub nadania.
+
+Dostawcy mogą działać jako podmioty przetwarzające na nasze zlecenie albo jako odrębni administratorzy, zależnie od konkretnej usługi i ich obowiązków. Zasady usług opisują również polityki prywatności: stripe.com/privacy, furgonetka.pl/polityka-prywatnosci oraz apple.com/legal/privacy/pl/. Nie sprzedajemy danych i nie wykorzystujemy Twoich projektów do reklamy bez osobnego uzgodnienia.
+
+Korzystanie z międzynarodowych dostawców może wiązać się z przetwarzaniem poza Europejskim Obszarem Gospodarczym. Takie przekazanie wymaga podstawy z rozdziału V RODO, np. odpowiedniej decyzji Komisji Europejskiej albo standardowych klauzul umownych i wymaganych zabezpieczeń. Informacje o podstawie konkretnego przekazania oraz sposobie uzyskania kopii zabezpieczeń udostępniamy pod adresem piotr@rapidmaker.pl.
+
+4. Jak długo przechowujemy dane
+
+Modele bez zamówienia: standardowo przez 24 godziny od przesłania. Zgłoszenie ręcznej wyceny lub rozpoczęta płatność może przedłużyć przechowywanie do zakończenia sprawy albo wygaśnięcia zgłoszenia. Nie usuwamy plików w trakcie wyjaśniania niepewnego wyniku płatności.
+
+Pliki zamówień: przez realizację i standardowo przez 90 dni od oznaczenia zamówienia jako zakończone. Otwarta reklamacja, spór lub inna uzasadniona potrzeba dowodowa może wymagać dłuższego zachowania niezbędnych plików. Usunięcie pliku nie oznacza usunięcia dokumentacji zamówienia. Zachowaj własny oryginał modelu.
+
+Dane konta: przez korzystanie z konta; po żądaniu zamknięcia usuwamy dane zbędne i wyłączamy dostęp, pozostawiając wyłącznie dane potrzebne z innej podstawy prawnej. Sam brak logowania nie oznacza zamknięcia konta. Szkice, wiadomości i dokumentacja spraw są okresowo przeglądane; nie przechowujemy ich dłużej, niż wymaga wycena, realizacja, obsługa sprawy lub uzasadniona ochrona roszczeń. Informację o terminie dotyczącym konkretnej sprawy uzyskasz emailem.
+
+Dokumenty podatkowe: co do zasady do upływu przedawnienia zobowiązania podatkowego — zwykle pięć lat od końca roku, w którym upłynął termin płatności podatku; termin może ulec zmianie w przypadkach ustawowych. Pozostałe dane dowodowe zachowujemy tylko w niezbędnym zakresie do upływu właściwego terminu roszczeń lub zakończenia postępowania. Nie oznacza to przechowywania wszystkich plików i całego konta przez okres wymagany dla faktur.
+
+Sesje i dane techniczne wygasają zgodnie z celem bezpieczeństwa; okres jest ograniczany do potrzeb ochrony i diagnozy. Kopie zapasowe również podlegają ograniczeniu przechowywania. Usunięcia uwzględniamy przy odtwarzaniu danych; backup nie powinien przywracać aktywnego konta ani rozpoczynać ponownie usuniętego przetwarzania. Możesz zapytać o zakres i aktualny okres kopii lub logów dotyczących Twoich danych.
+
+5. Twoje prawa i usunięcie konta
+
+Możesz zażądać dostępu i kopii danych, sprostowania, usunięcia lub ograniczenia przetwarzania oraz przenoszenia danych, gdy spełnione są warunki RODO. Możesz wnieść sprzeciw wobec przetwarzania opartego na uzasadnionym interesie, z przyczyn związanych z Twoją szczególną sytuacją. Jeśli przetwarzanie opiera się na zgodzie, możesz ją wycofać bez wpływu na zgodność wcześniejszego przetwarzania z prawem.
+
+Wniosek, w tym o zamknięcie konta, wyślij na piotr@rapidmaker.pl. Nie musisz zakładać konta ani podawać powodu. Jeśli mamy uzasadnione wątpliwości, możemy poprosić o proporcjonalne potwierdzenie tożsamości; nie wymagamy rutynowo skanu dowodu. Odpowiadamy bez zbędnej zwłoki, co do zasady w ciągu miesiąca. Przy złożonym wniosku lub dużej liczbie wniosków termin może zostać przedłużony o kolejne dwa miesiące; w pierwszym miesiącu informujemy o tym i podajemy przyczyny.
+
+Prawo do usunięcia nie jest bezwzględne: niezbędne dokumenty podatkowe, dane potrzebne do wykonania trwającego zamówienia lub ochrony roszczeń mogą pozostać. Wyjaśnimy zakres, podstawę i okres dalszego przechowywania. Zamknięcie konta nie anuluje samo w sobie umowy sprzedaży.
+
+Jeśli uważasz, że przetwarzamy dane niezgodnie z prawem, możesz złożyć skargę do Prezesa Urzędu Ochrony Danych Osobowych: uodo.gov.pl.
+
+6. Cookie i usługi zewnętrzne
+
+Serwis używa niezbędnych cookie do utrzymania sesji, zabezpieczenia formularzy i przypisania plików do właściwej osoby. Szkic koszyka i część ustawień mogą być zapisane w pamięci przeglądarki. Dane uwierzytelniania nie są przechowywane w localStorage. Usunięcie lub zablokowanie tych danych może uniemożliwić logowanie albo utratę dostępu do szkicu gościa.
+
+Nie prowadzimy newslettera ani nie używamy analityki marketingowej lub reklamowych trackerów. Formularze Stripe są ładowane w procesie płatności i adresowania; operator przetwarza również dane techniczne niezbędne do obsługi i ochrony płatności zgodnie ze swoją polityką. Mapa Google jest zewnętrznym odnośnikiem: po jego otwarciu obowiązują zasady Google. Gdybyśmy dodali opcjonalną analitykę lub marketing, wymaganą zgodę uzyskamy przed ich uruchomieniem.
+
+7. Ochrona danych i zmiany dokumentu
+
+Stosujemy środki techniczne i organizacyjne odpowiednie do ryzyka, w tym ograniczanie uprawnień, zabezpieczenia logowania i prywatny dostęp do plików. Nie obiecujemy całkowitego wyeliminowania ryzyka. Aktualizujemy dokument, gdy zmienia się sposób przetwarzania; istotne zmiany komunikujemy w odpowiedni sposób. Nowa polityka nie stanowi sama w sobie zgody na nowy cel przetwarzania.

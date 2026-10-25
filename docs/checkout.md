@@ -1,5 +1,7 @@
 # Checkout — kontrakt backendu
 
+Rozpoczęcie płatności wymaga aktualnego `legal_version` również przez endpointy zgodności. Zapis wersji/czasu i terminu produkcji jest atomowy z zamówieniem; po potwierdzonej zapłacie outbox wysyła specyfikację i pełne dokumenty. Retry nie dubluje kopii. [Warunki i ograniczenia](legal.md).
+
 ## Zwroty płatności
 
 - `POST /api/admin/orders/{id}/refunds`: `{"request_id":"UUID","amount_grosze":500}`. Kwota brutto w groszach, np. 500 = 5 zł; pełny zwrot to pozostała opłacona kwota. Wymaga sesji admina po passkey oraz CSRF/Origin. `202` potwierdza zapis zlecenia, nie zwrot pieniędzy.

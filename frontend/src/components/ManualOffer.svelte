@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LegalNotice from './LegalNotice.svelte';
   import { onMount } from 'svelte';
   import {
     publishManualOffer,
@@ -273,10 +274,9 @@
           {orderId}
           {onchange}
         />{/key}
-    {:else if amount !== null && (!expired || offer.state === 'payment_started')}<button
-        class="action"
-        disabled={busy}
-        onclick={pay}
+    {:else if amount !== null && (!expired || offer.state === 'payment_started')}<LegalNotice
+        preparing
+      /><button class="action" disabled={busy} onclick={pay}
         >{busy
           ? 'Sprawdzamy płatność…'
           : offer.state === 'payment_started' || payment

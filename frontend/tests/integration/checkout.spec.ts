@@ -38,7 +38,7 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
   await page.getByRole('button', { name: 'Przejdź do płatności →', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dokończ płatność.', exact: true })).toBeVisible();
   await fillStripeCard(page);
-  await page.getByRole('button', { name: /^Zapłać .*→$/ }).click();
+  await page.getByRole('button', { name: /^Zamawiam i płacę .*→$/ }).click();
   await expect(page).toHaveURL(/localhost:18437\/zamowienie\?payment_intent=pi_/);
   const intent = new URL(page.url()).searchParams.get('payment_intent')!;
   await expect

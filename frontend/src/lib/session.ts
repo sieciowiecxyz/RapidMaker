@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from './legal';
 import type { EmailChallenge, Session } from './types';
 import { ApiError, apiRequest, clearAuthToken } from './http';
 
@@ -44,7 +45,10 @@ export async function operatorSession(): Promise<AuthSession | null> {
   return current?.role === 'admin' && current.adminVerified ? current : null;
 }
 export async function requestLogin(email: string, _register = false): Promise<EmailChallenge> {
-  const result = await apiRequest<{ challenge_id: string }>('/api/auth/start', 'POST', { email });
+  const result = await apiRequest<{ challenge_id: string }>('/api/auth/start', 'POST', {
+    email,
+    legal_version: LEGAL_VERSION,
+  });
   return { id: result.challenge_id, email: email.trim(), isNew: false };
 }
 export async function confirmLogin(challengeId: string, code: string): Promise<AuthState> {

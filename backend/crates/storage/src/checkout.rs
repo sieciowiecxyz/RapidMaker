@@ -43,6 +43,8 @@ pub struct AttemptInput<'a> {
     pub fingerprint: &'a str,
     pub provider_kind: &'a str,
     pub provider_request: &'a Value,
+    pub legal_version: &'a str,
+    pub production_days: i32,
 }
 #[derive(Debug)]
 pub struct StripeEvent {
@@ -199,7 +201,10 @@ impl Storage {
         input: &AttemptInput<'_>,
         now: i64,
     ) -> Result<Option<PaymentAttempt>, StorageError> {
-        if uuid::Uuid::parse_str(input.id).is_err()
+        if input.legal_version.is_empty()
+            || input.legal_version.len() > 32
+            || !(1..=365).contains(&input.production_days)
+            || uuid::Uuid::parse_str(input.id).is_err()
             || !hash(input.client_key_hash)
             || !hash(input.fingerprint)
             || (!input.provider_request.is_array()
@@ -303,6 +308,8 @@ impl Storage {
             .bind(input.id).bind(input.draft_id).bind(input.owner_hash).bind(input.client_key_hash).bind(input.fingerprint).bind(input.provider_kind).bind(amount).bind(format!("rapidmaker:{}",input.id)).bind(input.provider_request).bind(now).bind(input.offer_id).fetch_one(&mut *tx).await?;
         sqlx::query("INSERT INTO orders(id,owner_hash,user_id,contact,lines,amount_grosze,provider_kind,provider_id,payment_attempt_id,guest_updates,created_at,fulfillment) VALUES($1,$2,$3,$4,$5,$6,$7,NULL,$1,$8,$9,$10)")
             .bind(input.id).bind(input.owner_hash).bind(user.as_deref()).bind(contact).bind(lines).bind(amount).bind(input.provider_kind).bind(quote["guest_updates"].as_bool().unwrap_or(true)).bind(now).bind(&fulfillment).execute(&mut *tx).await?;
+        sqlx::query("UPDATE orders SET legal_version=$2,legal_accepted_at=$3,production_days=$4 WHERE id=$1")
+            .bind(input.id).bind(input.legal_version).bind(now).bind(input.production_days).execute(&mut *tx).await?;
         enqueue(
             &mut tx,
             input.id,
@@ -722,6 +729,8 @@ mod tests {
             fingerprint: &fingerprint,
             provider_kind: "intent",
             provider_request: &params,
+            legal_version: "2026-10-25",
+            production_days: 14,
         };
         sqlx::query("UPDATE catalog_materials SET cost_net_grosze_per_kg=6000 WHERE id=$1")
             .bind(&material)
@@ -852,6 +861,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(mails, 1);
+        let legal: (String, i64, i32) = sqlx::query_as(
+            "SELECT legal_version,legal_accepted_at,production_days FROM orders WHERE id=$1",
+        )
+        .bind(&id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(legal, ("2026-10-25".into(), 10003, 14));
+        let contracts: Vec<Value> =
+            sqlx::query_scalar("SELECT payload FROM email_outbox WHERE event_key=$1")
+                .bind(format!("order:{id}:contract"))
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0]["notification"]["legal_version"], "2026-10-25");
+        assert!(
+            contracts[0]["notification"]["details"]
+                .as_str()
+                .unwrap()
+                .contains("25.00 PLN")
+        );
+        assert!(!contracts[0].to_string().contains("client_secret"));
+
         let until: Option<i64> =
             sqlx::query_scalar("SELECT retain_until FROM order_files WHERE order_id=$1")
                 .bind(&id)
@@ -893,6 +926,8 @@ mod tests {
                 fingerprint: &fingerprint,
                 provider_kind: "intent",
                 provider_request: &params,
+                legal_version: "2026-10-25",
+                production_days: 14,
             };
             db.checkout_prepare(&next, 12002 + offset)
                 .await
@@ -986,6 +1021,8 @@ mod tests {
             fingerprint: &fingerprint,
             provider_kind: "session",
             provider_request: &params,
+            legal_version: "2026-10-25",
+            production_days: 14,
         };
         db.checkout_prepare(&delayed_input, 13002)
             .await

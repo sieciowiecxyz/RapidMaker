@@ -247,7 +247,7 @@ pub(crate) async fn mark_paid(
     amount: i64,
     now: i64,
 ) -> Result<bool, StorageError> {
-    let row=sqlx::query("SELECT user_id,contact FROM orders WHERE id=$1 AND provider_id=$2 AND amount_grosze=$3 AND status='awaiting_payment' FOR UPDATE")
+    let row=sqlx::query("SELECT user_id,contact,lines,fulfillment,legal_version,production_days FROM orders WHERE id=$1 AND provider_id=$2 AND amount_grosze=$3 AND status='awaiting_payment' FOR UPDATE")
             .bind(id).bind(provider).bind(amount).fetch_optional(&mut **tx).await?;
     let Some(row) = row else {
         return Ok(false);
@@ -271,6 +271,36 @@ pub(crate) async fn mark_paid(
         now,
     )
     .await?;
+    if let Some(version) = row.try_get::<Option<String>, _>("legal_version")? {
+        let parts: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('plik',f.filename,'liczba_sztuk',q.request->'quantity','material',q.request->'material_id','kolor',q.request->'color_code','parametry_druku',q.request->'options','wymiary_mm',q.request->'dimensions_mm') FROM order_files f JOIN quotes q ON q.id=f.quote_id WHERE f.order_id=$1 ORDER BY f.quote_id")
+            .bind(id).fetch_all(&mut **tx).await?;
+        let fulfillment = row
+            .try_get::<Option<Value>, _>("fulfillment")?
+            .unwrap_or(Value::Null);
+        // Confirm the customer-facing terms, not the potentially large packing/placement plan.
+        let delivery = json!({"metoda":fulfillment["delivery"],"przewoznik":fulfillment["offer"]["name"],"koszt_grosze":fulfillment["offer"]["shipping_grosze"],"opakowania_grosze":fulfillment["packaging_grosze"],"punkt_odbioru":fulfillment["point"],"uzgodnienia":fulfillment["manual_scope"],"dostawa_reczna_grosze":fulfillment["manual_shipping_grosze"]});
+        let snapshot = json!({"odbiorca":contact,"czesci":parts,"pozycje_cenowe":row.try_get::<Value,_>("lines")?,"dostawa_i_uzgodnienia":delivery});
+        let details = format!(
+            "Potwierdzamy zawarcie umowy i płatność {}.{:02} PLN brutto za zamówienie {id}.\nWykonanie i nadanie / gotowość do odbioru: do {} dni kalendarzowych od potwierdzenia płatności, chyba że w ofercie uzgodniono inny termin. Czas przewozu osobno.\nSpecyfikacja i rozliczenie (kwoty pól *_grosze podano w groszach):\n{}",
+            amount / 100,
+            amount % 100,
+            row.try_get::<Option<i32>, _>("production_days")?
+                .ok_or("missing production term")?,
+            serde_json::to_string_pretty(&snapshot)?
+        );
+        enqueue(
+            tx,
+            id,
+            "contract",
+            user.as_deref(),
+            contact["email"].as_str().ok_or("invalid order contact")?,
+            "legal_documents",
+            json!({"reference":id,"legal_version":version,"details":details}),
+            true,
+            now,
+        )
+        .await?;
+    }
     Ok(true)
 }
 
