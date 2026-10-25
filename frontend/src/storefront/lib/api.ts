@@ -5,44 +5,19 @@ import { validateModel } from './modelSettings';
 import type { Material, Model, Quote, QuoteOptions } from './types';
 
 export async function getMaterials(): Promise<Material[]> {
-  const catalog = await checkout.getMaterials();
-  const families = [
-    {
-      id: 'GFA00',
-      family: 'PLA' as const,
-      description: 'Prototypy, dekoracje i codzienne części.',
-    },
-    {
-      id: 'GFB00',
-      family: 'ABS' as const,
-      description: 'Sztywne części techniczne, odporniejsze na temperaturę.',
-    },
-    {
-      id: 'GFU01',
-      family: 'TPU' as const,
-      description: 'Elastyczne elementy, osłony i amortyzacja.',
-    },
+  const colors = [
+    { id: 'black', name: 'Czarny', hex: '#292e2a', available: true },
+    { id: 'white', name: 'Biały', hex: '#f2f0e8', available: true },
+    { id: 'green', name: 'Zielony', hex: '#427756', available: true },
+    { id: 'custom', name: 'Niestandardowy', hex: '#a7b5a2', available: true },
   ];
-  return families.flatMap(({ id, family, description }) => {
-    const material = catalog.find((item) => item.id === id);
-    return material
-      ? [
-          {
-            id,
-            family,
-            name: family,
-            description,
-            compatible: material.compatible,
-            colors: material.colors.map((color) => ({
-              id: color.code ?? color.hex,
-              name: color.name,
-              hex: color.hex,
-              available: true,
-            })),
-          },
-        ]
-      : [];
-  });
+  return [
+    {id:'pla',family:'PLA',name:'PLA',description:'Modele poglądowe i prototypy. Dobry wybór na początek.',colors},
+    {id:'petg',family:'PETG',name:'PETG',description:'Części użytkowe i obudowy.',colors},
+    {id:'asa',family:'ASA',name:'ASA',description:'Elementy do zastosowań zewnętrznych.',colors},
+    {id:'pa',family:'PA-CF',name:'PA-CF',description:'Poliamid wzmacniany włóknem węglowym do elementów konstrukcyjnych.',colors:colors.filter(c=>c.id==='black')},
+    {id:'tpu',family:'TPU',name:'TPU',description:'Elastyczne elementy, osłony i amortyzacja.',colors},
+  ];
 }
 
 export const getSampleModels = samples;
@@ -114,23 +89,13 @@ function productionModel(
 }
 export async function getQuote(options: QuoteOptions): Promise<Quote> {
   const materials = await getMaterials();
-  validate(options.models, materials);
-  const catalog = await checkout.getPrintOptions();
-  const models = options.models.map((model) => productionModel(model, materials, catalog));
-  const result = await checkout.quoteModels(models, 'pickup', undefined, options.manual);
-  const quote = result.checkout;
-  return {
-    lines: quote.print_lines.map((line) => ({
-      id: line.model_id,
-      unitPrice: line.unit_grosze / 100,
-      subtotal: line.total_grosze / 100,
-    })),
-    total: quote.print_grosze / 100,
-    setup: quote.setup_grosze / 100,
-    delivery: 0,
-    manual: result.manual || quote.packing.status === 'manual_review',
-    reason: quote.reason ?? quote.packing.reason,
-  };
+  // Configuration is local; the production server must confirm a price separately.
+  for (const model of options.models) {
+    const issues = validateModel(model, materials);
+    if (issues.length) throw new Error(`${model.name}: uzupełnij ${issues.join(', ')}.`);
+  }
+  if (!options.models.length || options.models.length > 10) throw new Error('Dodaj od 1 do 10 części.');
+  return {lines:[],total:0,setup:0,delivery:0,manual:true};
 }
 export async function prepareCheckout(
   models: Model[],

@@ -2,20 +2,20 @@ import { customColors } from './colors';
 import type { Material, Model, PrintSettings } from './types';
 export const defaultSettings: PrintSettings = {
   material: '',
-  color: '',
+  color: 'black',
   customShade: '',
   quality: 'standard',
   strength: 'standard',
 };
 export const emptySettings: PrintSettings = {
   material: '',
-  color: '',
+  color: 'black',
   customShade: '',
   quality: '',
   strength: '',
 };
 export function normalizeSettings(settings: PrintSettings): PrintSettings {
-  return { ...settings };
+  return { ...settings, color: settings.material === 'pa' ? 'black' : settings.color };
 }
 export function validateModel(model: Model, materials: Material[]): string[] {
   const errors: string[] = [];
