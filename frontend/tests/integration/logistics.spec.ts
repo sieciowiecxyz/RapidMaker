@@ -18,8 +18,6 @@ for (const finish of ['cancel', 'handover'])
       fixture.find((a) => a.email === 'void@sieciowiec.xyz')!,
     );
     await configureCheckout(page);
-    await page.getByLabel('Email', { exact: true }).fill('void@sieciowiec.xyz');
-    await page.getByLabel('Telefon', { exact: true }).fill('500600700');
     await fillStripeAddress(page);
     const carrier = page.getByRole('radio', { name: /^DHL/ });
     await expect(carrier).toBeVisible({ timeout: 45_000 });
@@ -57,13 +55,43 @@ for (const finish of ['cancel', 'handover'])
       await operator.goto('/admin.html');
       await operator.getByRole('button', { name: `Otwórz ${orderId}`, exact: true }).click();
       const detail = operator.getByRole('complementary', { name: `Szczegóły ${orderId}` });
-      await detail.getByLabel('Etap realizacji').selectOption('in_production');
+      await detail.getByLabel('Etap realizacji').selectOption('production:printing');
       await expect
         .poll(
           async () =>
             (await (await page.request.get(`/api/account/orders/${orderId}`)).json()).status,
         )
         .toBe('in_production');
+      await detail
+        .getByRole('spinbutton', { name: /Gotowe \/ / })
+        .first()
+        .fill('1');
+      await detail
+        .getByRole('spinbutton', { name: /Gotowe \/ / })
+        .first()
+        .press('Tab');
+      await expect
+        .poll(
+          async () =>
+            (await (await operator.request.get(`/api/admin/orders/${orderId}/production`)).json())
+              .progress[0]?.done,
+        )
+        .toBe(1);
+      await detail.getByLabel('Etap realizacji').selectOption('production:qc');
+      await detail
+        .getByRole('checkbox', {
+          name: 'Kontrola jakości zakończona — wszystkie sztuki sprawdzone',
+          exact: true,
+        })
+        .check();
+      await expect
+        .poll(
+          async () =>
+            (await (await operator.request.get(`/api/admin/orders/${orderId}/production`)).json())
+              .qc_passed,
+        )
+        .toBe(true);
+      await detail.getByLabel('Etap realizacji').selectOption('production:packing');
       await detail.getByRole('button', { name: /^Dalej:/ }).click();
       await expect
         .poll(

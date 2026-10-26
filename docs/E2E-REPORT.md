@@ -1,5 +1,7 @@
 # E2E RapidMaker — 2026-10-26
 
+Raport historyczny dla main `0db0058`, przed integracją PR #4. Aktualne sprawdzenia: [integration-piotr.md](integration-piotr.md).
+
 **31 scenariuszy integracyjnych/E2E + 20 kontraktów UI PASS.** Testy i naprawy wykonano na lokalnej, izolowanej instancji. Osobna blokada DPD poniżej nie jest deklarowana jako sukces.
 
 Uruchomienie: `npm --prefix frontend run test:all`. Grupy, wymagania i pojedyncze regresje: [instrukcja](../frontend/tests/README.md). Runner tworzy osobną bazę, pliki i konta; nie zmienia normalnego localhostu. Stripe wyłącznie test, Furgonetka wyłącznie sandbox, email tylko `void@sieciowiec.xyz`.

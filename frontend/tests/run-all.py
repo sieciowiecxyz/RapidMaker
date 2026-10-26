@@ -25,7 +25,7 @@ if not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') and not Path('/usr/bin/c
     subprocess.run(['npx', 'playwright', 'install', 'chromium'], cwd=root / 'frontend', check=True)
 
 suites = {
-    'core': ['--local-accounts', 'models.spec.ts', 'pricing.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
+    'core': ['--local-accounts', 'models.spec.ts', 'pricing.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
     'sandbox': ['--sandbox', '--client-totp', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],

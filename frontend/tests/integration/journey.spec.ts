@@ -2,6 +2,7 @@ import { expect, test } from './fixtures';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { accounts, login, mail, fillStripeCard } from './helpers';
+import { fillAuthorContact } from './checkout-helpers';
 
 test.use({ screenshot: 'off', trace: 'off' });
 test('real manual quote, admin publication, iCloud notice, Stripe payment and email reply', async ({
@@ -23,12 +24,14 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment and em
     .getByLabel('Dodaj modele STL, STEP lub 3MF')
     .setInputFiles(resolve('../backend/crates/geometry/tests/fixtures/huge_cube_1000mm.stl'));
   await expect(page.getByRole('img', { name: /Model z pliku huge_cube_1000mm.stl/ })).toBeVisible();
-  await page.locator('input[name=material][value=GFA00]').check();
+  await page.locator('input[name=material][value=pla]').check();
   await page.locator('input[name=color]').first().check();
   await page.locator('input[name=quality][value=standard]').check();
   await page.locator('input[name=strength][value=standard]').check();
   await expect(page.getByText('Wymagana ręczna wycena', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Przejdź do dostawy', exact: true }).click();
+  await page.locator('.quote-contact').click();
+  await fillAuthorContact(page);
+  await page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Zapytaj o wycenę', exact: true })).toBeVisible();
   await page.getByLabel('Imię i nazwisko', { exact: true }).fill('Test Rapidmaker');
   await page.getByLabel('Telefon', { exact: true }).fill('500600700');

@@ -94,7 +94,7 @@ try:
     else:
         raise RuntimeError("Isolated API startup timeout")
     # Explicit fixture costs only in this disposable database; every color remains stock=false.
-    sql("UPDATE catalog_materials SET cost_net_grosze_per_kg=10000,production_enabled=true WHERE id IN ('GFA00','GFB00','GFU01')", name)
+    sql("UPDATE catalog_materials SET cost_net_grosze_per_kg=10000,production_enabled=true WHERE id IN ('GFA00','GFB00','GFU01','GFG02','GFB01','GFN03')", name)
     browser_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DISPLAY", "PLAYWRIGHT_CHROMIUM_EXECUTABLE")}
     if "PLAYWRIGHT_CHROMIUM_EXECUTABLE" not in browser_env and Path("/usr/bin/chromium").is_file():
         browser_env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"] = "/usr/bin/chromium"

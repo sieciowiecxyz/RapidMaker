@@ -10,7 +10,7 @@ test('real configurator prices stock=false PLA with the slicer and invalidates q
   await page.goto('/wycena', { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles(fixture('cube_20mm.stl'));
   await expect(page.getByRole('img', { name: /Model z pliku cube_20mm.stl/ })).toBeVisible();
-  await page.locator('input[name=material][value=GFA00]').check();
+  await page.locator('input[name=material][value=pla]').check();
   await page.locator('input[name=color]').first().check();
   await page.locator('input[name=quality][value=standard]').check();
   const quoteSent = page.waitForResponse(
@@ -19,13 +19,17 @@ test('real configurator prices stock=false PLA with the slicer and invalidates q
   await page.locator('input[name=strength][value=standard]').check();
   expect((await quoteSent).status()).toBe(202);
   await expect(page.locator('.price')).toContainText(/\d.*zł/, { timeout: 90_000 });
-  await expect(page.getByRole('button', { name: 'Przejdź do dostawy', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true }),
+  ).toBeEnabled();
   const previous = await page.locator('.price').innerText();
   await page.getByRole('spinbutton', { name: 'Liczba sztuk: cube_20mm.stl' }).fill('10');
   await expect(
-    page.getByRole('button', { name: 'Przejdź do dostawy', exact: true }),
+    page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true }),
   ).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Przejdź do dostawy', exact: true })).toBeEnabled({
+  await expect(
+    page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true }),
+  ).toBeEnabled({
     timeout: 90_000,
   });
   expect(await page.locator('.price').innerText()).not.toBe(previous);

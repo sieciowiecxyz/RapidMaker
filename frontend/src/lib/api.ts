@@ -208,6 +208,7 @@ export async function quoteModels(
     const material = materials.find((item) => item.id === model.options.materialId);
     return (
       !model.analysis ||
+      !!model.colorPreference ||
       model.analysis.dimensions_mm.some((axis) => axis > 500) ||
       !material?.compatible ||
       !material.colors.some(

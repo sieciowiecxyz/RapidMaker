@@ -11,7 +11,7 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
   await page.goto('/wycena', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.header')).toHaveCSS('display', 'flex');
   await expect(page.locator('.hero')).toHaveCSS('display', 'grid');
-  await expect(page.locator('input[name=material]')).toHaveCount(3);
+  await expect(page.locator('input[name=material]')).toHaveCount(5);
   const outsider = await browser.newContext();
   try {
     for (const name of [
@@ -58,7 +58,7 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
       ).toBe(401);
       await expect(
         page.getByRole('img', {
-          name: `Model z pliku ${name}. Obróć przeciągając myszą. Kolor: Biały podgląd.`,
+          name: `Model z pliku ${name}. Obróć przeciągając myszą. Kolor: Czarny.`,
         }),
       ).toBeVisible();
       await expect(page.getByText('Podgląd 3D jest niedostępny na tym urządzeniu.')).toHaveCount(0);
@@ -85,13 +85,13 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
     ).toBeVisible();
     await page.getByRole('button', { name: 'Konfiguruj cube_20mm.stl', exact: true }).click();
     await expect(
-      page.getByRole('img', { name: /Model z pliku cube_20mm.stl.*Biały podgląd/ }),
+      page.getByRole('img', { name: /Model z pliku cube_20mm.stl.*Czarny/ }),
     ).toBeVisible();
     await page
       .getByLabel('Dodaj modele STL, STEP lub 3MF')
       .setInputFiles(fixture('step_block.step'));
     await expect(
-      page.getByRole('img', { name: /Model z pliku step_block.step.*Biały podgląd/ }),
+      page.getByRole('img', { name: /Model z pliku step_block.step.*Czarny/ }),
     ).toBeVisible();
   } finally {
     await outsider.close();

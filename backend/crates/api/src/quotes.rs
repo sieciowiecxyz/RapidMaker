@@ -61,8 +61,32 @@ async fn materials(State(app): State<Arc<App>>) -> Result<Json<Value>, Error> {
         .map_err(|_| unavailable())?;
     Ok(Json(customer_catalog(&catalog)))
 }
-const CUSTOMER_MATERIALS: [(&str, &str); 3] =
-    [("GFA00", "PLA"), ("GFB00", "ABS"), ("GFU01", "TPU")];
+// Canonical production profiles behind the fixed five-family storefront and legacy orders.
+const CUSTOMER_MATERIALS: &[(&str, &str)] = &[
+    ("GFA00", "PLA"),
+    ("GFB00", "ABS"),
+    ("GFU01", "TPU"),
+    ("GFG02", "PETG"),
+    ("GFB01", "ASA"),
+    ("GFN03", "PA-CF"),
+    ("GFA01", "PLA Matte"),
+    ("GFA02", "PLA Metal"),
+    ("GFA05", "PLA Silk"),
+    ("GFA06", "PLA Silk+"),
+    ("GFA07", "PLA Marble"),
+    ("GFA08", "PLA Sparkle"),
+    ("GFA09", "PLA Tough"),
+    ("GFA10", "PLA Tough+"),
+    ("GFA11", "PLA Aero"),
+    ("GFA12", "PLA Glow"),
+    ("GFA13", "PLA Dynamic"),
+    ("GFA15", "PLA Galaxy"),
+    ("GFA16", "PLA Wood"),
+    ("GFA17", "PLA Translucent"),
+    ("GFA18", "PLA Lite"),
+    ("GFA19", "PLA Pure"),
+    ("GFA50", "PLA-CF"),
+];
 pub(super) fn customer_material(id: &str) -> bool {
     CUSTOMER_MATERIALS.iter().any(|(known, _)| *known == id)
 }
@@ -80,13 +104,19 @@ pub(super) fn approved_cost(material: &Material) -> Option<u32> {
 }
 pub(super) fn known_color(material: &Material, code: &str) -> bool {
     material.colors.iter().any(|color| color.code == code)
+        || (material.id == "GFN03" && material.colors.is_empty() && code == "black")
 }
 fn customer_catalog(catalog: &[Material]) -> Value {
-    json!({"materials":CUSTOMER_MATERIALS.iter().filter_map(|(id,name)|catalog.iter().find(|m|m.id==*id).map(|m|json!({
-        "id":m.id,"name":name,"density_g_cm3":m.density_g_cm3,"colors":m.colors,
-        "available":approved_cost(m).is_some() && !m.colors.is_empty(),
-    }))).collect::<Vec<_>>()})
+    json!({"materials":CUSTOMER_MATERIALS.iter().filter_map(|(id,name)|catalog.iter().find(|m|m.id==*id).map(|m| {
+        // PA-CF has no upstream swatch list; black is our explicit storefront choice, not a Bambu SKU.
+        let colors = if m.id == "GFN03" && m.colors.is_empty() {
+            json!([{"code":"black","name":"Black","rgba":["#000000FF"],"in_stock":false}])
+        } else { json!(m.colors) };
+        json!({"id":m.id,"name":name,"density_g_cm3":m.density_g_cm3,"colors":colors,
+            "available":approved_cost(m).is_some() && colors.as_array().is_some_and(|c| !c.is_empty())})
+    })).collect::<Vec<_>>()})
 }
+
 fn manual(reason: &str, message: &str) -> Error {
     (
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -151,7 +181,10 @@ async fn estimate(
         .find(|m| m.id == input.material_id)
         .ok_or_else(|| error(StatusCode::BAD_REQUEST, "Nieznany materiał."))?;
     if !customer_material(&material.id) {
-        return Err(error(StatusCode::BAD_REQUEST, "Wybierz PLA, ABS albo TPU."));
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Wybierz materiał obsługiwany przez konfigurator.",
+        ));
     }
     if !known_color(&material, &input.color_code) {
         return Err(error(
@@ -263,7 +296,7 @@ mod tests {
         }
     }
     #[test]
-    fn customer_catalog_has_three_families_and_preserves_all_canonical_colors_without_stock() {
+    fn customer_catalog_preserves_approved_profiles_and_colors_without_stock() {
         let mut pla = material("GFA00");
         pla.colors.push(Color {
             code: "second".into(),
@@ -285,7 +318,7 @@ mod tests {
                 .iter()
                 .map(|m| m["name"].as_str().unwrap())
                 .collect::<Vec<_>>(),
-            ["PLA", "ABS", "TPU"]
+            ["PLA", "ABS", "TPU", "PLA-CF"]
         );
         assert_eq!(families[0]["colors"].as_array().unwrap().len(), 2);
         assert!(families.iter().all(|m| m["available"] == true));
@@ -299,10 +332,19 @@ mod tests {
         assert!(!known_color(&rows[1], "second"));
         assert!(!known_color(&rows[4], "invented"));
         assert_eq!(approved_cost(&rows[0]), None);
-        assert_eq!(approved_cost(&rows[1]), None);
+        assert_eq!(approved_cost(&rows[1]), Some(8000));
         let mut tpu = material("GFU01");
         tpu.production_enabled = false;
         assert_eq!(customer_catalog(&[tpu])["materials"][0]["available"], false);
+    }
+    #[test]
+    fn pa_black_choice_does_not_implicitly_approve_production() {
+        let mut pa = material("GFN03");
+        pa.colors.clear();
+        pa.production_enabled = false;
+        assert!(known_color(&pa, "black"));
+        assert!(!known_color(&pa, "invented"));
+        assert_eq!(customer_catalog(&[pa])["materials"][0]["available"], false);
     }
     #[test]
     fn stock_does_not_change_measured_price_but_profile_and_purchase_price_remain_required() {
@@ -393,10 +435,13 @@ mod tests {
         });
         let Json(catalog) = materials(State(app.clone())).await.unwrap();
         let families = catalog["materials"].as_array().unwrap();
-        assert_eq!(families.len(), 3);
+        assert_eq!(families.len(), CUSTOMER_MATERIALS.len());
         for family in families {
             let profile = operator.iter().find(|m| family["id"] == m.id).unwrap();
-            assert_eq!(family["available"], true);
+            assert_eq!(
+                family["available"],
+                approved_cost(profile).is_some() && !profile.colors.is_empty()
+            );
             assert_eq!(
                 family["colors"].as_array().unwrap().len(),
                 profile.colors.len()
@@ -407,7 +452,10 @@ mod tests {
                     .iter()
                     .all(|c| !c.in_stock && known_color(profile, &c.code))
             );
-            assert_eq!(approved_cost(profile), Some(8000));
+            assert_eq!(
+                approved_cost(profile).is_some(),
+                ["GFA00", "GFB00", "GFU01"].contains(&profile.id.as_str())
+            );
         }
         sqlx::query("UPDATE catalog_materials SET cost_net_grosze_per_kg=NULL WHERE id='GFU01'")
             .execute(&pool)

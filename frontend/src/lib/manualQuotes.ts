@@ -43,12 +43,14 @@ export function manualRequestBody(
       const color = material?.colors.find(
         (item) => item.code === model.options.color || item.name === model.options.color,
       );
-      if (!color?.code) throw new Error(`${model.name}: wybierz materiał i kolor z katalogu.`);
+      if (!material || (!color?.code && !model.colorPreference))
+        throw new Error(`${model.name}: wybierz materiał i kolor z katalogu.`);
       return {
         model_id: model.analysis!.id,
         quantity: model.options.quantity,
         material_id: model.options.materialId,
-        color_code: color.code,
+        color_code: model.colorPreference ? '' : color!.code!,
+        ...(model.colorPreference ? { requested_color: model.colorPreference } : {}),
         options: {
           quality: model.options.quality,
           wall_loops: model.advanced.wallCount,

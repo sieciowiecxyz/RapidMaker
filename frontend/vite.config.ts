@@ -11,6 +11,6 @@ export default defineConfig(({ mode }) => {
     plugins: [tailwindcss(), svelte()],
     server: { proxy },
     preview: { proxy },
-    build: { rollupOptions: { input: { main: 'index.html', admin: 'admin.html' } } },
+    build: { rollupOptions: { input: { main: 'index.html', admin: 'admin.html', adminDesign: 'admin-design.html', checkoutDesign: 'checkout-design.html' } } },
   };
 });

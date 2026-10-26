@@ -37,3 +37,10 @@
 ## Sekrety
 - Jawny `.env` zostaje lokalnie; w Git trzymamy `secrets/dev.enc.env` szyfrowany SOPS dla dwóch kluczy publicznych z `.sops.yaml`.
 - Po sklonowaniu aktywuj hook: `git config --local core.hooksPath .githooks`. Edytuj `.env`; hook przed commitem szyfruje zmiany i dodaje SOPS do indeksu. Po pobraniu zmian sekretów odszyfruj aktualny SOPS przed edycją `.env`. Szczegóły: `docs/secrets.md`.
+
+## Wzorzec frontendu Piotra (decyzja właściciela 2026-10-25)
+- Zatwierdzony lokalnie frontend jest źródłem prawdy dla wyglądu i interakcji. Dopasowuj backend i adaptery do tego UI; integracja nie upoważnia do redesignu, usuwania kontrolek ani zmiany materiałów.
+- Konfigurator ma stałe PLA/PETG/ASA/PA-CF/TPU, PA-CF tylko czarny, domyślnie czarny; kolory dostępne przed materiałem. Nie pobieraj katalogu serwera, by wyświetlić wybór. Paleta Bambu to statyczne dane kolorystyczne, nie stan magazynu ani profile druku.
+- Zachowuj kasety materiałów, koło kolorów rozwijane z Niestandardowego, modele pokazowe, lokalny STL w workerze niezależny od sesji, animację przekroju ścian/wypełnienia, dyszę i uzgodniony jasny/ciemny motyw.
+- Nie zastępuj brakującego kontraktu API usunięciem funkcji UI. Zgłoś brak, zachowaj wzorzec, dostosuj API osobno. Nie udawaj zapisu, wystawienia faktury, otrzymania wpłaty ani wykonania operacji przewoźnika.
+- `/admin-design.html` i `/checkout-design.html` to jawnie oznaczone lokalne wzorce, nie zamienniki chronionych danych. `/admin.html`, checkout i endpointy zachowują autoryzację. Szczegóły: docs/frontend-contract.md.

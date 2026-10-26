@@ -19,6 +19,7 @@ pub use mail_inbound::receive_once as mail_receive_once;
 mod orders;
 mod packing;
 mod passkeys;
+mod production;
 mod quotes;
 mod refunds;
 mod shipment_action_worker;
@@ -111,7 +112,8 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .merge(auth::router(auth.clone()))
         .merge(account_security::router(auth.clone()))
         .merge(passkeys::router(auth.clone()))
-        .merge(orders::router(auth.clone()));
+        .merge(orders::router(auth.clone()))
+        .merge(production::router(auth.clone()));
     let (router, mut document) = api.split_for_parts();
     let (webhook, webhook_document) = webhook.split_for_parts();
     document.merge(webhook_document);

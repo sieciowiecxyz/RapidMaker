@@ -1,5 +1,7 @@
 # Rapidmaker.pl — brief frontendu
 
+Aktualny wygląd i integrację definiuje [kontrakt Piotra](frontend-contract.md); ten brief zachowuje wcześniejsze ustalenia funkcjonalne. W razie różnicy materiałów/palety obowiązuje kontrakt PR #4.
+
 Aktualizacja B1–B5: katalog, panel materiałów/cennika, upload, wycena i checkout korzystają już z Rust/PostgreSQL/slicera. Konta klientów, zamówienia i chat nadal są prototypami. Poniższy brief opisuje pierwotny zakres wizualny; bieżący kontrakt i granice mają pierwszeństwo: [architektura](ARCHITECTURE.md), [backend](../backend/README.md). Nie odtwarzaj stałej taryfy ani autoryzacji admina z mocków.
 
 

@@ -21,6 +21,7 @@
     IconFileInvoice,
   } from '@tabler/icons-svelte';
   import Finance from './Finance.svelte';
+  import { productionFor, productionStages, saveProduction, type Production } from './production';
   import Shipment from './Shipment.svelte';
   import Refunds from './Refunds.svelte';
   import {
@@ -48,6 +49,7 @@
   let filesLoading = $state(false);
   let detailGeneration = 0;
   let authGeneration = 0;
+  let linkedOrderOpened = false;
   async function signOut() {
     try {
       await logout();
@@ -98,6 +100,13 @@
         }
         return order;
       });
+      if (!linkedOrderOpened) {
+        linkedOrderOpened = true;
+        const id = new URLSearchParams(location.search).get('order');
+        const linked = orders.find((o) => o.id === id);
+        if (linked) await open(linked);
+        else if (id) feedback = 'Nie znaleziono zamówienia na dostępnej liście.';
+      }
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         expired();
@@ -115,6 +124,8 @@
   let tab = $state('Modele i wycena');
   let feedback = $state('');
   let storageError = $state('');
+  let noteDraft = $state('');
+  let noteRevision = $state(0);
   let light = $state(false);
   let panel = $state<HTMLElement>();
   let opener: HTMLElement | null = null;
@@ -133,11 +144,12 @@
           filter === 'Wszystkie' ||
           (filter === 'Wymaga reakcji' && !!o.attention) ||
           (filter === 'Nowe' && o.status === 'Nowe') ||
-          (filter === 'W produkcji' && ['Przygotowanie', 'Drukowanie'].includes(o.status)) ||
+          (filter === 'W produkcji' &&
+            ['Przygotowanie', 'Drukowanie', 'Kontrola jakości'].includes(o.status)) ||
           (filter === 'Do wysłania' && o.status === 'Pakowanie'),
       ),
   );
-  const production: Stage[] = ['Przygotowanie', 'Drukowanie', 'Pakowanie'];
+  const production: Stage[] = ['Przygotowanie', 'Drukowanie', 'Kontrola jakości', 'Pakowanie'];
   const statusTone = (status: Stage) =>
     ({
       'Oczekuje na wycenę': 'waiting',
@@ -145,6 +157,7 @@
       Nowe: 'new',
       Przygotowanie: 'preparing',
       Drukowanie: 'printing',
+      'Kontrola jakości': 'quality',
       Pakowanie: 'packing',
       Wysłane: 'sent',
       Zakończone: 'complete',
@@ -236,6 +249,8 @@
   async function open(o: Order, event?: MouseEvent) {
     opener = (event?.currentTarget as HTMLElement) ?? null;
     selectedId = o.id;
+    noteDraft = o.production?.private_notes ?? '';
+    noteRevision = productionFor(o).revision;
     messagesLoading = false;
     tab = 'Modele i wycena';
     feedback = '';
@@ -255,7 +270,35 @@
     messagesLoading = false;
     opener?.focus();
   }
+  const productionEditable = (o: Order) => o.paid && ['paid', 'in_production'].includes(o.state);
+  async function persist(o: Order, patch: Partial<Production>) {
+    if (busy) return;
+    busy = true;
+    try {
+      const input = { ...productionFor(o), ...patch };
+      const saved = await saveProduction(o.id, input);
+      if (selectedId === o.id && noteRevision === input.revision) noteRevision = saved.revision;
+      if (o.state === 'paid' && saved.stage !== 'preparation')
+        await apiRequest(`/api/admin/orders/${encodeURIComponent(o.id)}/status`, 'POST', {
+          status: 'in_production',
+        });
+      await load();
+      feedback = 'Dane produkcji zapisane.';
+    } catch (error) {
+      failed(error);
+    } finally {
+      busy = false;
+    }
+  }
   async function updateStatus(o: Order, status: string) {
+    if (status.startsWith('production:')) {
+      const stage = status.slice(11) as Production['stage'];
+      await persist(o, {
+        stage,
+        qc_passed: stage === 'packing' ? productionFor(o).qc_passed : false,
+      });
+      return;
+    }
     const next = nextStatus(o);
     if (busy || !next || next.state !== status) return;
     busy = true;
@@ -272,6 +315,22 @@
   async function advance(o: Order) {
     const next = nextStatus(o);
     if (next) await updateStatus(o, next.state);
+  }
+  async function retreat(o: Order) {
+    const index = productionStages.findIndex(([id]) => id === productionFor(o).stage);
+    if (index > 0) await persist(o, { stage: productionStages[index - 1][0], qc_passed: false });
+  }
+  async function done(o: Order, modelId: string, value: string) {
+    const count = Number(value);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      feedback = 'Podaj całkowitą liczbę wykonanych sztuk.';
+      return;
+    }
+    const progress = o.models.map((m) => ({
+      model_id: m.id,
+      done: m.id === modelId ? count : m.done,
+    }));
+    await persist(o, { progress, qc_passed: false });
   }
   async function send(o: Order) {
     const body = o.draft.trim();
@@ -390,6 +449,7 @@
             >{/if}
         </div>
         {#if storageError}<p class="warning" role="alert">{storageError}</p>{/if}
+        {#if feedback && !selected}<p class="helper" role="status">{feedback}</p>{/if}
         {#if loading}<p role="status">Pobieranie zamówień…</p>{/if}
         {#if view === 'Zamówienia'}
           <div class="attention-strip">
@@ -522,8 +582,12 @@
                       {[...new Set(o.models.map((m) => m.material))].join(', ')} · {pieces(o)} szt.
                     </p>
                     <div class="production-progress">
-                      <span>{pieces(o)} szt. w zamówieniu</span><span>{fmt(o.due)}</span>
+                      <span
+                        >{o.models.reduce((sum, m) => sum + m.done, 0)} / {pieces(o)} gotowych</span
+                      ><span>{fmt(o.due)}</span>
                     </div>
+                    <progress value={o.models.reduce((sum, m) => sum + m.done, 0)} max={pieces(o)}
+                    ></progress>
                     <button
                       class="secondary"
                       disabled={busy || !nextStatus(o)}
@@ -532,11 +596,16 @@
                         ? 'Dalej: ' + nextStatus(o)!.label
                         : 'Nadanie w logistyce'}<IconArrowRight size={15} /></button
                     >
+                    {#if productionEditable(o) && productionFor(o).stage !== 'preparation'}<button
+                        class="production-back"
+                        disabled={busy}
+                        onclick={() => retreat(o)}>Cofnij etap</button
+                      >{/if}
                   </article>{:else}<p class="lane-empty">Brak zleceń na tym etapie.</p>{/each}
               </section>{/each}
           </div>
         {:else if view === 'Płatności' || view === 'Faktury'}
-          {#key view}<Finance {orders} mode={view} onopen={openFinance} />{/key}
+          {#key view}<Finance {orders} mode={view} onopen={openFinance} onsaved={load} />{/key}
         {:else}
           <div class="inbox">
             {#each orders as o}<button
@@ -581,25 +650,29 @@
         <div class="detail-summary">
           <label
             >Etap realizacji<select
-              value={selected.state}
-              disabled={busy || !nextStatus(selected)}
+              value={productionEditable(selected)
+                ? 'production:' + productionFor(selected).stage
+                : selected.state}
+              disabled={busy || !productionEditable(selected)}
               onchange={(e) => updateStatus(selected!, e.currentTarget.value)}
-              ><option value={selected.state}>{selected.status}</option
-              >{#if nextStatus(selected)}<option value={nextStatus(selected)!.state}
-                  >{nextStatus(selected)!.label}</option
-                >{/if}</select
-            ></label
-          ><label
+            >
+              {#if productionEditable(selected)}{#each productionStages as [id, label]}<option
+                    value={'production:' + id}>{label}</option
+                  >{/each}
+              {:else}<option value={selected.state}>{selected.status}</option>{/if}
+            </select></label
+          >
+          <label
             >Termin realizacji<input
               type="date"
               value={selected.due}
-              disabled
-              title="Planowanie terminów nie jest jeszcze dostępne"
+              disabled={busy}
+              onchange={(e) => persist(selected!, { due_date: e.currentTarget.value || null })}
             /></label
           >
         </div>
         <div class="detail-tabs" aria-label="Sekcje zamówienia">
-          {#each ['Modele i wycena', 'Pliki', 'Dostawa', 'Rozliczenie', 'Wiadomości', 'Historia'] as t}<button
+          {#each ['Modele i wycena', 'Pliki', 'Dostawa', 'Rozliczenie', 'Wiadomości', 'Notatki', 'Historia'] as t}<button
               class:chosen={tab === t}
               aria-pressed={tab === t}
               onclick={() => {
@@ -661,9 +734,12 @@
                   ><label
                     >Gotowe / {m.qty}<input
                       type="number"
-                      disabled
-                      placeholder="—"
-                      title="Postęp pojedynczych sztuk nie jest obsługiwany"
+                      min="0"
+                      max={m.qty}
+                      step="1"
+                      value={m.done}
+                      disabled={busy || !productionEditable(selected)}
+                      onchange={(e) => done(selected!, m.id, e.currentTarget.value)}
                     /></label
                   ><strong
                     >{m.amount === null && selected.manualOffer?.amount_grosze != null
@@ -672,6 +748,15 @@
                   >
                 </div>
               </section>{/each}
+            {#if productionEditable(selected) && ['qc', 'packing'].includes(productionFor(selected).stage)}<label
+                class="qc-check"
+                ><input
+                  type="checkbox"
+                  checked={productionFor(selected).qc_passed}
+                  disabled={busy}
+                  onchange={(e) => persist(selected!, { qc_passed: e.currentTarget.checked })}
+                />Kontrola jakości zakończona — wszystkie sztuki sprawdzone</label
+              >{/if}
             <div class="payment-box">
               <div><strong>Płatność</strong><small>{selected.payment}</small></div>
               <span class="muted">Status potwierdza operator płatności</span>
@@ -686,6 +771,7 @@
                 {selected}
                 mode="Rozliczenie"
                 onopen={openFinance}
+                onsaved={load}
               />
               {#if selected.amountGrosze !== null}<Refunds
                   orderId={selected.id}
@@ -761,6 +847,21 @@
               ><button class="primary" disabled={busy || messagesLoading || !selected.draft.trim()}
                 >Wyślij wiadomość</button
               >
+            </form>
+          {:else if tab === 'Notatki'}
+            <h3>Notatki wewnętrzne</h3>
+            <p class="helper">Widoczne wyłącznie dla operatorów, bez wysyłki do klienta.</p>
+            <form
+              onsubmit={(e) => {
+                e.preventDefault();
+                void persist(selected!, { private_notes: noteDraft, revision: noteRevision });
+              }}
+            >
+              <label class="message-label"
+                >Notatka<textarea rows="6" maxlength="4000" bind:value={noteDraft} disabled={busy}
+                ></textarea></label
+              >
+              <button class="primary" disabled={busy}>Zapisz notatkę</button>
             </form>
           {:else if tab === 'Dostawa'}
             {#key selected.id}<Shipment orderId={selected.id} onchange={load} />{/key}

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './fixtures';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { customColors } from '../../src/storefront/lib/colors';
 
 const fixture = (name: string) => resolve('../backend/crates/geometry/tests/fixtures', name);
 const draftKey = 'rapidmaker.storefront.draft.v1';
@@ -23,16 +24,15 @@ async function manualModel(page: Page) {
   await expect(page.getByRole('img', { name: /Model z pliku cube_20mm.stl/ })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Mam nietypowe wymagania do omówienia' }).check();
   await page.getByRole('radio', { name: 'Wysyłka', exact: true }).check();
-  await page.locator('input[name=material][value=GFA00]').check();
+  await page.locator('input[name=material][value=pla]').check();
   await page.locator('input[name=color]').first().check();
   await page.locator('input[name=quality][value=standard]').check();
   await page.locator('input[name=strength][value=standard]').check();
-  const advanced = page.getByRole('button', {
-    name: 'Opcje zaawansowane: podpory, wypełnienie i wykończenie',
-  });
+  const advanced = page.locator('.quote-contact');
   await expect(advanced).toBeEnabled();
   await advanced.click();
-  await expect(page).toHaveURL(/\/wycena\/zaawansowana$/);
+  await expect(page).toHaveURL(/#zamowienie$/);
+  await page.goto('/wycena/zaawansowana');
   await readyAdvanced(page);
 }
 
@@ -79,7 +79,11 @@ test('storefront navigation, theme, sample and invalid upload actions have obser
   await expect(
     page.getByRole('button', { name: 'Konfiguruj uchwyt-montazowy.stl', exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('Obiekt pokazowy.', { exact: false })).toBeVisible();
+  await expect(page.locator('input[name=color][value=black]')).toBeChecked();
+  await page.getByRole('button', { name: 'Pokaż przykład: 10 STL', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Lista dodanych modeli' }).locator('.model-row'),
+  ).toHaveCount(10);
   await page.getByRole('button', { name: /Wczytaj ponownie przykład/ }).click();
   await expect(
     page.getByRole('region', { name: 'Lista dodanych modeli' }).locator('.model-row'),
@@ -137,16 +141,21 @@ test('storefront navigation, theme, sample and invalid upload actions have obser
   await expect(page.getByRole('heading', { name: 'Dobrze Cię widzieć.' })).toBeVisible();
 });
 
-test('all material colors and print choices persist per model, including copying and quantity validation', async ({
+test('fixed families, every PLA wheel shade and real prices preserve the authored configurator', async ({
   page,
 }) => {
-  test.setTimeout(180_000);
+  const estimatedProfiles: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/quotes/estimate') && request.method() === 'POST')
+      estimatedProfiles.push(request.postDataJSON().material_id);
+  });
+  test.setTimeout(240_000);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/wycena');
-  const catalog = await (await page.request.get('/api/catalog/materials')).json();
   await page
     .getByLabel('Dodaj modele STL, STEP lub 3MF')
     .setInputFiles([fixture('cube_20mm.stl'), fixture('simple_model.3mf')]);
-  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Biały podgląd/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Czarny/ })).toBeVisible();
   await expect
     .poll(async () =>
       (await storefront(page)).models.every(
@@ -154,33 +163,55 @@ test('all material colors and print choices persist per model, including copying
       ),
     )
     .toBe(true);
-  for (const [name, value] of [
-    ['Wysyłka', 'shipping'],
-    ['Odbiór osobisty', 'pickup'],
-  ] as const) {
-    await page.getByRole('radio', { name, exact: true }).check();
-    await expect.poll(async () => (await storefront(page)).delivery).toBe(value);
-  }
-  await page.getByRole('button', { name: 'Uzupełnij ustawienia', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: 'Konfiguruj cube_20mm.stl', exact: true }),
-  ).toHaveAttribute('aria-pressed', 'true');
-  // Leave the second part incomplete during the sweep: no unnecessary slicer call per color.
-  for (const family of catalog.materials as { id: string; colors: { code: string }[] }[]) {
-    await page.locator(`input[name=material][value="${family.id}"]`).check();
-    await expect(page.locator('input[name=color]')).toHaveCount(family.colors.length);
-    for (const color of family.colors) {
-      const option = page.locator(`input[name=color][value="${color.code}"]`);
-      await option.check();
-      await expect(option).toBeChecked();
-      await expect
-        .poll(async () => (await storefront(page)).models[0].settings.color)
-        .toBe(color.code);
+  await expect(page.locator('input[name=color][value=black]')).toBeChecked();
+  expect(
+    await page
+      .locator('input[name=material]')
+      .evaluateAll((options) => options.map((option) => (option as HTMLInputElement).value)),
+  ).toEqual(['pla', 'petg', 'asa', 'pa', 'tpu']);
+  for (const family of ['pla', 'petg', 'asa', 'pa', 'tpu']) {
+    await page.locator(`input[name=material][value="${family}"]`).check();
+    await expect(page.locator('input[name=color][value=black]')).toBeChecked();
+    await expect(page.locator('input[name=color]')).toHaveCount(family === 'pa' ? 1 : 4);
+    if (family === 'pa')
+      await expect(
+        page.getByText('PA-CF jest dostępny wyłącznie w kolorze czarnym.'),
+      ).toBeVisible();
+    for (const value of family === 'pa' ? ['black'] : ['black', 'white', 'green']) {
+      await page.locator(`input[name=color][value="${value}"]`).check();
+      await expect.poll(async () => (await storefront(page)).models[0].settings.color).toBe(value);
     }
   }
-  for (const quality of await page
-    .locator('input[name=quality]')
-    .evaluateAll((options) => options.map((option) => (option as HTMLInputElement).value))) {
+  await page.locator('input[name=material][value=pla]').check();
+  await page.locator('input[name=color][value=custom]').check();
+  expect(customColors.filter((shade) => shade.id.startsWith('bambu-'))).toHaveLength(178);
+  const visited = new Set<string>();
+  const series = [...new Set(customColors.map((shade) => shade.series))];
+  for (const name of series) {
+    await page.locator('.palette-series').getByRole('button', { name, exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Poprzednie kolory', exact: true }),
+    ).toBeDisabled();
+    while (true) {
+      const options = await page
+        .locator('input[name=custom-shade]')
+        .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
+      for (const value of options) {
+        await page.locator(`input[name=custom-shade][value="${value}"]`).check();
+        await expect
+          .poll(async () => (await storefront(page)).models[0].settings.customShade)
+          .toBe(value);
+        visited.add(value);
+      }
+      const next = page.getByRole('button', { name: 'Następne kolory', exact: true });
+      if (await next.isDisabled()) break;
+      await next.click();
+    }
+    const previous = page.getByRole('button', { name: 'Poprzednie kolory', exact: true });
+    if (await previous.isEnabled()) await previous.click();
+  }
+  expect([...visited].sort()).toEqual(customColors.map((shade) => shade.id).sort());
+  for (const quality of ['standard', 'fine', 'draft']) {
     await page.locator(`input[name=quality][value="${quality}"]`).check();
     await expect
       .poll(async () => (await storefront(page)).models[0].settings.quality)
@@ -193,12 +224,10 @@ test('all material colors and print choices persist per model, including copying
       .toBe(strength);
   }
   const quantity = page.getByRole('spinbutton', { name: 'Liczba sztuk: cube_20mm.stl' });
-  for (const invalid of ['0', '1001']) {
-    await quantity.fill(invalid);
+  for (const value of ['0', '1001']) {
+    await quantity.fill(value);
     await expect(page.getByText(/Do uzupełnienia: liczba sztuk od 1 do 1000/)).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Przejdź do dostawy', exact: true }),
-    ).toBeDisabled();
+    await expect(page.locator('.quote-contact')).toBeDisabled();
   }
   await quantity.fill('1000');
   await expect(
@@ -210,7 +239,10 @@ test('all material colors and print choices persist per model, including copying
   await expect
     .poll(async () => {
       const models = (await storefront(page)).models;
-      return models[0].settings.color === models[1].settings.color && models[1].quantity === 1;
+      return (
+        models[0].settings.customShade === models[1].settings.customShade &&
+        models[1].quantity === 1
+      );
     })
     .toBe(true);
   await page.getByRole('button', { name: 'Następny model', exact: true }).click();
@@ -222,28 +254,41 @@ test('all material colors and print choices persist per model, including copying
   await quantity.fill('1');
   await page.locator('input[name=quality][value=standard]').check();
   await page.locator('input[name=strength][value=standard]').check();
-  for (const family of catalog.materials as { id: string }[]) {
-    await page.locator(`input[name=material][value="${family.id}"]`).check();
-    await page.locator('input[name=color]').first().check();
+  for (const [family, profile] of [
+    ['pla', 'GFA00'],
+    ['petg', 'GFG02'],
+    ['asa', 'GFB01'],
+    ['pa', 'GFN03'],
+    ['tpu', 'GFU01'],
+  ]) {
+    await page.locator(`input[name=material][value="${family}"]`).check();
+    await page.locator('input[name=color][value=black]').check();
     const requested = page.waitForResponse(
       (response) =>
-        response.url().endsWith('/api/quotes/estimate') && response.request().method() === 'POST',
+        response.url().endsWith('/api/checkout/quote') && response.request().method() === 'POST',
     );
     await page.getByRole('checkbox', { name: 'Mam nietypowe wymagania do omówienia' }).uncheck();
     const response = await requested;
-    expect(response.request().postDataJSON().material_id).toBe(family.id);
-    expect(response.status()).toBe(202);
-    await expect(page.getByRole('button', { name: 'Przejdź do dostawy', exact: true })).toBeEnabled(
-      { timeout: 90_000 },
-    );
+    expect(response.status()).toBe(200);
+    const part = response.request().postDataJSON().parts[0];
+    expect(part.quote_id).toBeTruthy();
+    const estimate = await page.request.get(`/api/quotes/jobs/${part.quote_id}`);
+    expect(estimate.status()).toBe(200);
+    const measured = await estimate.json();
+    expect(measured.status).toBe('succeeded');
+    expect(measured.result.id).toBe(part.quote_id);
+    expect(measured.result.quantity).toBe(1);
+    expect(measured.result.measurement.filament_grams).toBeGreaterThan(0);
+    // The profile may have been sliced earlier in this same browser test and reused from cache.
+    expect(estimatedProfiles).toContain(profile);
+    expect((await response.json()).print_grosze).toBeGreaterThan(0);
+    await expect(page.locator('.quote-contact')).toBeEnabled({ timeout: 90_000 });
     await expect(page.locator('.price')).toContainText(/\d.*zł/);
     await page.getByRole('checkbox', { name: 'Mam nietypowe wymagania do omówienia' }).check();
   }
   await page.reload();
   await expect(quantity).toHaveValue('1');
-  await expect(page.locator('input[name=material]:checked')).toHaveValue(
-    catalog.materials.at(-1).id,
-  );
+  await expect(page.locator('input[name=material][value=tpu]')).toBeChecked();
 });
 
 test('viewer mouse controls and reduced-motion mobile controls remain usable', async ({
@@ -251,7 +296,7 @@ test('viewer mouse controls and reduced-motion mobile controls remain usable', a
 }, info) => {
   await page.goto('/wycena');
   await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles(fixture('cube_20mm.stl'));
-  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Biały podgląd/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Czarny/ })).toBeVisible();
   for (const name of ['Przybliż model', 'Oddal model', 'Obróć model']) {
     const button = page.getByRole('button', { name, exact: true });
     await expect(button).toBeEnabled();
@@ -348,7 +393,7 @@ test('advanced controls save every offered value and survive return to the store
     await readyAdvanced(page);
     await expect.poll(async () => (await cart(page)).models[0].units).toBe(value);
   }
-  for (const material of ['PLA', 'ABS', 'TPU']) {
+  for (const material of await page.locator('.material-list button strong').allTextContents()) {
     await page
       .locator('.material-list')
       .getByRole('button', { name: new RegExp(`^${material}`) })
@@ -425,8 +470,10 @@ test('advanced controls save every offered value and survive return to the store
   await expect(page).toHaveURL(/\/wycena\?restore=cart$/);
   await expect(page.locator('input[name=quality][value=draft]')).toBeChecked();
   await expect(page.getByRole('radio', { name: 'Wysyłka', exact: true })).toBeChecked();
-  await expect(page.getByRole('button', { name: /Opcje zaawansowane: podpory/ })).toBeEnabled();
-  await page.getByRole('button', { name: /Opcje zaawansowane: podpory/ }).click();
+  await expect(page.locator('.quote-contact')).toBeEnabled();
+  await page.locator('.quote-contact').click();
+  await expect(page).toHaveURL(/#zamowienie$/);
+  await page.goto('/wycena/zaawansowana');
   await readyAdvanced(page);
   await page.getByText('Więcej ustawień i wymagania', { exact: true }).click();
   await expect(units).toHaveValue('cm');
@@ -452,9 +499,17 @@ test('real connection failures show recoverable quote and preview actions', asyn
   context,
 }) => {
   await page.goto('/wycena');
+  // Abort only upload traffic: local STL geometry must still render without a server response.
+  await page.route('**/api/models', (route) => route.abort('failed'));
   await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles(fixture('cube_20mm.stl'));
-  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Biały podgląd/ })).toBeVisible();
-  await page.locator('input[name=material][value=GFA00]').check();
+  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Czarny/ })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Ponów wysłanie modelu', exact: true }),
+  ).toBeVisible();
+  await page.unroute('**/api/models');
+  await page.getByRole('button', { name: 'Ponów wysłanie modelu', exact: true }).click();
+  await expect.poll(async () => (await storefront(page)).models[0].status).toBe('ready');
+  await page.locator('input[name=material][value=pla]').check();
   await page.locator('input[name=color]').first().check();
   await page.locator('input[name=quality][value=standard]').check();
   await context.setOffline(true);
@@ -465,7 +520,7 @@ test('real connection failures show recoverable quote and preview actions', asyn
     await context.setOffline(false);
   }
   await page.getByRole('button', { name: 'Ponów przeliczenie' }).click();
-  await expect(page.getByRole('button', { name: 'Przejdź do dostawy', exact: true })).toBeEnabled({
+  await expect(page.locator('.quote-contact')).toBeEnabled({
     timeout: 90_000,
   });
   await context.setOffline(true);

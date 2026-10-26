@@ -1,24 +1,14 @@
-# Milestones: pełne E2E
+# Milestones: integracja PR #4
 
-Statusy: TODO / IN PROGRESS / PASS / FAIL / BLOCKED / NOT RUN. PASS wymaga zapisanego rzeczywistego wyniku; mock i skip nie potwierdzają integracji. Nie zamykamy celu, jeśli naprawialny błąd lub obowiązkowy test pozostaje bez wykonania. Blokady zewnętrzne nazywamy w raporcie.
-
-| Etap | Zakres | Kryterium zakończenia | Stan |
-| --- | --- | --- | --- |
-| E0 | Inwentaryzacja i plan | Mapa wszystkich kontrolek źródłowych, podział aktywne/dynamiczne/wyłączone/martwe, mapowanie tras i testów | PASS |
-| E1 | Środowisko i runner | Powtarzalna izolowana baza/pliki/konta, bez live; rozdzielone realne sandboxy i kontrakty; wyniki do raportu | PASS |
-| E2 | Upload i konfiguracja | Każda oferowana opcja i powrót/odtworzenie sprawdzone z efektem; wszystkie formaty i negatywne przypadki; naprawy | PASS |
-| E3 | Dane, dostawa i płatność | Rzeczywiste UI: pickup/kurier/paczkomat/punkt, faktura/walidacja, cena/edycja/retry oraz Stripe paid/failure | PASS |
-| E4 | Logowanie i ustawienia | Rzeczywiste hasło/passkey + email/TOTP, ochrona tras, zmiany hasła/kluczy/2FA i logout; brak ujawnienia sekretów | PASS |
-| E5 | Klient, admin, zwroty, logistyka | Dostępne akcje paneli z efektem serwerowym; partial+remaining refund Stripe, odmowy i dostępna logistyka sandbox; brak fikcyjnych klików | PASS |
-| E6 | Integracja i poprawki | Uruchomiony uzgodniony zestaw, błędy naprawione i konkretnie sprawdzone; wybrane screeny desktop/mobile; lista ograniczeń | PASS |
-| E7 | Raport MD i przekazanie | Zwięzły E2E-REPORT.md: scenariusze, komendy, faktyczne PASS/FAIL/SKIP/BLOCKED, naprawy, ograniczenia, LOC; zweryfikowany commit/push | PASS |
+| Etap | Kryterium | Stan |
+| --- | --- | --- |
+| I0 | PR + aktualne main w worktree, rozdzielone pliki workerów, lokalne zmiany użytkownika zachowane | PASS |
+| I1 | Stały autorski wybór materiałów/kolorów + rzeczywiste profile/wyceny; preferencje ręczne bez podmiany materiału | PASS |
+| I2 | Lokalny STL niezależny od API, upload i STEP/3MF GLB, zachowane interakcje i przykłady | PASS |
+| I3 | Inline formularz → prawdziwa dostawa/Stripe/zamówienie, ponowienia i dane bez duplikowania | PASS |
+| I4 | Trwałe i autoryzowane notatki/termin/postęp/etapy/szkic faktury w panelu Piotra | PASS |
+| I5 | Celowane testy Rust/E2E i widoki, raport, push PR i merge main, zachowane lokalne AGENTS.md | PASS — testy/raport; merge: PR #4 |
 
 ## Checkpoint
 
-2026-10-26: wykonano E0–E7. [Raport](E2E-REPORT.md): **31 unikalnych integracji/E2E + 20 kontraktów PASS**, bez liczenia ponownych uruchomień jako nowych scenariuszy. Inwentarz: 368 deklaracji w 42 plikach i trzy mapy pokrycia. Prawdziwe STL/STEP/3MF, slicer, checkout, Stripe/refundy, auth, panele, rejestracja i email → chat sprawdzone; naprawy w raporcie.
-
-Logistyka DHL: nadanie dwóch paczek w jednym zleceniu, PDF, propozycje i rezerwacja podjazdu, anulowanie; osobno przekazanie → shipped: 2 PASS. **DPD BLOCKED:** dwie próby nadania odrzucone carrierValidationError (timeout API DPD), brak potwierdzonego nadania w tych próbach. E5 obejmuje działającą ścieżkę DHL; nie oznacza sprawności każdego przewoźnika.
-
-Runner izoluje DB/pliki/konta i odróżnia realne integracje od mocków; obsługuje przerwanie i prywatne artefakty per grupa. Obejrzano desktop/mobile; testy sprawdzają wybrane granice overflow. Komenda całości: npm --prefix frontend run test:all. W tym etapie wykonano grupy i powtórki naprawionych regresji; nie deklarujemy jednego nieprzerwanego przebiegu całego polecenia po ostatniej poprawce.
-
-Rust build/fmt/Clippy oraz wskazane testy modułów PASS; frontend check/build, Python i celowane formatowanie PASS. Granice: fizyczny passkey, load/pentest, produkcja i niewdrożone funkcje nie są zaliczone. Cudze AGENTS.md/result.json pozostawione poza commitem. Kolejny krok dla DPD: powtórzyć nadanie po ustaniu timeoutów sandboxa; nie usuwać zabezpieczeń ponawiania i niepewnych operacji.
+2026-10-26: PR c6d41f8 + main 0db0058 połączone w osobnym worktree. Działa autorski wybór pięciu rodzin i palety, slicer/API, lokalny STL i prywatny GLB po odświeżeniu. Inline formularz przechodzi do dostawy/Stripe; poprawiony fokus po animacji. Produkcja i szkice zapisują się z kontrolą revision, uprawnień, ilości i QC. Krytyczne zakupy, Paczkomat/kurier oraz panel/refundy sprawdzone. I5: ręczna oferta/email/płatność/odpowiedź i logistyka PASS; raport zakończony. Wynik merge i SHA: [PR #4](https://github.com/sieciowiecxyz/RapidMaker/pull/4). Lokalne AGENTS.md/result.json użytkownika pozostają poza zmianą.

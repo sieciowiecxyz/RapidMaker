@@ -321,6 +321,13 @@
     {#if adminMode}<div class="grid-2">
         <section class="panel stack">
           <h2>Produkcja</h2>
+          <a class="button secondary" href={'/admin.html?order=' + encodeURIComponent(order.id)}
+            >Otwórz produkcję i kontrolę jakości ↗</a
+          >
+          <small class="muted"
+            >Liczby sztuk, kontrola jakości, termin i notatki zespołu są zapisywane w panelu
+            produkcji.</small
+          >
           <label for="order-status">Status</label><select
             id="order-status"
             bind:value={status}

@@ -50,12 +50,12 @@
           currency: 'pln',
           locale: 'pl',
           appearance: {
-            theme: 'night',
+            theme: document.documentElement.dataset.theme === 'light' ? 'stripe' : 'night',
             variables: {
-              colorPrimary: token('--color-primary') || '#b5ee4b',
-              colorBackground: token('--color-control') || '#202e1d',
-              colorText: token('--color-text') || '#edf4e9',
-              colorDanger: token('--color-danger') || '#ffc2b8',
+              colorPrimary: token('--color-primary') || token('--accent') || '#b5ee4b',
+              colorBackground: token('--color-control') || token('--soft') || '#202e1d',
+              colorText: token('--color-text') || token('--ink') || '#edf4e9',
+              colorDanger: token('--color-danger') || token('--danger') || '#ffc2b8',
               borderRadius: '3px',
               fontFamily: '"Segoe UI", Arial, sans-serif',
               fontSizeBase: '16px',

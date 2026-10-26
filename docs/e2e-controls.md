@@ -2,7 +2,7 @@
 
 Wygenerowano: `node frontend/tests/inventory-controls.mjs`. To mapa źródeł, nie wynik testów. Jedna kontrolka szablonu może tworzyć wiele opcji/wierszy; wartości i pokrycie opisują pliki e2e-*-inventory.md oraz raport. Nie klikamy automatycznie wszystkiego bez sprawdzenia skutków.
 
-Kontrolki szablonów: **369**, pliki: **42**.
+Kontrolki szablonów: **447**, pliki: **45**.
 
 ## frontend/src/App.svelte
 
@@ -23,60 +23,129 @@ Kontrolki szablonów: **369**, pliki: **42**.
 | 214 | a | rapidmaker |
 | 217 | a | Regulaminy i prywatność |
 
+## frontend/src/admin-design/Admin.svelte
+
+| Linia | Typ | Etykieta / początek deklaracji |
+| --- | --- | --- |
+| 45 | svelte:window | <svelte:window onkeydown={keyboard}/> |
+| 49 | a | RapidMaker |
+| 52 | button | <button class:active={view===item.name} onclick={()=> |
+| 55 | a | Panel z danymi serwera |
+| 55 | a | Otwórz stronę |
+| 58 | button | <button class="icon" onclick={theme} aria-label={light?'Włącz ciemny motyw':'Włącz jasny motyw'}> |
+| 60 | button | Eksport CSV |
+| 64 | button | Sprawdź kolejkę |
+| 65 | button | <button class:chosen={filter===f} aria-pressed={filter===f} onclick={()=> |
+| 65 | input | <input bind:value={query} placeholder="Szukaj numeru, klienta, pliku…" aria-label="Szukaj zamówień"/> |
+| 65 | button | <button class="icon" onclick={()=> |
+| 67 | button | <button class="order-link" onclick={(e)=> |
+| 67 | button | <button class="icon" onclick={(e)=> |
+| 68 | button | Wyczyść filtry |
+| 71 | button | <button class="order-link" onclick={(e)=> |
+| 71 | button | <button class="secondary" onclick={()=> |
+| 71 | button | Cofnij etap |
+| 75 | button | <button class="message-row" onclick={async(e)=> |
+| 81 | button | <button class="icon" aria-label="Zamknij szczegóły" onclick={close}> |
+| 83 | select | <select value={selected.status} onchange={(e)=> |
+| 83 | input | <input type="date" bind:value={selected.due} onchange={()=> |
+| 84 | button | <button class:chosen={tab===t} aria-pressed={tab===t} onclick={()=> |
+| 88 | input | <input type="number" min="0" step="0.01" value={m.price} onchange={(e)=> |
+| 88 | input | <input type="number" min="0" max={m.qty} value={m.done} onchange={(e)=> |
+| 89 | button | <button class="secondary" onclick={()=> |
+| 103 | button | Pobierz |
+| 103 | button | Bambu Studio |
+| 103 | input | <input type="file" accept=".stl,.step,.stp,.3mf" aria-label={'Przypnij plik do '+m.name} onchange={(e)=> |
+| 107 | textarea | <textarea rows="5" bind:value={selected.draft} placeholder="Napisz odpowiedź dotyczącą realizacji…"> |
+| 107 | button | Zapisz szkic |
+| 109 | form | <form onsubmit={(e)=> |
+| 109 | textarea | <textarea rows="4" bind:value={note} placeholder="Np. sprawdzić tolerancję otworu po wydruku" required> |
+| 109 | button | Dodaj notatkę |
+| 112 | button | <button class="primary" disabled={selected.status==='Zakończone'} onclick={()=> |
+
+## frontend/src/admin-design/Finance.svelte
+
+| Linia | Typ | Etykieta / początek deklaracji |
+| --- | --- | --- |
+| 17 | button | <button class="secondary" onclick={()=> |
+| 23 | form | <form onsubmit={(e)=> |
+| 24 | input | <input bind:value={draft.buyer} required maxlength="200"/> |
+| 25 | textarea | <textarea bind:value={draft.address} required rows="2" maxlength="500"> |
+| 26 | input | <input bind:value={draft.nip} maxlength="20"/> |
+| 29 | button | Aktualizuj z zamówienia |
+| 30 | button | Zapisz szkic |
+| 30 | button | Wystaw fakturę |
+| 34 | button | Utwórz szkic faktury |
+| 42 | button | <button class:chosen={filter===f} aria-pressed={filter===f} onclick={()=> |
+| 42 | input | <input aria-label={'Szukaj: '+mode} bind:value={search} placeholder="Szukaj zamówienia lub klienta…"/> |
+| 44 | button | <button class="order-link" onclick={(e)=> |
+| 45 | button | Wyczyść filtry |
+
 ## frontend/src/admin/Admin.svelte
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 324 | svelte:window | <svelte:window onkeydown={keyboard} /> |
-| 329 | a | RapidMaker |
-| 334 | button | <button class:active={view === item.name} onclick={() => |
-| 347 | a | Materiały i ceny |
-| 348 | a | Ustawienia wyceny |
-| 349 | a | Bezpieczeństwo konta |
-| 350 | button | Wyloguj |
-| 351 | a | Otwórz stronę |
-| 363 | a | Konto |
-| 364 | button | Odśwież |
-| 364 | button | <button class="icon" onclick={theme} aria-label={light ? 'Włącz ciemny motyw' : 'Włącz jasny motyw'} > |
-| 388 | button | Eksport CSV |
-| 401 | button | Sprawdź kolejkę |
-| 407 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
-| 415 | input | <input bind:value={query} placeholder="Szukaj numeru, klienta, pliku…" aria-label="Szukaj zamówień" /> |
-| 419 | button | <button class="icon" onclick={() => |
-| 438 | button | <button class="order-link" onclick={(e) => |
-| 479 | button | <button class="icon" onclick={(e) => |
-| 492 | button | Wyczyść filtry |
-| 517 | button | <button class="order-link" onclick={(e) => |
-| 527 | button | <button class="secondary" disabled={busy \|\| !nextStatus(o)} onclick={() => |
-| 542 | button | <button class="message-row" aria-label={'Rozmowa z ${o.client}, zamówienie ${o.id}'} onclick={async (e) => |
-| 573 | button | <button class="icon" aria-label="Zamknij szczegóły" onclick={close} > |
-| 583 | select | <select value={selected.state} disabled={busy \|\| !nextStatus(selected)} onchange={(e) => |
-| 593 | input | <input type="date" value={selected.due} disabled title="Planowanie terminów nie jest jeszcze dostępne" /> |
-| 602 | button | <button class:chosen={tab === t} aria-pressed={tab === t} onclick={() => |
-| 613 | ManualOffer | <ManualOffer orderId={selected.id} offer={selected.manualOffer} adminMode onchange={load} /> |
-| 654 | input | <input type="number" value={m.price} placeholder="Indywidualnie" disabled title="Cena z zapisanej wyceny" /> |
-| 662 | input | <input type="number" disabled placeholder="—" title="Postęp pojedynczych sztuk nie jest obsługiwany" /> |
-| 690 | Refunds | <Refunds orderId={selected.id} amountGrosze={selected.amountGrosze} paid={selected.paid} onchange={load} /> |
-| 720 | a | Pobierz |
-| 724 | button | Zmień plik |
-| 744 | button | Pokaż kolejne |
-| 749 | form | <form onsubmit={(e) => |
-| 756 | textarea | <textarea rows="5" maxlength="4000" bind:value={selected.draft} placeholder="Napisz odpowiedź dotyczącą realizacji…"> |
-| 761 | button | Wyślij wiadomość |
-| 766 | Shipment | <Shipment orderId={selected.id} onchange={load} /> |
-| 775 | button | <button class="primary" disabled={busy \|\| !nextStatus(selected)} onclick={() => |
+| 383 | svelte:window | <svelte:window onkeydown={keyboard} /> |
+| 388 | a | RapidMaker |
+| 393 | button | <button class:active={view === item.name} onclick={() => |
+| 406 | a | Materiały i ceny |
+| 407 | a | Ustawienia wyceny |
+| 408 | a | Bezpieczeństwo konta |
+| 409 | button | Wyloguj |
+| 410 | a | Otwórz stronę |
+| 422 | a | Konto |
+| 423 | button | Odśwież |
+| 423 | button | <button class="icon" onclick={theme} aria-label={light ? 'Włącz ciemny motyw' : 'Włącz jasny motyw'} > |
+| 447 | button | Eksport CSV |
+| 461 | button | Sprawdź kolejkę |
+| 467 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
+| 475 | input | <input bind:value={query} placeholder="Szukaj numeru, klienta, pliku…" aria-label="Szukaj zamówień" /> |
+| 479 | button | <button class="icon" onclick={() => |
+| 498 | button | <button class="order-link" onclick={(e) => |
+| 539 | button | <button class="icon" onclick={(e) => |
+| 552 | button | Wyczyść filtry |
+| 577 | button | <button class="order-link" onclick={(e) => |
+| 591 | button | <button class="secondary" disabled={busy \|\| !nextStatus(o)} onclick={() => |
+| 599 | button | Cofnij etap |
+| 611 | button | <button class="message-row" aria-label={'Rozmowa z ${o.client}, zamówienie ${o.id}'} onclick={async (e) => |
+| 642 | button | <button class="icon" aria-label="Zamknij szczegóły" onclick={close} > |
+| 652 | select | <select value={productionEditable(selected) ? 'production:' + productionFor(selected).stage : selected.state} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
+| 666 | input | <input type="date" value={selected.due} disabled={busy} onchange={(e) => |
+| 675 | button | <button class:chosen={tab === t} aria-pressed={tab === t} onclick={() => |
+| 686 | ManualOffer | <ManualOffer orderId={selected.id} offer={selected.manualOffer} adminMode onchange={load} /> |
+| 727 | input | <input type="number" value={m.price} placeholder="Indywidualnie" disabled title="Cena z zapisanej wyceny" /> |
+| 735 | input | <input type="number" min="0" max={m.qty} step="1" value={m.done} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
+| 753 | input | <input type="checkbox" checked={productionFor(selected).qc_passed} disabled={busy} onchange={(e) => |
+| 776 | Refunds | <Refunds orderId={selected.id} amountGrosze={selected.amountGrosze} paid={selected.paid} onchange={load} /> |
+| 806 | a | Pobierz |
+| 810 | button | Zmień plik |
+| 830 | button | Pokaż kolejne |
+| 835 | form | <form onsubmit={(e) => |
+| 842 | textarea | <textarea rows="5" maxlength="4000" bind:value={selected.draft} placeholder="Napisz odpowiedź dotyczącą realizacji…"> |
+| 847 | button | Wyślij wiadomość |
+| 854 | form | <form onsubmit={(e) => |
+| 861 | textarea | <textarea rows="6" maxlength="4000" bind:value={noteDraft} disabled={busy} > |
+| 864 | button | Zapisz notatkę |
+| 867 | Shipment | <Shipment orderId={selected.id} onchange={load} /> |
+| 876 | button | <button class="primary" disabled={busy \|\| !nextStatus(selected)} onclick={() => |
 
 ## frontend/src/admin/Finance.svelte
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 30 | button | Wystaw fakturę |
-| 49 | button | Wystaw fakturę |
-| 69 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
-| 76 | input | <input aria-label="Szukaj płatności" bind:value={search} placeholder="Szukaj zamówienia lub klienta…" /> |
-| 94 | button | <button class="order-link" onclick={(e) => |
-| 103 | button | Szczegóły rozliczenia |
-| 112 | button | Wyczyść filtry |
+| 123 | form | <form onsubmit={(e) => |
+| 130 | input | <input bind:value={draft.buyer} required maxlength="200" disabled={busy} /> |
+| 133 | textarea | <textarea bind:value={draft.address} rows="2" maxlength="500" disabled={busy}> |
+| 140 | input | <input bind:value={draft.nip} maxlength="10" inputmode="numeric" disabled={busy} /> |
+| 148 | input | <input type="date" bind:value={draft.created} required disabled={busy} /> |
+| 168 | button | Aktualizuj z zamówienia |
+| 172 | button | Zapisz szkic |
+| 172 | button | Wystaw fakturę |
+| 192 | button | Utwórz szkic faktury |
+| 230 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
+| 237 | input | <input aria-label={invoiceMode ? 'Szukaj dokumentów' : 'Szukaj płatności'} bind:value={search} placeholder="Szukaj zamówienia lub klienta…" /> |
+| 255 | button | <button class="order-link" onclick={(e) => |
+| 277 | button | <button class="text-button" onclick={(e) => |
+| 290 | button | Wyczyść filtry |
 
 ## frontend/src/admin/Refunds.svelte
 
@@ -241,13 +310,14 @@ Kontrolki szablonów: **369**, pliki: **42**.
 | 222 | ManualOffer | <ManualOffer orderId={order.id} offer={order.manualOffer} {adminMode} onchange={async () => |
 | 272 | Button | Przejdź do płatności ↗ |
 | 274 | Button | Sprawdź płatność |
-| 324 | select | <select id="order-status" bind:value={status} disabled={!nextStatus \|\| busy} > |
-| 332 | input | <input id="lead-time" value={leadTime} disabled /> |
-| 336 | textarea | <textarea id="private-notes" value={notes} rows="3" disabled> |
-| 340 | Button | Zapisz status |
-| 348 | Button | Zleć zwrot |
-| 354 | Button | Przygotuj etykietę |
-| 368 | OrderChat | <OrderChat {order} role={adminMode ? 'admin' : 'client'} onchange={assign} /> |
+| 324 | a | Otwórz produkcję i kontrolę jakości ↗ |
+| 331 | select | <select id="order-status" bind:value={status} disabled={!nextStatus \|\| busy} > |
+| 339 | input | <input id="lead-time" value={leadTime} disabled /> |
+| 343 | textarea | <textarea id="private-notes" value={notes} rows="3" disabled> |
+| 347 | Button | Zapisz status |
+| 355 | Button | Zleć zwrot |
+| 361 | Button | Przygotuj etykietę |
+| 375 | OrderChat | <OrderChat {order} role={adminMode ? 'admin' : 'client'} onchange={assign} /> |
 
 ## frontend/src/components/ParcelPlan.svelte
 
@@ -407,42 +477,43 @@ Kontrolki szablonów: **369**, pliki: **42**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 448 | button | Spróbuj ponownie |
-| 457 | button | Sprawdź ponownie |
-| 458 | a | Moje zamówienia |
-| 470 | a | Utwórz konto przez email → |
-| 474 | a | Moje zamówienia |
-| 481 | a | Przejdź do wyceny → |
-| 496 | a | Wróć do rozpoczętej płatności → |
-| 501 | form | <form class="checkout-layout work-surface" novalidate oninput={saveDraft} onchange={saveDraft} onsubmit={(e) => |
-| 526 | input | <input required autocomplete="shipping name" id="checkout-name" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? 'error-name' : undefined} bind:value={contact |
-| 537 | input | <input required type="email" autocomplete="shipping email" id="checkout-email" aria-invalid={!!fieldErrors.email} aria-describedby={fieldErrors.email ? 'error-email' : undefined} b |
-| 550 | input | <input required type="tel" autocomplete="shipping tel" id="checkout-phone" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone ? 'error-phone' : undefined} bind: |
-| 565 | StripeCheckout | <StripeCheckout bind:this={stripeForm} collectAddress={cart.delivery === 'courier'} publishableKey={stripeKey} amount={Math.round((cart.quote?.total ?? 1) * 100)} {contact} payment |
-| 590 | input | <input required pattern={'[0-9]{2}-[0-9]{3}'} placeholder="00-001" autocomplete="shipping postal-code" id="checkout-postalCode" aria-invalid={!!fieldErrors.postalCode} aria-describ |
-| 603 | input | <input required autocomplete="shipping address-level2" id="checkout-city" aria-invalid={!!fieldErrors.city} aria-describedby={fieldErrors.city ? 'error-city' : undefined} bind:valu |
-| 616 | input | <input required autocomplete="shipping street-address" id="checkout-street" aria-invalid={!!fieldErrors.street} aria-describedby={fieldErrors.street ? 'error-street' : undefined} b |
-| 631 | input | <input type="checkbox" bind:checked={invoice} /> |
-| 633 | input | <input required id="checkout-company" aria-invalid={!!fieldErrors.company} aria-describedby={fieldErrors.company ? 'error-company' : undefined} bind:value={contact.company} autocom |
-| 644 | input | <input required pattern={'[0-9]{10}'} maxlength="10" placeholder="10 cyfr" id="checkout-nip" aria-invalid={!!fieldErrors.nip} aria-describedby={fieldErrors.nip ? 'error-nip' : unde |
-| 669 | input | <input type="radio" name="delivery" value={method.id} checked={cart.delivery === method.id} disabled={busy} onchange={() => |
-| 696 | button | Zmień punkt |
-| 709 | button | Szukaj w innym miejscu |
-| 720 | input | <input placeholder="Miasto, ulica lub nazwa Paczkomatu" bind:value={pointSearch} onkeydown={(event) => |
-| 731 | button | Szukaj |
-| 745 | button | <button type="button" class:chosen={contact.pickupPoint === point.code} disabled={busy} onclick={() => |
-| 776 | a | Wróć do konfiguracji modelu → |
-| 782 | button | Spróbuj ponownie |
-| 791 | input | <input type="radio" name="carrier" checked={selectedOffer === offer.id} onchange={() => |
-| 811 | button | Spróbuj ponownie |
-| 828 | a | Zmień konfigurację |
-| 832 | summary | <summary > |
-| 859 | button | Zmień |
-| 880 | summary | Szczegóły pakowania |
-| 942 | button | <button type="submit" class="button primary" disabled={busy \|\| quoteBusy \|\| (stage === 4 && !stripeForm) \|\| (stage === 3 && cart.quote.manual) \|\| (stage === 3 && !cart.quote.manual |
-| 966 | button | ← Wróć do podsumowania |
-| 973 | button | ← Wróć do dostawy |
-| 975 | a | ← Wróć do konfiguracji druku |
+| 468 | button | Spróbuj ponownie |
+| 477 | button | Sprawdź ponownie |
+| 478 | a | Moje zamówienia |
+| 490 | a | Utwórz konto przez email → |
+| 494 | a | Moje zamówienia |
+| 501 | a | Przejdź do wyceny → |
+| 516 | a | Wróć do rozpoczętej płatności → |
+| 521 | form | <form class="checkout-layout work-surface" novalidate oninput={saveDraft} onchange={saveDraft} onsubmit={(e) => |
+| 541 | button | Popraw kontakt lub fakturę → |
+| 557 | input | <input required autocomplete="shipping name" id="checkout-name" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? 'error-name' : undefined} bind:value={contact |
+| 568 | input | <input required type="email" autocomplete="shipping email" id="checkout-email" aria-invalid={!!fieldErrors.email} aria-describedby={fieldErrors.email ? 'error-email' : undefined} b |
+| 581 | input | <input required type="tel" autocomplete="shipping tel" id="checkout-phone" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone ? 'error-phone' : undefined} bind: |
+| 597 | StripeCheckout | <StripeCheckout bind:this={stripeForm} collectAddress={cart.delivery === 'courier'} publishableKey={stripeKey} amount={Math.round((cart.quote?.total ?? 1) * 100)} {contact} payment |
+| 622 | input | <input required pattern={'[0-9]{2}-[0-9]{3}'} placeholder="00-001" autocomplete="shipping postal-code" id="checkout-postalCode" aria-invalid={!!fieldErrors.postalCode} aria-describ |
+| 635 | input | <input required autocomplete="shipping address-level2" id="checkout-city" aria-invalid={!!fieldErrors.city} aria-describedby={fieldErrors.city ? 'error-city' : undefined} bind:valu |
+| 648 | input | <input required autocomplete="shipping street-address" id="checkout-street" aria-invalid={!!fieldErrors.street} aria-describedby={fieldErrors.street ? 'error-street' : undefined} b |
+| 663 | input | <input type="checkbox" bind:checked={invoice} /> |
+| 665 | input | <input required id="checkout-company" aria-invalid={!!fieldErrors.company} aria-describedby={fieldErrors.company ? 'error-company' : undefined} bind:value={contact.company} autocom |
+| 676 | input | <input required pattern={'[0-9]{10}'} maxlength="10" placeholder="10 cyfr" id="checkout-nip" aria-invalid={!!fieldErrors.nip} aria-describedby={fieldErrors.nip ? 'error-nip' : unde |
+| 701 | input | <input type="radio" name="delivery" value={method.id} checked={cart.delivery === method.id} disabled={busy} onchange={() => |
+| 728 | button | Zmień punkt |
+| 741 | button | Szukaj w innym miejscu |
+| 752 | input | <input placeholder="Miasto, ulica lub nazwa Paczkomatu" bind:value={pointSearch} onkeydown={(event) => |
+| 763 | button | Szukaj |
+| 777 | button | <button type="button" class:chosen={contact.pickupPoint === point.code} disabled={busy} onclick={() => |
+| 808 | a | Wróć do konfiguracji modelu → |
+| 814 | button | Spróbuj ponownie |
+| 823 | input | <input type="radio" name="carrier" checked={selectedOffer === offer.id} onchange={() => |
+| 843 | button | Spróbuj ponownie |
+| 860 | a | Zmień konfigurację |
+| 864 | summary | <summary > |
+| 891 | button | Zmień |
+| 912 | summary | Szczegóły pakowania |
+| 974 | button | <button type="submit" class="button primary" disabled={busy \|\| quoteBusy \|\| (stage === 4 && !stripeForm) \|\| (stage === 3 && cart.quote.manual) \|\| (stage === 3 && !cart.quote.manual |
+| 998 | button | ← Wróć do podsumowania |
+| 1005 | button | ← Wróć do dostawy |
+| 1007 | a | ← Wróć do konfiguracji druku |
 
 ## frontend/src/pages/checkout/PaymentReturn.svelte
 
@@ -507,38 +578,57 @@ Kontrolki szablonów: **369**, pliki: **42**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 278 | a | Przejdź do treści |
-| 281 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
-| 282 | a | Oferta |
-| 282 | a | Wycena |
-| 282 | a | Moje zamówienia |
-| 282 | a | Kontakt |
-| 283 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
-| 293 | Button | Spróbuj ponownie |
-| 315 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
-| 316 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
-| 319 | a | Zasady prywatności |
-| 320 | Button | <Button variant="text" onclick={() => |
-| 328 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
-| 333 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
-| 337 | Button | Następny model |
-| 341 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
-| 341 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
-| 342 | input | <input type="checkbox" bind:checked={manual} /> |
-| 354 | Button | Uzupełnij dla wszystkich |
-| 357 | Button | Uzupełnij ustawienia |
-| 360 | Button | Ponów przeliczenie |
-| 364 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
-| 365 | Button | Opcje zaawansowane: podpory, wypełnienie i wykończenie |
-| 378 | a | 537 320 816 |
-| 378 | a | piotr@rapidmaker.pl |
-| 378 | a | <a class="map-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=ul.+Zielony+Kr%C4%85g+1,+05-500+Piaseczno" target="_blank" rel="noreferrer"> |
-| 378 | a | Wyznacz trasę |
-| 380 | summary | Narzędzia podglądu |
-| 380 | Button | Zmień motyw |
-| 380 | Button | Symuluj błąd wyceny |
-| 382 | a | Regulaminy i prywatność |
-| 382 | a | Wróć na górę |
+| 300 | a | Przejdź do treści |
+| 303 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
+| 304 | button | Wróć do konfiguracji |
+| 304 | a | Oferta |
+| 304 | a | Wycena |
+| 304 | a | Moje zamówienia |
+| 304 | a | Kontakt |
+| 305 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
+| 315 | Button | Spróbuj ponownie |
+| 340 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
+| 341 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
+| 344 | a | Zasady prywatności |
+| 345 | Button | <Button variant="text" onclick={() => |
+| 345 | Button | Pokaż przykład: 10 STL |
+| 353 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
+| 358 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
+| 362 | Button | Następny model |
+| 363 | Button | Ponów wysłanie modelu |
+| 367 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
+| 367 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
+| 368 | input | <input type="checkbox" bind:checked={manual} /> |
+| 380 | Button | Uzupełnij dla wszystkich |
+| 383 | Button | Uzupełnij ustawienia |
+| 386 | Button | Ponów przeliczenie |
+| 390 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
+| 403 | a | 537 320 816 |
+| 403 | a | piotr@rapidmaker.pl |
+| 403 | Button | Wczytaj mapę Google |
+| 403 | a | Wyznacz trasę |
+| 405 | summary | Narzędzia podglądu |
+| 405 | Button | Zmień motyw |
+| 405 | Button | Symuluj błąd wyceny |
+| 407 | a | Regulaminy i prywatność |
+| 407 | a | Wróć na górę |
+
+## frontend/src/storefront/components/OrderPage.svelte
+
+| Linia | Typ | Etykieta / początek deklaracji |
+| --- | --- | --- |
+| 75 | button | Wróć do konfiguracji |
+| 83 | form | <form bind:this={form} onsubmit={review} oninput={save} onchange={save}> |
+| 87 | input | <input class="input" bind:value={data.name} name="name" autocomplete="name" required maxlength="120" pattern=".*\S.*" placeholder="Jan Kowalski"/> |
+| 88 | input | <input class="input" bind:value={data.email} name="email" type="email" autocomplete="email" required maxlength="254" placeholder="jan@przyklad.pl"/> |
+| 89 | input | <input class="input" bind:value={data.phone} name="phone" type="tel" autocomplete="tel" required pattern={'[+0-9 .\\(\\)\\-]{7,25}'} title="Podaj numer telefonu, np. +48 123 456 78 |
+| 93 | input | <input type="checkbox" bind:checked={invoice}/> |
+| 94 | input | <input class="input" bind:value={data.company} name="company" autocomplete="organization" required pattern=".*\S.*" maxlength="180"/> |
+| 94 | input | <input class="input" bind:value={data.taxId} name="taxId" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" placeholder="Numer identyfikacji podatkowej"/> |
+| 95 | textarea | <textarea class="input" bind:value={data.notes} name="notes" rows="4" maxlength="2000" placeholder="Zastosowanie części, ważne wymiary, oczekiwany termin…"> |
+| 104 | Button | <Button type="submit" disabled={preparing}> |
+| 104 | a | Zasady prywatności |
+| 114 | button | Zmień modele lub ustawienia |
 
 ## frontend/src/storefront/components/PrintScene.svelte
 
@@ -560,16 +650,19 @@ Kontrolki szablonów: **369**, pliki: **42**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 40 | input | <input class="choice-input" type="radio" name="material" value={item.id} bind:group={material} /> |
-| 81 | input | <input class="choice-input" type="radio" name="color" value={item.id} bind:group={color} aria-label={item.name} /> |
-| 112 | input | <input class="choice-input" type="radio" name="quality" value={item.id} bind:group={quality} /> |
-| 139 | input | <input class="choice-input" type="radio" name="strength" value={item.id} bind:group={strength} aria-describedby="strength-hint" /> |
+| 22 | input | <input class="choice-input" type="radio" name="material" value={item.id} bind:group={material} aria-describedby="material-description" /> |
+| 37 | input | <input class="choice-input" type="radio" name="color" value={item.id} bind:group={color} disabled={!item.available} aria-label={item.name} /> |
+| 59 | input | <input class="choice-input" type="radio" name="quality" value={item.id} bind:group={quality} /> |
+| 81 | input | <input class="choice-input" type="radio" name="strength" value={item.id} bind:group={strength} aria-describedby="strength-hint" /> |
 
 ## frontend/src/storefront/components/RadialPalette.svelte
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 38 | input | <input class="choice-input" type="radio" name="custom-shade" value={shade.id} bind:group={value} aria-label={shade.name}/> |
+| 35 | button | <button type="button" class:active={series===option} aria-pressed={series===option} onclick={()=> |
+| 36 | button | <button type="button" disabled={page===0} aria-label="Poprzednie kolory" onclick={()=> |
+| 36 | button | <button type="button" disabled={page> |
+| 47 | input | <input class="choice-input" type="radio" name="custom-shade" value={shade.id} bind:group={value} aria-label={shade.name}/> |
 
 ## frontend/src/storefront/components/ui/Button.svelte
 

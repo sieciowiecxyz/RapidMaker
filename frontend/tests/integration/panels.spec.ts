@@ -138,6 +138,8 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
   try {
     const operator = await adminContext.newPage(),
       outsider = await otherContext.newPage();
+    const operatorErrors: string[] = [];
+    operator.on('pageerror', (error) => operatorErrors.push(error.name));
     await login(page, client);
     await login(operator, admin);
     await login(outsider, other);
@@ -288,7 +290,29 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     await operator.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
     const detail = operator.getByRole('complementary', { name: `Szczegóły ${id}` });
     await expect(detail).toBeVisible();
-    await expect(detail.getByLabel('Termin realizacji')).toBeDisabled();
+    await expect(detail.getByLabel('Termin realizacji')).toBeEnabled();
+    await detail.getByLabel('Termin realizacji').fill('2026-11-10');
+    await expect
+      .poll(
+        async () =>
+          (await (await operator.request.get(`/api/admin/orders/${id}/production`)).json())
+            .due_date,
+      )
+      .toBe('2026-11-10');
+    await detail.getByRole('button', { name: 'Notatki', exact: true }).click();
+    await detail.getByLabel('Notatka', { exact: true }).fill('Prywatna uwaga E2E operatora');
+    await detail.getByRole('button', { name: 'Zapisz notatkę', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await (await operator.request.get(`/api/admin/orders/${id}/production`)).json())
+            .private_notes,
+      )
+      .toBe('Prywatna uwaga E2E operatora');
+    expect(
+      JSON.stringify(await (await page.request.get(`/api/account/orders/${id}`)).json()),
+    ).not.toContain('Prywatna uwaga E2E operatora');
+    await detail.getByRole('button', { name: 'Modele i wycena', exact: true }).click();
     await expect(detail.getByLabel('Cena / szt. (zł)')).toBeDisabled();
     await detail.getByRole('button', { name: 'Pliki', exact: true }).click();
     await expect(detail.getByLabel('Podgląd modelu cube_20mm.stl')).toBeVisible();
@@ -334,7 +358,7 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
 
     // Two independent controls advance only valid server statuses; pickup can complete without a carrier.
     await operator.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
-    await detail.getByLabel('Etap realizacji').selectOption('in_production');
+    await detail.getByLabel('Etap realizacji').selectOption('production:printing');
     await expect
       .poll(async () => (await (await page.request.get(`/api/account/orders/${id}`)).json()).status)
       .toBe('in_production');
@@ -354,6 +378,31 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     ).toBeDisabled();
     await operator.goto('/admin.html');
     await operator.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
+    const count = detail.getByRole('spinbutton', { name: /Gotowe \/ / }).first();
+    await count.fill('1');
+    await count.press('Tab');
+    await expect
+      .poll(
+        async () =>
+          (await (await operator.request.get(`/api/admin/orders/${id}/production`)).json())
+            .progress[0]?.done,
+      )
+      .toBe(1);
+    await detail.getByLabel('Etap realizacji').selectOption('production:qc');
+    await detail
+      .getByRole('checkbox', {
+        name: 'Kontrola jakości zakończona — wszystkie sztuki sprawdzone',
+        exact: true,
+      })
+      .check();
+    await expect
+      .poll(
+        async () =>
+          (await (await operator.request.get(`/api/admin/orders/${id}/production`)).json())
+            .qc_passed,
+      )
+      .toBe(true);
+    await detail.getByLabel('Etap realizacji').selectOption('production:packing');
     await detail.getByRole('button', { name: /^Dalej:/ }).click();
     await expect
       .poll(async () => (await (await page.request.get(`/api/account/orders/${id}`)).json()).status)
@@ -380,7 +429,19 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     await operator.getByRole('button', { name: 'Szczegóły rozliczenia' }).click();
     const refunds = detail.getByRole('region', { name: 'Zwroty płatności' });
     await expect(refunds.getByLabel('Kwota zwrotu (zł)')).toBeEnabled();
+    await detail.getByRole('button', { name: 'Utwórz szkic faktury', exact: true }).click();
+    await detail.getByLabel('Nabywca', { exact: true }).fill('Nabywca E2E');
+    await detail.getByLabel('Adres nabywcy', { exact: true }).fill('Testowa 1, 05-500 Piaseczno');
+    await detail.getByRole('button', { name: 'Zapisz szkic', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await (await operator.request.get(`/api/admin/orders/${id}/invoice-draft`)).json()).draft
+            ?.buyer,
+      )
+      .toBe('Nabywca E2E');
     await expect(detail.getByRole('button', { name: 'Wystaw fakturę' })).toBeDisabled();
+    expect(operatorErrors, 'admin editor must remain reactive after saving its draft').toEqual([]);
     await refunds.getByLabel('Kwota zwrotu (zł)').fill('25,01');
     await refunds.getByRole('button', { name: 'Zleć zwrot', exact: true }).click();
     await expect(refunds.getByRole('alert')).toContainText('nie może przekraczać');
@@ -459,7 +520,11 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     expect(overRefund.status()).toBe(409);
     await detail.getByRole('button', { name: 'Zamknij szczegóły' }).click();
     await nav.getByRole('button', { name: 'Faktury', exact: true }).click();
-    await expect(operator.getByRole('button', { name: 'Wystaw fakturę' })).toBeDisabled();
+    await operator.getByRole('button', { name: 'Otwórz szkic', exact: true }).click();
+    await expect(detail.getByRole('button', { name: 'Wystaw fakturę' })).toBeDisabled();
+    await expect(detail.getByLabel('Nabywca', { exact: true })).toHaveValue('Nabywca E2E');
+    expect(operatorErrors, 'admin draft/refund actions must not throw runtime errors').toEqual([]);
+    await detail.getByRole('button', { name: 'Zamknij szczegóły' }).click();
     await nav.getByRole('button', { name: 'Wiadomości', exact: true }).click();
     await operator.getByRole('button', { name: new RegExp(`zamówienie ${id}$`) }).click();
     await detail.getByRole('button', { name: 'Pokaż kolejne', exact: true }).click();

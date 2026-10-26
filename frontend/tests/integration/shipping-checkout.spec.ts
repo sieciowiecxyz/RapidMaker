@@ -13,20 +13,22 @@ for (const method of ['locker', 'courier'] as const) {
       'Requires Stripe test and Furgonetka sandbox',
     );
     test.setTimeout(180_000);
-    await configureCheckout(page);
-    // Pickup exposes the native recipient inputs without duplicating Stripe's address form.
-    await page.getByRole('radio', { name: /Odbiór osobisty/ }).check();
+    await configureCheckout(page, false);
+    // Contact/invoice are edited once in the authored form, before the delivery step.
     await page.getByLabel('Imię i nazwisko', { exact: true }).fill('Test Rapidmaker');
-    await page.getByLabel('Email', { exact: true }).fill('void@sieciowiec.xyz');
+    await page.getByLabel('E-mail', { exact: true }).fill('void@sieciowiec.xyz');
     await page.getByLabel('Telefon', { exact: true }).fill('500600700');
-    await page.getByRole('checkbox', { name: 'Chcę fakturę na firmę', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Potrzebuję faktury na firmę', exact: true }).check();
     await page.getByLabel('Nazwa firmy', { exact: true }).fill('Firma testowa');
     const nip = page.getByLabel('NIP', { exact: true });
     await nip.fill('123');
     expect(await nip.evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(false);
     await nip.fill('1234567883');
-    await page.getByRole('checkbox', { name: 'Chcę fakturę na firmę', exact: true }).uncheck();
+    await page
+      .getByRole('checkbox', { name: 'Potrzebuję faktury na firmę', exact: true })
+      .uncheck();
     await expect(nip).toHaveCount(0);
+    await page.getByRole('button', { name: 'Wybierz dostawę i zapłać', exact: true }).click();
     if (method === 'locker') {
       await page.getByRole('radio', { name: /Paczkomat/ }).check();
       await expect(page.getByLabel('Ulica, numer domu i mieszkania', { exact: true })).toHaveCount(
@@ -52,7 +54,7 @@ for (const method of ['locker', 'courier'] as const) {
       await page.getByRole('radio', { name: /Kurier/ }).check();
       await fillStripeAddress(page);
     }
-    await expect(page.getByLabel('Email', { exact: true })).toHaveValue('void@sieciowiec.xyz');
+    await expect(page.locator('.embedded-contact')).toContainText('void@sieciowiec.xyz');
     const carriers = page.locator('input[name="carrier"]');
     await expect(carriers.first()).toBeVisible({ timeout: 45_000 });
     for (let i = 0; i < (await carriers.count()); i++) {
@@ -61,9 +63,7 @@ for (const method of ['locker', 'courier'] as const) {
     }
     await carriers.first().check();
     await page.getByRole('button', { name: 'Podsumowanie →', exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: 'Sprawdź zamówienie.', exact: true }),
-    ).toBeVisible();
+    await expect(page.locator('.order-stage')).toContainText('Podsumowanie');
     // Only synthetic recipient data; no card, OTP or payment secret is on this screen.
     await page.screenshot({ path: info.outputPath('summary-desktop.png') });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -75,7 +75,7 @@ for (const method of ['locker', 'courier'] as const) {
     await page.locator('.review-model summary').first().click();
     await expect(page.locator('.review-model').first()).toHaveAttribute('open', '');
     await page.getByRole('button', { name: /Wróć do dostawy/ }).click();
-    await expect(page.getByLabel('Email', { exact: true })).toHaveValue('void@sieciowiec.xyz');
+    await expect(page.locator('.embedded-contact')).toContainText('void@sieciowiec.xyz');
     await page.getByRole('button', { name: 'Podsumowanie →', exact: true }).click();
     await page.getByRole('button', { name: 'Przejdź do płatności →', exact: true }).click();
     const intents = new Set<string>();

@@ -334,6 +334,8 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         format!("/api/admin/orders/{}/messages", fa.order),
         format!("/api/admin/orders/{}/files", fa.order),
         format!("/api/admin/orders/{}/refunds", fa.order),
+        format!("/api/admin/orders/{}/production", fa.order),
+        format!("/api/admin/orders/{}/invoice-draft", fa.order),
     ] {
         for actor in [&a, &b, &pending] {
             assert_eq!(
@@ -571,6 +573,295 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         .await
         .0,
         401
+    );
+    // Private admin metadata: real router/DB contracts, not a Stripe provider test.
+    let production_path = format!("/api/admin/orders/{}/production", fa.order);
+    let invoice_path = format!("/api/admin/orders/{}/invoice-draft", fa.order);
+    let count_before: i64 = sqlx::query_scalar("SELECT count(*) FROM order_production")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        count_before, 0,
+        "GET production must not adopt a legacy order or infer QC"
+    );
+    sqlx::query("UPDATE orders SET lines=$2,status='paid',paid_at=$3,fulfillment=$4 WHERE id=$1")
+        .bind(&fa.order)
+        .bind(json!([{"model_id":fa.model,"quantity":2}]))
+        .bind(now)
+        .bind(json!({"delivery":{"method":"pickup"}}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let payment_before: (Option<String>, Option<i64>, i64) =
+        sqlx::query_as("SELECT provider_id,paid_at,amount_grosze FROM orders WHERE id=$1")
+            .bind(&fa.order)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let mut production = json!({"revision":0,"stage":"printing","due_date":"2026-12-01","private_notes":"private-production-canary","progress":[{"model_id":fa.model,"done":1}],"qc_passed":false});
+    let mut missing_csrf = admin.clone();
+    missing_csrf.csrf = None;
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&missing_csrf),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&a),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        409
+    );
+    production["revision"] = json!(1);
+    production["progress"][0]["done"] = json!(3);
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        422
+    );
+    production["progress"][0]["model_id"] = json!(fb.model);
+    production["progress"][0]["done"] = json!(1);
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        422
+    );
+    production["progress"][0]["model_id"] = json!(fa.model);
+    production["progress"][0]["done"] = json!(2);
+    production["stage"] = json!("packing");
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        422
+    );
+    production["stage"] = json!("qc");
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("/api/admin/orders/{}/status", fa.order),
+            Some(&admin),
+            Some(json!({"status":"in_production"}))
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("/api/admin/orders/{}/status", fa.order),
+            Some(&admin),
+            Some(json!({"status":"ready"}))
+        )
+        .await
+        .0,
+        409
+    );
+    production["revision"] = json!(2);
+    production["stage"] = json!("packing");
+    production["qc_passed"] = json!(true);
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("/api/admin/orders/{}/status", fa.order),
+            Some(&admin),
+            Some(json!({"status":"ready"}))
+        )
+        .await
+        .0,
+        200
+    );
+    production["revision"] = json!(3);
+    production["stage"] = json!("printing");
+    production["qc_passed"] = json!(false);
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &production_path,
+            Some(&admin),
+            Some(production.clone())
+        )
+        .await
+        .0,
+        422
+    );
+    let invoice = json!({"revision":0,"buyer":"Klient testowy","address":"","nip":"","created":"2026-10-26","lines":[{"name":"Całe zamówienie","qty":1,"price_grosze":1000}]});
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &invoice_path,
+            Some(&missing_csrf),
+            Some(invoice.clone())
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        call(&app, "PUT", &invoice_path, Some(&a), Some(invoice.clone()))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &invoice_path,
+            Some(&admin),
+            Some(invoice.clone())
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &invoice_path,
+            Some(&admin),
+            Some(invoice.clone())
+        )
+        .await
+        .0,
+        409
+    );
+    let mut wrong = invoice;
+    wrong["revision"] = json!(1);
+    wrong["lines"][0]["price_grosze"] = json!(1001);
+    assert_eq!(
+        call(&app, "PUT", &invoice_path, Some(&admin), Some(wrong))
+            .await
+            .0,
+        422
+    );
+    let mut concurrent = json!({"revision":1,"buyer":"Nowy nabywca A","address":"","nip":"","created":"2026-10-26","lines":[{"name":"Całe zamówienie","qty":1,"price_grosze":1000}]});
+    let first = concurrent.clone();
+    concurrent["buyer"] = json!("Nowy nabywca B");
+    let (first, second) = tokio::join!(
+        call(&app, "PUT", &invoice_path, Some(&admin), Some(first)),
+        call(&app, "PUT", &invoice_path, Some(&admin), Some(concurrent))
+    );
+    let mut statuses = [first.0, second.0];
+    statuses.sort();
+    assert_eq!(
+        statuses,
+        [200, 409],
+        "only one editor can save a given invoice revision"
+    );
+    let (_, saved) = call(&app, "GET", &invoice_path, Some(&admin), None).await;
+    assert_eq!(
+        serde_json::from_slice::<Value>(&saved).unwrap()["draft"]["revision"],
+        2
+    );
+    let (status, public) = call(
+        &app,
+        "GET",
+        &format!("/api/account/orders/{}", fa.order),
+        Some(&a),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(!String::from_utf8_lossy(&public).contains("private-production-canary"));
+    let payment_after: (Option<String>, Option<i64>, i64) =
+        sqlx::query_as("SELECT provider_id,paid_at,amount_grosze FROM orders WHERE id=$1")
+            .bind(&fa.order)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        payment_before, payment_after,
+        "metadata cannot rewrite payment facts or order price"
     );
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM payment_refunds")
         .fetch_one(&pool)

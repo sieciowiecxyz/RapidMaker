@@ -17,6 +17,19 @@
     PickupPoint,
     StripeStatus,
   } from '../../lib/types';
+  let {
+    embedded = false,
+    initialContact,
+    initialInvoice = false,
+    onEditContact,
+    onStage,
+  }: {
+    embedded?: boolean;
+    initialContact?: Partial<Contact>;
+    initialInvoice?: boolean;
+    onEditContact?: (contact: Contact, invoice: boolean, delivery: DeliveryMethod) => void;
+    onStage?: (stage: number) => void;
+  } = $props();
   const routeParams = new URLSearchParams(location.search);
   const paymentReference = routeParams.get('stripe_session') ?? routeParams.get('payment_intent');
   const returningPayment = Boolean(paymentReference);
@@ -242,6 +255,8 @@
         contact = { ...contact, ...saved.contact };
         invoice = !!saved.invoice;
       }
+      if (initialContact) contact = { ...contact, ...initialContact };
+      if (embedded) invoice = initialInvoice;
       pointSearch = contact.postalCode || contact.city;
       cart = savedCart;
       if (cart.models.length) await refreshQuote();
@@ -401,49 +416,54 @@
         },
       };
   }
+  $effect(() => {
+    onStage?.(returningPayment ? 4 : stage);
+  });
 </script>
 
-<section class="page purchase-page">
-  <CheckoutSteps
-    current={returningPayment ? 4 : stage}
-    onStep={returningPayment || order
-      ? undefined
-      : (step) => {
-          if (step === 2) editDelivery();
-          else {
-            stage = step;
-            error = '';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-        }}
-  />
-  <div class="page-heading">
-    <span class="badge"
-      >{returningPayment || stage === 4
-        ? '04 / Płatność'
-        : stage === 3
-          ? '03 / Podsumowanie'
-          : '02 / Wysyłka'}</span
-    >
-    <h1>
-      {returningPayment
-        ? 'Status płatności.'
-        : stage === 4
-          ? 'Dokończ płatność.'
+<section class="page purchase-page" class:embedded>
+  {#if !embedded}
+    <CheckoutSteps
+      current={returningPayment ? 4 : stage}
+      onStep={returningPayment || order
+        ? undefined
+        : (step) => {
+            if (step === 2) editDelivery();
+            else {
+              stage = step;
+              error = '';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+    />
+    <div class="page-heading">
+      <span class="badge"
+        >{returningPayment || stage === 4
+          ? '04 / Płatność'
           : stage === 3
-            ? 'Sprawdź zamówienie.'
-            : 'Dokąd wysłać wydruk?'}
-    </h1>
-    <p class="muted">
-      {returningPayment
-        ? 'Potwierdzenie i szczegóły Twojej płatności.'
-        : stage === 4
-          ? 'Kwota jest ustalona. Potwierdź płatność w bezpiecznym formularzu Stripe.'
-          : stage === 3
-            ? 'Modele, dostawa i pełna cena — wszystko w jednym miejscu.'
-            : 'Podaj dane raz. Na ich podstawie dobierzemy dostawę i pobliskie punkty odbioru.'}
-    </p>
-  </div>
+            ? '03 / Podsumowanie'
+            : '02 / Wysyłka'}</span
+      >
+      <h1>
+        {returningPayment
+          ? 'Status płatności.'
+          : stage === 4
+            ? 'Dokończ płatność.'
+            : stage === 3
+              ? 'Sprawdź zamówienie.'
+              : 'Dokąd wysłać wydruk?'}
+      </h1>
+      <p class="muted">
+        {returningPayment
+          ? 'Potwierdzenie i szczegóły Twojej płatności.'
+          : stage === 4
+            ? 'Kwota jest ustalona. Potwierdź płatność w bezpiecznym formularzu Stripe.'
+            : stage === 3
+              ? 'Modele, dostawa i pełna cena — wszystko w jednym miejscu.'
+              : 'Podaj dane raz. Na ich podstawie dobierzemy dostawę i pobliskie punkty odbioru.'}
+      </p>
+    </div>
+  {/if}
   {#if error && !returningPayment}<p class="alert error" role="alert">
       {error}{#if !cart}<button class="button ghost" onclick={load}>Spróbuj ponownie</button>{/if}
     </p>{/if}
@@ -514,13 +534,24 @@
       }}
     >
       <div class="stack">
+        {#if embedded && stage === 2}<section class="checkout-section stack embedded-contact">
+            <div class="section-title"><h2>Kontakt i faktura</h2></div>
+            <p>{contact.name}<br />{contact.email}<br />{contact.phone}</p>
+            {#if invoice}<p>{contact.company}<br />NIP: {contact.nip}</p>{/if}
+            {#if onEditContact}<button
+                type="button"
+                class="text-button"
+                onclick={() => onEditContact?.({ ...contact }, invoice, cart!.delivery)}
+                >Popraw kontakt lub fakturę →</button
+              >{/if}
+          </section>{/if}
         <section class="checkout-section stack" hidden={stage === 3 || (stage === 4 && !stripeKey)}>
-          <div class="section-title" hidden={stage !== 2}>
+          <div class="section-title" hidden={stage !== 2 || embedded}>
             <span>01</span>
             <h2>Dane odbiorcy</h2>
           </div>
           <div class="recipient-fields">
-            <div class="stack recipient-contact" hidden={stage !== 2}>
+            <div class="stack recipient-contact" hidden={stage !== 2 || embedded}>
               <div class="contact-grid">
                 {#if !stripeKey || cart.delivery !== 'courier'}<label class="contact-name"
                     >Imię i nazwisko<input
@@ -561,6 +592,7 @@
                 >
               </div>
             </div>
+            {#if embedded && stage === 2 && cart.delivery === 'courier'}<h2>Adres dostawy</h2>{/if}
             {#if stripeKey}<div class="stack">
                 {#key cart.delivery === 'courier'}<StripeCheckout
                     bind:this={stripeForm}
@@ -626,7 +658,7 @@
                   >{/if}
               </div>{/if}
           </div>
-          <div class="stack invoice-fields" hidden={stage !== 2}>
+          <div class="stack invoice-fields" hidden={stage !== 2 || embedded}>
             <label class="checkbox"
               ><input type="checkbox" bind:checked={invoice} />Chcę fakturę na firmę</label
             >{#if invoice}<label
@@ -982,6 +1014,90 @@
   [hidden] {
     display: none !important;
   }
+  .embedded {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    --color-text: var(--ink);
+    --color-heading: var(--ink);
+    --color-muted: var(--muted);
+    --color-border: var(--line);
+    --color-primary: var(--accent);
+    --color-accent: var(--accent);
+    --color-control: var(--soft);
+    --color-danger: var(--danger);
+    --color-focus: var(--accent);
+  }
+  .embedded .stack {
+    display: grid;
+    gap: 16px;
+  }
+  .embedded .checkout-layout > .stack {
+    gap: 0;
+  }
+  .embedded .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .embedded label {
+    display: grid;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .embedded input:not([type='radio']):not([type='checkbox']) {
+    width: 100%;
+    min-width: 0;
+    padding: 12px;
+    color: var(--ink);
+    background: var(--soft);
+    border: 1px solid var(--control-line);
+    border-radius: var(--control-radius);
+  }
+  .embedded .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 12px 18px;
+    border: 1px solid var(--line);
+    font: inherit;
+    text-decoration: none;
+  }
+  .embedded .button.primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .embedded .button.secondary {
+    background: var(--soft);
+    color: var(--ink);
+  }
+  .embedded .text-button {
+    padding: 8px 0;
+    text-align: left;
+    color: var(--accent);
+    background: none;
+    border: 0;
+    font-size: 13px;
+  }
+  .embedded .alert {
+    padding: 16px;
+    background: var(--soft);
+    border: 1px solid var(--line);
+  }
+  .embedded .error,
+  .embedded .field-error {
+    color: var(--danger);
+  }
+  .embedded-contact p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
   .alternate-point-search {
     display: flex;
     align-items: end;

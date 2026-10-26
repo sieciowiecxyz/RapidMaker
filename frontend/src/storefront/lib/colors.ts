@@ -1,5 +1,6 @@
+import { bambuPlaColors } from './bambuPlaColors';
 // Approximate customer preferences, not a claim of filament stock or calibrated color.
-export const customColors = [
+const legacyColors = [
   { id:'red', name:'Czerwony', hex:'#d94a42' },
   { id:'orange', name:'Pomarańczowy', hex:'#e39139' },
   { id:'yellow', name:'Żółty', hex:'#e2c347' },
@@ -11,3 +12,5 @@ export const customColors = [
   { id:'gray', name:'Szary', hex:'#858c89' },
   { id:'cream', name:'Kremowy', hex:'#ded3b5' }
 ];
+
+export const customColors = [...legacyColors.map(c=>({...c,hexes:[c.hex],series:'Orientacyjne',code:''})), ...bambuPlaColors];
