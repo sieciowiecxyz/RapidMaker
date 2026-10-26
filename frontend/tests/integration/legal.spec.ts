@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('real legal documents are public, downloadable and stale enrollment is rejected', async ({
   page,
@@ -28,6 +28,14 @@ test('real legal documents are public, downloadable and stale enrollment is reje
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: info.outputPath('terms-mobile.png'), fullPage: false });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('link', { name: 'Wszystkie dokumenty', exact: false }).click();
+  await page.getByRole('link', { name: /Polityka prywatności Dane/ }).click();
+  await expect(
+    page.getByRole('heading', { name: '5. Twoje prawa i usunięcie konta', exact: true }),
+  ).toBeVisible();
+  const privacyDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Pobierz dokument/ }).click();
+  expect((await privacyDownload).suggestedFilename()).toBe('rapidmaker-prywatnosc-2026-10-25.txt');
   for (const legal_version of [undefined, 'old-version']) {
     const response = await page.request.post('/api/auth/start', {
       headers: { Origin: new URL(page.url()).origin },

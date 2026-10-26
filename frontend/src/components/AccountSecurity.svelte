@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { apiRequest, ApiError, clearAuthToken } from '../lib/http';
+  let { onchange = () => {} }: { onchange?: () => void } = $props();
   type Security = { has_password: boolean; totp_enabled: boolean };
   let security = $state<Security | null>(null);
   let loading = $state(true),
@@ -79,6 +80,7 @@
         await apiRequest('/api/account/password', 'PUT', { password });
         if (!alive) return;
         security = security && { ...security, has_password: true };
+        onchange();
         success = 'Hasło zapisane.';
       } finally {
         if (alive) password = repeat = '';

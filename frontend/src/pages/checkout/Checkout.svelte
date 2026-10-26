@@ -214,13 +214,18 @@
   onMount(() => {
     load();
   });
+  async function paymentOrder(payment: StripeStatus, reference: string) {
+    if (payment.order_id && (await api.getSession())) return api.getOrder(payment.order_id);
+    const saved = api.getCheckoutOrder(reference);
+    return saved && payment.order_id ? { ...saved, id: payment.order_id, ownerId: null } : saved;
+  }
   async function load() {
     busy = true;
     error = '';
     try {
       if (paymentReference) {
         stripePayment = await api.verifyCheckout(paymentReference);
-        order = api.getCheckoutOrder(paymentReference);
+        order = await paymentOrder(stripePayment, paymentReference);
         const saved = JSON.parse(sessionStorage.getItem(receiptKey) ?? 'null');
         if (saved?.sessionId === paymentReference) receipt = saved;
         return;
@@ -348,7 +353,7 @@
         );
         await stripeForm.confirm(intent.client_secret, contact.email, intent.payment_intent_id);
         stripePayment = await api.verifyCheckout(intent.payment_intent_id);
-        order = api.getCheckoutOrder(intent.payment_intent_id);
+        order = await paymentOrder(stripePayment, intent.payment_intent_id);
         receipt = saved;
         stage = 4;
         return;

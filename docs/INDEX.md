@@ -6,12 +6,18 @@
 
 Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, trackingiem i wysyłką emaila. Anulowanie L2 sprawdzone w sandboxie; podjazdy L1 zaimplementowane, potwierdzenie rezerwacji blokuje `carrierConnectionError` DPD. Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
-- [Plan finalizacji](PLAN.md)
-  - przeczytaj gdy: finalizujesz stronę i integracje.
-  - opis: podglądy, wyceny, płatność, retencja i spójność strony.
-- [Milestones finalizacji](MILESTONES.md)
-  - przeczytaj gdy: wdrażasz kolejny etap backendu.
-  - opis: kolejność F0–F6, kryteria i bieżący checkpoint.
+- [Plan E2E](PLAN.md)
+  - przeczytaj gdy: sprawdzasz całą stronę i integracje.
+  - opis: zakres E2E, izolacja danych i naprawa błędów.
+- [Milestones E2E](MILESTONES.md)
+  - przeczytaj gdy: realizujesz bieżący plan testów.
+  - opis: etapy E0–E7, kryteria i bieżący checkpoint.
+- [Raport E2E](E2E-REPORT.md)
+  - przeczytaj gdy: chcesz poznać wyniki i ograniczenia testów.
+  - opis: uruchomione scenariusze, poprawki i komendy.
+- [Mapa kontrolek](e2e-controls.md)
+  - przeczytaj gdy: zmieniasz interakcje strony.
+  - opis: źródła przycisków/formularzy; mapy scenariuszy obok.
 - [Rozmowy i email](chat-email.md)
   - przeczytaj gdy: rozwijasz chat i odpowiadanie z poczty.
   - opis: API historii, SMTP/IMAP, konfiguracja i dowody CH0–CH4.

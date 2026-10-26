@@ -112,6 +112,8 @@
     }
   }
   function sessionExpired() {
+    // A denied guest request is not an expired account; remounting would retry it forever.
+    if (!session) return;
     session = null;
     ready = false;
     generation++;

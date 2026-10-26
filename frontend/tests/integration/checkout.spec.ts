@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { resolve } from 'node:path';
 import { fillStripeCard } from './helpers';
 
@@ -47,4 +47,10 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
       { timeout: 30_000 },
     )
     .toBe('paid');
+  await expect(
+    page.getByRole('heading', { name: 'Płatność potwierdzona.', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Utwórz konto i śledź zamówienie →', exact: true }),
+  ).toBeVisible();
 });

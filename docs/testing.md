@@ -1,3 +1,5 @@
+Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wymagania: [tests/README](../frontend/tests/README.md); wyniki bieżącego etapu: [E2E-REPORT.md](E2E-REPORT.md). Starsze sekcje poniżej opisują historyczne sprawdzenia i nie nadpisują aktualnego raportu.
+
 # Szybka weryfikacja
 
 Testy mają pomagać dostarczać kod. Sprawdzaj zmieniony zakres najkrótszą sensowną metodą. Bez obowiązkowej Astry, testujących subagentów, wielokrotnych review i pełnych zestawów przy każdej iteracji. Zielonego wyniku nie powtarzaj bez nowej zmiany, błędu lub konkretnej wątpliwości.
@@ -36,7 +38,7 @@ Auth: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-auth
 
 ## Integracja istniejących paneli
 
-`live-panels.spec.ts` oraz `operator.spec.ts`: kontrakt HTTP interfejsu (kod email/claim, MFA przed odczytem, zamówienia/pliki/chat, preferencje, RGBA i CSRF, ponowienie zwrotu bez nowego request_id). Odpowiedzi API są podstawiane; nie jest to ponowny test rzeczywistego SMTP, passkey/Stripe/Furgonetki ani autoryzacji PostgreSQL. Starszy `flows.spec.ts` nadal wymaga migracji. Używaj `http://localhost:18430` dla rzeczywistego auth; port testów 18431 nie jest skonfigurowanym origin backendu.
+`live-panels.spec.ts` oraz `operator.spec.ts`: kontrakt HTTP interfejsu (kod email/claim, MFA przed odczytem, zamówienia/pliki/chat, preferencje, RGBA i CSRF, ponowienie zwrotu bez nowego request_id). Odpowiedzi API są podstawiane; nie jest to ponowny test rzeczywistego SMTP, passkey/Stripe/Furgonetki ani autoryzacji PostgreSQL. Dawne demo `flows.spec.ts` i `shipping.spec.ts` zastąpiono rzeczywistymi scenariuszami z [tests/README](../frontend/tests/README.md). Używaj `http://localhost:18430` dla rzeczywistego auth; port testów 18431 nie jest skonfigurowanym origin backendu.
 
 `operations.spec.ts`: kontrakty formularzy logistyki (paczki/koszt/zgoda/book/retry/PDF/podjazd/anulowanie), częściowego zwrotu z zachowaniem ID po reloadzie i natywnego WebAuthn z wirtualnym uwierzytelniaczem. `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npx playwright test operations.spec.ts live-panels.spec.ts operator.spec.ts` z `frontend/`. To test UI z podstawionym API, bez połączeń z dostawcami. Screenshoty fixture dostawy: `frontend/tests/artifacts/shipping-desktop.png` i `shipping-mobile.png` (ignorowane przez Git).
 

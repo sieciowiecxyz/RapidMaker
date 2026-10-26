@@ -282,7 +282,7 @@ impl Sandbox {
                 {
                     return Err(invalid());
                 }
-                rows.push(json!({"width":parcel.outer_mm[0].div_ceil(10),"depth":parcel.outer_mm[1].div_ceil(10),"height":parcel.outer_mm[2].div_ceil(10),"weight":f64::from(parcel.weight_g)/1000.,"quantity":1,"type":"package"}));
+                rows.push(json!({"width":parcel.outer_mm[0].div_ceil(10),"depth":parcel.outer_mm[1].div_ceil(10),"height":parcel.outer_mm[2].div_ceil(10),"weight":crate::provider_weight(parcel.weight_g),"quantity":1,"type":"package"}));
             }
             let reference = format!("{reference}-{:02}", index + 1);
             let body = json!({"pickup":pickup,"receiver":receiver,"service_id":provider_id(service_id),"parcels":rows,"user_reference_number":reference});
@@ -539,12 +539,17 @@ pub fn matches_prepared(actual: &ProviderPackage, expected: &Value) -> bool {
                 return false;
             }
         }
-        let digits = |value: &Value| {
-            value
-                .as_str()
-                .map(|s| s.bytes().filter(u8::is_ascii_digit).collect::<Vec<_>>())
+        let phone = |address: &Value| {
+            address["phone"].as_str().map(|value| {
+                let mut digits: Vec<_> = value.bytes().filter(u8::is_ascii_digit).collect();
+                // The provider adds +48 to domestic Polish numbers on readback.
+                if address["country_code"] == "PL" && digits.len() == 9 {
+                    digits.splice(..0, b"48".iter().copied());
+                }
+                digits
+            })
         };
-        if digits(&expected[party]["phone"]) != digits(&actual.body[party]["phone"]) {
+        if phone(&expected[party]) != phone(&actual.body[party]) {
             return false;
         }
     }
@@ -776,6 +781,11 @@ mod tests {
         returned["parcels"][0]["quantity"] = Value::Null;
         let mut actual = parse_package(returned).unwrap();
         assert!(matches_prepared(&actual, &expected));
+        actual.body["receiver"]["phone"] = json!("+48 123 456 789");
+        assert!(matches_prepared(&actual, &expected));
+        actual.body["receiver"]["phone"] = json!("+49 123 456 789");
+        assert!(!matches_prepared(&actual, &expected));
+        actual.body["receiver"]["phone"] = expected["receiver"]["phone"].clone();
         actual.body["parcels"][0]["weight"] = json!(1.);
         assert!(!matches_prepared(&actual, &expected));
         actual.body = expected.clone();

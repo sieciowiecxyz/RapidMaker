@@ -81,12 +81,12 @@ function productionModel(
     name: model.name,
     format: /\.(step|stp)$/i.test(model.name) ? 'STEP' : /\.3mf$/i.test(model.name) ? '3MF' : 'STL',
     parts: 1,
-    units: 'mm',
+    units: previous?.units ?? 'mm',
     options: {
       materialId: settings.material,
       color: color.id,
       quantity: model.quantity,
-      quality: settings.quality as 'standard' | 'fine',
+      quality: settings.quality as 'draft' | 'standard' | 'fine',
     },
     strength: selected === strength ? previous!.strength : strength,
     advanced: {
@@ -153,7 +153,11 @@ export async function prepareCheckout(
     await checkout.updateModel(added.id, { ...draft, id: added.id });
   }
   await checkout.setDelivery(
-    (['courier', 'locker', 'pickup'].includes(delivery) ? delivery : 'courier') as DeliveryMethod,
+    (['courier', 'locker', 'pickup'].includes(delivery)
+      ? delivery
+      : oldCart.delivery === 'locker'
+        ? 'locker'
+        : 'courier') as DeliveryMethod,
     oldCart.postalCode,
   );
   saveDraft(models, delivery);
@@ -178,7 +182,7 @@ export async function restoreCheckoutDraft(): Promise<{
   if (!cart.models.length) return null;
   const materials = await getMaterials();
   return {
-    delivery: cart.delivery,
+    delivery: cart.delivery === 'pickup' ? 'pickup' : 'shipping',
     models: cart.models.map((model) => ({
       id: model.id,
       name: model.name,
@@ -195,7 +199,7 @@ export async function restoreCheckoutDraft(): Promise<{
               (color) => color.id === model.options.color || color.name === model.options.color,
             )?.id ?? '',
         customShade: '',
-        quality: model.options.quality === 'fine' ? 'fine' : 'standard',
+        quality: model.options.quality,
         strength:
           model.strength === 'strong'
             ? 'reinforced'
@@ -203,7 +207,12 @@ export async function restoreCheckoutDraft(): Promise<{
               ? 'light'
               : 'standard',
       },
-      checkoutOptions: { advanced: model.advanced, notes: model.notes, strength: model.strength },
+      checkoutOptions: {
+        advanced: model.advanced,
+        notes: model.notes,
+        strength: model.strength,
+        units: model.units,
+      },
     })),
   };
 }

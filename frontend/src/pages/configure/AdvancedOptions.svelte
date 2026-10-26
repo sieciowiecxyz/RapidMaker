@@ -5,10 +5,12 @@
     catalog,
     busy,
     onchange,
+    open = $bindable(false),
   }: {
     model: PrintModel;
     catalog: PrintOptionsCatalog;
     busy: boolean;
+    open?: boolean;
     onchange: (patch: Partial<PrintModel>) => void;
   } = $props();
   let selections = $derived<
@@ -29,7 +31,7 @@
   }
 </script>
 
-<details class="advanced-options">
+<details class="advanced-options" bind:open>
   <summary>Więcej ustawień i wymagania</summary>
   <div class="stack advanced-content">
     <p class="muted intro">

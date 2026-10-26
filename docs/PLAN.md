@@ -1,41 +1,24 @@
-# Finalizacja Rapidmaker
+# Plan: pełne ścieżki E2E RapidMaker
 
-Cel: spójna, działająca strona od uploadu do realizacji zamówienia. Rozwijamy istniejący frontend Piotra i backend Rust; bez redesignu, nowego stosu i pozornych zapisów. Kolejność i dowody: [MILESTONES.md](MILESTONES.md). Poprzednie plany pozostają w historii Git. Mapa kodu: [ARCHITECTURE.md](ARCHITECTURE.md).
+Cel: sprawdzić rzeczywistą stronę od uploadu przez konfigurację, dane/dostawę i Stripe po obsługę klienta/admina, zwroty i logistykę. Zachowujemy styl i stos; naprawiamy błędy odkryte przez testy. Wyniki i granice w krótkim `docs/E2E-REPORT.md`.
 
-## Efekt dla klienta
+## Zakres
 
-1. Dodaje STL, STEP lub 3MF; od razu widzi biały podgląd, bez wybierania materiału/koloru. Zmiana koloru jedynie przemalowuje model. Błąd analizy nie pokazuje przykładowego modelu jako jego pliku.
-2. Wybiera rodzinę **PLA, ABS albo TPU** przyciskami jak jakość/wytrzymałość, z krótkim opisem. Bez dropdownu, materiałów podporowych i kilkunastu odmian jednej rodziny. Pełne profile techniczne pozostają po stronie operatora. Kolory danej rodziny są widoczne i wybieralne niezależnie od stanu magazynu; usuwamy stock jako warunek wyboru/wyceny. Bezpieczny profil drukarki i jawna cena zakupu nadal są wymagane do automatycznej kalkulacji. Brak dopuszczonego profilu, np. konkretnego TPU, prowadzi do ręcznej wyceny, nie zmyślonej ceny.
-3. Otrzymuje serwerową cenę za rzeczywistą partię i dostawę; wiele części i sztuk, jeden koszt przygotowania koszyka. Wynik zależy od slicera, stawek i pakowania, nie od kwot w przeglądarce.
-4. Podaje dane raz, wybiera dostawę, sprawdza podsumowanie i płaci Stripe test na naszej stronie. Login klienta/admina: hasło lub passkey + obowiązkowy email/TOTP zgodnie z [auth.md](auth.md).
-5. W koncie widzi własne zamówienia, ich części/podglądy, pliki, płatność, status, dostawę i rozmowę. Admin obsługuje te same rzeczy przez własny panel. Powiadomienia i odpowiedzi email trafiają do właściwej rozmowy, bez duplikatów i wycieku cudzych danych.
+- Mapa wszystkich szablonowych kontrolek: `docs/e2e-controls.md` (generator `frontend/tests/inventory-controls.mjs`); doprecyzowanie aktywnych tras, opcji dynamicznych, kontrolek wyłączonych i martwych widoków w inwentarzach obszarów. Liczba kontrolek nie jest wynikiem testu.
+- Konfigurator: STL/STEP/3MF, podgląd, błędne pliki, wiele części, wszystkie oferowane materiały/kolory/jakości/wytrzymałości, ilości i opcje zaawansowane; zachowanie danych przy nawigacji i odtworzeniu. Nie testujemy iloczynu wszystkich możliwych kombinacji.
+- Checkout: walidacja danych/faktury, odbiór, kurier, paczkomaty i zmiana punktu, pakowanie i oferta/cena serwera, edycja/wstecz/retry, regulamin, prawdziwa płatność Stripe test oraz niepowodzenie/anulowanie.
+- Tożsamość: rejestracja i hasło/passkey + email/TOTP, błędy kodów, powrót do celu, ustawienia hasła/kluczy/aplikacji, wylogowanie i ochrona tras.
+- Klient/admin: listy/szukanie/filtry, szczegóły/pliki/podglądy, wiadomości, powiadomienia, statusy, ręczna oferta i zapłata, materiały/ceny, eksport, zwroty częściowe/pozostałe i limity; logistyka dostępna w rzeczywistym sandboxie.
+- Ochrona: cudze zasoby, niedozwolony admin, CSRF, błędne kwoty, retry bez podwójnej operacji, retencja plików, współbieżni klienci; błędy HTTP/JS i wygląd desktop/mobile.
 
-## Ręczna wycena i późniejsza zapłata
+## Wykonanie
 
-Ręczna wycena pozostaje awaryjną, pełną ścieżką. Powody: przekroczenie 500 × 500 × 500 mm na którejkolwiek osi, brak wykonalnego ułożenia na aktualnej P1P, niedopuszczony profil, niepewna analiza/slicer lub nietypowe pakowanie. Granica 500 mm nie powiększa stołu P1P. Błędny/złośliwy upload jest odrzucany, nie kierowany do operatora jako poprawny model.
+Playwright z rzeczywistym Rust API, PostgreSQL, parserem/slicerem; Stripe i Furgonetka wyłącznie sandbox/test, email wyłącznie void@sieciowiec.xyz. Osobna baza `rapidmaker_test_browser_*`, katalog modeli i porty 18436/18437; sprzątanie tylko własnych zasobów. Bez zmian normalnych kont, zamówień i uploadów.
 
-Klient wysyła zgłoszenie z plikami i wymaganiami → admin widzi „Oczekuje na wycenę” → wpisuje cenę brutto PLN i zakres/dostawę → zatwierdza ofertę → transakcja zapisuje wersję ceny i email w outbox. Link prowadzi do własnego zamówienia na naszej stronie; wymaga zalogowania do właściwego konta. Gość przed wysłaniem prośby potwierdza konto i przypisuje własne pliki. Sam adres email lub link nie nadają uprawnień.
+Istniejące kontrakty z podstawionym API zachowujemy dla awarii/retry i trudnych stanów, ale raport wyraźnie odróżnia je od E2E prawdziwych integracji. Nie podszywamy się pod udaną odpowiedź dostawcy. Rzeczywiste błędy poprawiamy; nie osłabiamy kwot/uprawnień/2FA ani testów. Funkcja niedostępna/niezaimplementowana albo blokada dostawcy dostaje jawny status i dowód, nie PASS. Martwe lub niedziałające przyciski naprawiamy albo uczciwie wyłączamy, bez tworzenia fikcyjnej funkcji.
 
-Klient widzi cenę i płaci istniejącym Stripe flow. Serwer sprawdza własność, wersję, ważność, walutę i kwotę. Zmiana oferty unieważnia stare potwierdzenie; rozpoczętej/niepewnej/opłaconej płatności nie wolno zastąpić nową ceną. Jedna zapłata, jedna zmiana statusu, jeden email; restart, retry i podwójne kliknięcie nie tworzą dubli. W tym etapie jedna próba płatności na ręczne zamówienie: po utworzeniu próby oferta jest nieedytowalna, a po jej definitywnym wygaśnięciu/niepowodzeniu klient wysyła nowe zgłoszenie. Nie tworzymy równoległych płatności. Domyślna ważność oferty: 7 dni; po terminie nowe zgłoszenie, bez płatności starą kwotą. Wycena dostawy jest jawna: wyliczona albo potwierdzona ręcznie z zakresem usługi; nie darmowa fikcyjna dostawa.
+Testy sprawdzają efekt akcji i stan serwera, nie samo kliknięcie. Reużywamy flow/helperów; nie dublujemy istniejących scenariuszy. Formularze i błędy sprawdzamy selektorami dostępnymi dla użytkownika; WebAuthn przez wirtualny authenticator. Trace/screenshoty wyłączone tam, gdzie ujawniłyby kody/sekrety/karty. Raport nie zawiera sekretów ani danych prawdziwych klientów.
 
-## Upload, retencja i współbieżność
+Workerzy Sol medium implementują rozłączne obszary konfiguratora i paneli. Główny agent trzyma plan, integruje helpery/runner, checkout/auth oraz wyniki; bez Astry i dodatkowych bramek review. Rozszerzony zakres testów wynika z aktualnej wyraźnej prośby użytkownika, mimo wcześniejszego trybu POC.
 
-Pliki prywatne, ID serwera, kontrola własności, limit rozmiaru/liczby/dysku, sprawdzanie zawartości i archiwów 3MF, brak traversal/symlink/XXE/SSRF i odczytu zewnętrznych zasobów. Parser i slicer izolowane bez sieci/sekretów, z timeoutem i limitami pamięci/CPU. Szczegóły: [slicer-queue.md](slicer-queue.md).
-
-Porzucony upload/szkic: retencja 24 h. Nieopłacona próba: po wygaśnięciu i potwierdzeniu w Stripe, że nie została opłacona i nie jest przetwarzana, zwalniamy hold; sprzątanie usuwa oryginał, siatkę i GLB. Niepewność płatności blokuje usuwanie do uzgodnienia. Prośba o ręczną wycenę: 14 dni na obsługę; opublikowana oferta: 7 dni na zapłatę. Wygaśnięcie bez płatności zwalnia pliki według retencji; klient widzi termin. Zamówienia opłacone zachowują istniejącą ochronę i 90 dni po completed; snapshoty/historia pozostają po usunięciu plików. Testy używają kontrolowanego czasu, nie czekają dni.
-
-HTTP nie czeka na cały slicer: 202 + status i ograniczone odpytywanie. Wielu klientów wysyła/równolegle korzysta ze strony, a kosztowne zadania mają trwałą kolejkę, lease/retry i ograniczoną liczbę workerów. Kolejka nie oznacza nieskończonej liczby procesów. Restart i przekroczenie limitów mają czytelne, bezpieczne zachowanie.
-
-## Wygląd
-
-Źródło stylu: [frontend/README.md](../frontend/README.md), `frontend/src/storefront/theme.css`, mapowanie `frontend/src/theme.css` i istniejące komponenty. Zachowujemy fonty, limonkę, kontrast i język autora. Ujednolicamy skalę odstępów, szerokości, wysokości pól, przyciski, focus/error/loading oraz podglądy w konfiguratorze, checkout, koncie i adminie. Różnice wynikające z funkcji ekranu są celowe; nie narzucamy jednego paddingu wszystkiemu. Zrzuty desktop/mobile i obejrzenie rzeczywistych ekranów po zmianie.
-
-Usuwamy „strona testowa”, „demo”, lorem ipsum i techniczne instrukcje z normalnych widoków. Nie maskujemy błędów ani nie przedstawiamy sandboxu jako produkcyjnej transakcji; tryb dostawców pozostaje w konfiguracji/adminie i dokumentacji.
-
-## Sprawdzenie końcowe
-
-Playwright na działającym frontendzie + Rust + osobnej bazie/pliku storage: różne modele/formaty, biały podgląd bez koloru, konfiguracja, koszyk, adres/dostawa, Stripe test, konto/admin, ręczna oferta i zapłata, chat/email, sesje i odmowy dostępu. Testy z podstawionym API pozostają szybkimi regresjami UI, ale nie są dowodem integracji. Prawdziwe sandboxy sprawdzamy oznaczonym zestawem bez live płatności/nadawania. Email testowy wyłącznie void@sieciowiec.xyz; bez sekretów/kodów w logach i raportach.
-
-Rust: graniczne ilości/wymiary, koszt partii bez podwójnego mnożenia, minimum/VAT/zaokrąglenia, energia/filament, oferta dostawy/cache i kwoty Stripe. Porównujemy koszty z jawnymi stawkami testowymi; zyskowności produkcyjnej nie deklarujemy bez potwierdzonych kosztów. Sprawdzamy uploady, CSRF, IDOR, role, replay, limity, webhooki i współbieżność na własnym localhost. Bez szerokich testów przy każdej kosmetyce; pełny przebieg przy zamknięciu etapu integracji i po istotnej zmianie granic.
-
-Gotowe dopiero po dowodach PASS, w tym automatycznej wycenie przez zwykły formularz localhost i jego bazę. PASS na bazie fixture nie zastępuje konfiguracji używanej strony. FAIL/NOT RUN i blokery zapisujemy jawnie. Nie zamykamy celu na samym buildzie. Brakujące dane/operator/realny klucz lub problem sandboxa izolujemy i zgłaszamy, pozostałą pracę kontynuujemy. Bez publicznego wdrożenia w tym celu.
+Kolejność i kryteria: [MILESTONES.md](MILESTONES.md). Starszy plan finalizacji zachowany w historii Git, ostatnia wersja przed tym etapem: e5a7f28.

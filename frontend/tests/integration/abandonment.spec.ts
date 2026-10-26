@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -61,7 +61,11 @@ test('unpaid Stripe test session is closed before its expired upload is deleted'
   const quote = await priced.json();
   const started = await request.post(`/api/checkout/drafts/${draft.id}/payment`, {
     headers: { ...headers, 'Idempotency-Key': randomUUID() },
-    data: { version: quote.version, offer_id: quote.quote.offers[0].id },
+    data: {
+      version: quote.version,
+      offer_id: quote.quote.offers[0].id,
+      legal_version: '2026-10-25',
+    },
   });
   expect(started.status()).toBe(200);
   const attempt = await started.json();

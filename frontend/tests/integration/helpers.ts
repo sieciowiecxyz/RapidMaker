@@ -58,7 +58,7 @@ export function mail(
     child.stdin.end(JSON.stringify(input));
   });
 }
-export function totp(uri: string): string {
+export function totp(uri: string, timestamp = Date.now()): string {
   const secret = new URL(uri).searchParams.get('secret')!;
   let bits = '';
   for (const char of secret.replace(/=+$/, ''))
@@ -69,7 +69,7 @@ export function totp(uri: string): string {
     ),
   );
   const step = Buffer.alloc(8);
-  step.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  step.writeBigUInt64BE(BigInt(Math.floor(timestamp / 30_000)));
   const hash = createHmac('sha1', bytes).update(step).digest(),
     offset = hash[hash.length - 1] & 15;
   return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0');
@@ -106,9 +106,12 @@ export async function login(page: Page, account: Account) {
   await expect
     .poll(async () => (await (await page.request.get('/api/auth/me')).json()).stage)
     .toBe('authenticated');
+  await expect(page).toHaveURL(
+    account.role === 'admin' ? /\/admin\.html$/ : /\/konto\/zamowienia$/,
+  );
 }
 
-export async function fillStripeCard(page: Page) {
+export async function fillStripeCard(page: Page, number = '4242424242424242') {
   let payment: Frame | undefined;
   await expect
     .poll(
@@ -134,7 +137,7 @@ export async function fillStripeCard(page: Page) {
     )
     .toBe(true);
   if (!payment) throw new Error('Stripe card frame missing');
-  await payment.locator('input[name="number"]').fill('4242424242424242');
+  await payment.locator('input[name="number"]').fill(number);
   await payment.locator('input[name="expiry"]').fill('1234');
   await payment.locator('input[name="cvc"]').fill('123');
   const country = payment.locator('select[name="country"]');

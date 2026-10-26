@@ -6,8 +6,14 @@ export default defineConfig({
   workers: 1,
   timeout: 120_000,
   expect: { timeout: 20_000 },
-  reporter: 'list',
-  outputDir: './tests/artifacts/integration',
+  reporter: [
+    ['list'],
+    [
+      'json',
+      { outputFile: process.env.PLAYWRIGHT_JSON_OUTPUT_NAME ?? 'tests/artifacts/integration.json' },
+    ],
+  ],
+  outputDir: './tests/artifacts/integration/' + (process.env.E2E_REPORT_NAME ?? 'default'),
   use: {
     baseURL: 'http://localhost:18437',
     actionTimeout: 20_000,

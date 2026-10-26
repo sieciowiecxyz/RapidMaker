@@ -15,12 +15,20 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+os.umask(0o077)
 root = Path(__file__).resolve().parents[2]
+artifacts = root / "frontend/tests/artifacts"
+artifacts.mkdir(parents=True, exist_ok=True)
+artifacts.chmod(0o700)
+registration = "--registration" in sys.argv
 sandbox = "--sandbox" in sys.argv
-client_totp = "--client-totp" in sys.argv
-arguments = [arg for arg in sys.argv[1:] if arg not in ("--sandbox", "--client-totp")]
-if client_totp and (not sandbox or not arguments or any("auth" in arg for arg in arguments)):
-    raise SystemExit("--client-totp requires --sandbox and explicit tests other than auth.spec.ts")
+local_accounts = "--local-accounts" in sys.argv
+client_totp = "--client-totp" in sys.argv or local_accounts
+arguments = [arg for arg in sys.argv[1:] if arg not in ("--sandbox", "--client-totp", "--local-accounts", "--registration")]
+if client_totp and (not (sandbox or local_accounts) or not arguments or any(Path(arg).name == "auth.spec.ts" for arg in arguments)):
+    raise SystemExit("TOTP fixture requires --sandbox or --local-accounts and explicit tests other than auth.spec.ts")
+if registration and not sandbox:
+    raise SystemExit("--registration requires --sandbox for real test email")
 provider_values = {}
 container = os.environ.get("TEST_PG_CONTAINER", "rapidmaker-catalog-postgres")
 url = None
@@ -36,6 +44,12 @@ if not url:
 parsed = urllib.parse.urlsplit(url)
 if parsed.hostname not in ("localhost", "127.0.0.1") or parsed.port != 18434:
     raise SystemExit("Tests require the dedicated local PostgreSQL on port 18434.")
+browser_check = subprocess.run([
+    "node", "--input-type=module", "-e",
+    "import {chromium} from 'playwright'; const b=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}); await b.close();"
+], cwd=root / "frontend", capture_output=True)
+if browser_check.returncode:
+    raise SystemExit("Browser preflight failed; run `cd frontend && npx playwright install chromium` or set a valid PLAYWRIGHT_CHROMIUM_EXECUTABLE. No test database was created.")
 name = "rapidmaker_test_browser_" + secrets.token_hex(6)
 
 def sql(query, database="postgres"):
@@ -46,8 +60,13 @@ if not binary.exists():
     raise SystemExit("Build the backend and frontend first; see docs/testing.md.")
 folder = Path(tempfile.mkdtemp(prefix="rapidmaker-browser-"))
 api = None
+browser = None
 created = False
 failed = True
+# SIGTERM must also run cleanup; otherwise a stopped test leaves its private DB/server behind.
+def interrupted(_signal, _frame):
+    raise SystemExit(143)
+signal.signal(signal.SIGTERM, interrupted)
 try:
     sql("CREATE DATABASE " + name)
     created = True
@@ -75,21 +94,40 @@ try:
     else:
         raise RuntimeError("Isolated API startup timeout")
     # Explicit fixture costs only in this disposable database; every color remains stock=false.
-    sql("UPDATE catalog_materials SET cost_net_grosze_per_kg=10000,production_enabled=true WHERE id='GFA00'", name)
+    sql("UPDATE catalog_materials SET cost_net_grosze_per_kg=10000,production_enabled=true WHERE id IN ('GFA00','GFB00','GFU01')", name)
     browser_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DISPLAY", "PLAYWRIGHT_CHROMIUM_EXECUTABLE")}
-    browser_env.setdefault("PLAYWRIGHT_CHROMIUM_EXECUTABLE", "/usr/bin/chromium")
+    if "PLAYWRIGHT_CHROMIUM_EXECUTABLE" not in browser_env and Path("/usr/bin/chromium").is_file():
+        browser_env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"] = "/usr/bin/chromium"
     browser_env.update(RAPIDMAKER_TEST_DATABASE=name, RAPIDMAKER_TEST_MODEL_ROOT=str(folder / "models"), TEST_PG_CONTAINER=container)
-    if sandbox:
+    if sandbox or local_accounts:
         if client_totp: env["TEST_CLIENT_TOTP"] = "1"
+        if registration: env["TEST_REGISTER"] = "1"
         fixture_file = folder / "accounts.json"
         with fixture_file.open("wb") as output:
             fixture_file.chmod(0o600)
             subprocess.run(["cargo", "run", "--locked", "--quiet", "--manifest-path", "backend/Cargo.toml", "-p", "rapidmaker-api", "--example", "browser_fixture"], cwd=root, env=env, stdout=output, check=True)
-        browser_env.update(RAPIDMAKER_SANDBOX="1", RAPIDMAKER_TEST_ACCOUNTS=str(fixture_file))
-    result = subprocess.run(["npx", "playwright", "test", "--config=playwright.integration.config.ts", *arguments], cwd=root / "frontend", env=browser_env)
-    failed = result.returncode != 0
-    sys.exit(result.returncode)
+        browser_env.update(RAPIDMAKER_TEST_ACCOUNTS=str(fixture_file))
+        if sandbox: browser_env["RAPIDMAKER_SANDBOX"] = "1"
+    report_name = os.environ.get("E2E_REPORT_NAME", "integration")
+    if not report_name.replace("-", "").isalnum(): raise RuntimeError("Invalid report name")
+    browser_env["E2E_REPORT_NAME"] = report_name
+    browser_env["PLAYWRIGHT_NO_COPY_PROMPT"] = "1"
+    method = os.environ.get("E2E_REGISTRATION_METHOD", "password")
+    if method not in ("password", "passkey"): raise RuntimeError("Invalid registration method")
+    browser_env["E2E_REGISTRATION_METHOD"] = method
+    browser_env["PLAYWRIGHT_JSON_OUTPUT_NAME"] = str(root / "frontend/tests/artifacts" / (report_name + ".json"))
+    browser = subprocess.Popen(["node", str(root / "frontend/node_modules/@playwright/test/cli.js"), "test", "--config=playwright.integration.config.ts", *arguments], cwd=root / "frontend", env=browser_env, start_new_session=True)
+    result = browser.wait()
+    failed = result != 0
+    sys.exit(result)
 finally:
+    if browser and browser.poll() is None:
+        os.killpg(browser.pid, signal.SIGINT)
+        try:
+            browser.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(browser.pid, signal.SIGKILL)
+            browser.wait()
     if api and api.poll() is None:
         os.killpg(api.pid, signal.SIGTERM)
         try:

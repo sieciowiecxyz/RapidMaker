@@ -197,7 +197,9 @@ async fn session(
         .as_str()
         .filter(|_| a.state == "open")
         .ok_or_else(conflict)?;
-    Ok(Json(json!({"url":url,"session_id":a.provider_id})))
+    Ok(Json(
+        json!({"url":url,"session_id":a.provider_id,"order_id":a.id}),
+    ))
 }
 #[utoipa::path(post,path="/api/checkout/intent",tag="Checkout",operation_id="legacy_checkout_intent",request_body=Start,
  responses((status=200,body=Value),(status=409,body=Value),(status=503,body=Value)),security(("session"=[],"csrf"=[]),("guest"=[])))]
@@ -310,7 +312,7 @@ async fn payment_status(
         return Err(unavailable());
     }
     Ok(Json(
-        json!({"status":if paid{"paid"}else{"unpaid"},"livemode":false,"total_grosze":a.amount_grosze,"currency":"pln","quote_id":a.draft_id,"checkout_status":object["status"],"url":object["url"]}),
+        json!({"status":if paid{"paid"}else{"unpaid"},"livemode":false,"total_grosze":a.amount_grosze,"currency":"pln","quote_id":a.draft_id,"order_id":a.id,"checkout_status":object["status"],"url":object["url"]}),
     ))
 }
 #[utoipa::path(get,path="/api/checkout/session/{id}",tag="Checkout",operation_id="legacy_session_status",params(("id"=String,Path)),responses((status=200,body=Value),(status=404,body=Value)),security(("session"=[]),("guest"=[])))]
@@ -341,7 +343,7 @@ async fn intent_secret(app: &App, a: &rapidmaker_storage::PaymentAttempt) -> Res
     }
     let secret = object["client_secret"].as_str().ok_or_else(unavailable)?;
     Ok(Json(
-        json!({"client_secret":secret,"payment_intent_id":a.provider_id,"total_grosze":a.amount_grosze}),
+        json!({"client_secret":secret,"payment_intent_id":a.provider_id,"order_id":a.id,"total_grosze":a.amount_grosze}),
     ))
 }
 #[utoipa::path(get,path="/api/checkout/intent/{id}/resume",tag="Checkout",operation_id="legacy_intent_resume",params(("id"=String,Path)),responses((status=200,body=Value),(status=404,body=Value),(status=409,body=Value)),security(("session"=[]),("guest"=[])))]

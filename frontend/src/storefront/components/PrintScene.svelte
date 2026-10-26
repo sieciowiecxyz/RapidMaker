@@ -24,7 +24,8 @@
     const state:ViewerState={yaw:-.45,pitch:.62,build:1,flex:0,layer:.13,sweep:1,r:.16,g:.18,b:.16,oldR:.16,oldG:.18,oldB:.16,explode:0,zoom:1,upperOpacity:1,density:.065,wall:4};
     let active=true,lastDraw=0,kind='',hex='',lastStrengthTrigger=strengthTrigger;
     let rotation:gsap.core.Tween|undefined,entrance:gsap.core.Tween|undefined,flex:gsap.core.Timeline|undefined,demonstration:gsap.core.Timeline|undefined;
-    const draw=()=>{if(!document.hidden&&active)renderer.draw(state);};
+    // Explicit redraws must work while IntersectionObserver catches up after scroll/resize.
+    const draw=()=>{if(!document.hidden)renderer.draw(state);};
     const syncActivity=()=>{const stop=paused||demonstrating||!active||document.hidden||reduced.matches;rotation?.paused(stop);entrance?.paused(stop);flex?.paused(stop);};
     function start(){demonstration?.kill();demonstrating=false;state.explode=0;state.upperOpacity=1;rotation?.kill();entrance?.kill();reducedMotion=reduced.matches;if(reduced.matches){state.build=1;draw();return;}state.build=.04;entrance=gsap.to(state,{build:1,duration:1.3,ease:'power3.out',onUpdate:draw});rotation=gsap.to(state,{yaw:state.yaw+Math.PI*2,duration:55,ease:'none',repeat:-1});syncActivity();}
     function demonstrate(){
@@ -45,12 +46,12 @@
       const nextWall=({light:2,standard:4,reinforced:7} as Record<string,number>)[nextStrength]??4;
       gsap.to(state,{wall:nextWall,density:nextDensity,duration:instant?0:.35,ease:'power3.out',overwrite:'auto',onUpdate:draw});
       if(nextStrength && lastStrengthTrigger!==nextStrengthTrigger)demonstrate();lastStrengthTrigger=nextStrengthTrigger ?? 0;
-      gsap.to(state,{layer:nextQuality==='fine'?.26:.13,duration:instant?0:.25,ease:'power3.out',overwrite:'auto',onUpdate:draw});syncActivity();draw();
+      gsap.to(state,{layer:nextQuality==='fine'?.26:nextQuality==='draft'?.08:.13,duration:instant?0:.25,ease:'power3.out',overwrite:'auto',onUpdate:draw});syncActivity();draw();
     };
     configure(theme,material,color,quality,strength,mesh,meshKey,strengthTrigger);
     const resize=new ResizeObserver(()=>{const width=host.clientWidth,height=matchMedia('(max-width:760px)').matches?210:Math.max(320,Math.min(460,width*.83));const ratio=Math.min(devicePixelRatio,1.5);canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);canvas.style.height=`${height}px`;draw();});resize.observe(host);
     zoomIn=()=>{state.zoom=Math.min(2.4,state.zoom*1.2);draw();};zoomOut=()=>{state.zoom=Math.max(.5,state.zoom/1.2);draw();};
-    replay=start;togglePause=()=>{paused=!paused;if(!paused&&!reduced.matches){rotation?.kill();rotation=gsap.to(state,{yaw:state.yaw+Math.PI*2,duration:55,ease:'none',repeat:-1});}syncActivity();};
+    replay=()=>{paused=false;start();};togglePause=()=>{paused=!paused;if(!paused&&!reduced.matches){rotation?.kill();rotation=gsap.to(state,{yaw:state.yaw+Math.PI*2,duration:55,ease:'none',repeat:-1});}syncActivity();};
     rotate=()=>{paused=true;syncActivity();if(reduced.matches){state.yaw+=Math.PI/4;draw();}else gsap.to(state,{yaw:state.yaw+Math.PI/4,duration:.3,ease:'power3.out',overwrite:'auto',onUpdate:draw});};
     const tick=(time:number)=>{if((paused&&!demonstrating)||reduced.matches||document.hidden||!active||time-lastDraw<1/30)return;lastDraw=time;draw();};gsap.ticker.add(tick);
     const visible=new IntersectionObserver(([entry])=>{active=entry.isIntersecting;syncActivity();if(active)draw();},{threshold:.05});visible.observe(host);
@@ -65,12 +66,12 @@
 
 <div class="print-scene chamber" bind:this={host}>
   <div class="chamber-top"><span><i></i> Podgląd</span><span>{mesh ? 'Twój plik / 3D' : 'FDM / próbka'}</span></div>
-  <div class="chamber-visual" role="img" aria-label={mesh ? `Model z pliku ${fileName}. Obróć przeciągając myszą. Kolor: ${colorName}.` : `Pokazowa część: ${sample.name}, ${materialName}, ${colorName}, jakość ${quality === 'fine' ? 'dokładna' : quality === 'standard' ? 'standardowa' : 'nie wybrano'}. ${demonstrating ? `Poglądowe wypełnienie i ścianki: ${strengthName}.` : ''} Nie przedstawia wgranego pliku.`}>
+  <div class="chamber-visual" role="img" aria-label={mesh ? `Model z pliku ${fileName}. Obróć przeciągając myszą. Kolor: ${colorName}.` : `Pokazowa część: ${sample.name}, ${materialName}, ${colorName}, jakość ${quality === 'fine' ? 'dokładna' : quality === 'standard' ? 'standardowa' : quality === 'draft' ? 'robocza' : 'nie wybrano'}. ${demonstrating ? `Poglądowe wypełnienie i ścianki: ${strengthName}.` : ''} Nie przedstawia wgranego pliku.`}>
     <span class="chamber-watermark" aria-hidden="true">{mesh && material === 'unselected' ? '3D' : materialName}</span>
     <canvas bind:this={canvas} aria-hidden="true"></canvas>{#if unavailable}<p class="viewer-fallback">Podgląd 3D jest niedostępny na tym urządzeniu. Konfigurator działa dalej.</p>{/if}
     <span class="chamber-callout"><IconArrowDownRight size={16} stroke={1.5} />{fileName ?? sample.name}</span>
   </div>
   {#if demonstrating}<div class="strength-demonstration" role="status"><span>Wypełnienie i ścianki · {strengthName}</span><small>Pokaz poglądowy</small></div>{/if}
-  <div class="chamber-data"><div><span>Materiał</span><strong>{materialName}</strong></div><div><span>Kolor</span><strong>{colorName}</strong></div><div><span>Warstwy</span><strong>{quality === 'fine' ? 'Dokładne' : quality === 'standard' ? 'Standard' : 'Nie wybrano'}</strong></div></div>
+  <div class="chamber-data"><div><span>Materiał</span><strong>{materialName}</strong></div><div><span>Kolor</span><strong>{colorName}</strong></div><div><span>Warstwy</span><strong>{quality === 'fine' ? 'Dokładne' : quality === 'standard' ? 'Standard' : quality === 'draft' ? 'Robocze' : 'Nie wybrano'}</strong></div></div>
   <div class="scene-caption"><span>{#if mesh}{mesh.triangleCount.toLocaleString('pl-PL')} trójkątów · podgląd geometrii. Przekrój i wypełnienie poglądowe; nie są wynikiem slicera.{:else}{sample.application}. Obiekt pokazowy.{/if}</span><div class="scene-actions"><button onclick={()=>zoomOut()} disabled={unavailable} aria-label="Oddal model"><IconMinus size={16}/></button><button onclick={()=>zoomIn()} disabled={unavailable} aria-label="Przybliż model"><IconPlus size={16}/></button><button onclick={()=>rotate()} disabled={unavailable} aria-label="Obróć model"><IconRotateClockwise size={16}/></button><button onclick={()=>togglePause()} disabled={reducedMotion || unavailable} aria-label={paused?'Wznów animację druku':'Wstrzymaj animację druku'}>{#if paused}<IconPlayerPlay size={16} />{:else}<IconPlayerPause size={16} />{/if}</button><button onclick={()=>replay()} disabled={reducedMotion || unavailable} aria-label="Odtwórz animację druku"><IconRefresh size={16}/></button></div></div>
 </div>

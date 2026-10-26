@@ -87,6 +87,8 @@ try:
                             print(json.dumps({'code': match[1]})); sys.exit(0)
                     elif request['mode'] == 'chat' and request['reference'] in body and request['marker'] in body:
                         print(json.dumps({'message_id': str(message.get('Message-ID', ''))})); sys.exit(0)
+                    elif request['mode'] == 'legal' and request['reference'] in body and all(text in body for text in ['Regulamin RapidMaker', 'Polityka prywatności RapidMaker', '2026-10-25']):
+                        print(json.dumps({'received': True})); sys.exit(0)
                     elif request['mode'] == 'offer' and request['reference'] in body and '/konto/zamowienia/' in body:
                         print(json.dumps({'received': True})); sys.exit(0)
                 time.sleep(2)

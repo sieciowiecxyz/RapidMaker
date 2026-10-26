@@ -320,7 +320,7 @@ async function calculateQuote(
   return mock.saveQuote(quote, cart);
 }
 export function startCheckout(quoteId: string, offerId: string) {
-  return request<{ url: string; session_id: string }>('/api/checkout/session', {
+  return request<{ url: string; session_id: string; order_id: string }>('/api/checkout/session', {
     quote_id: quoteId,
     offer_id: offerId,
     legal_version: LEGAL_VERSION,
@@ -351,7 +351,7 @@ export async function startOrderCheckout(quote: Quote, contact: Contact, offerId
     amountGrosze,
     offer,
   });
-  return { ...result, order };
+  return { ...result, order: { ...order, id: result.order_id } };
 }
 export async function refreshOrderPayment(orderId: string): Promise<Order> {
   await request(`/api/account/orders/${encodeURIComponent(orderId)}/payment-status`, {});
@@ -392,6 +392,7 @@ export async function startOrderIntent(quote: Quote, contact: Contact, offerId: 
   const result = await request<{
     client_secret: string;
     payment_intent_id: string;
+    order_id: string;
     total_grosze: number;
   }>('/api/checkout/intent', {
     quote_id: checkout.id,
@@ -408,7 +409,7 @@ export async function startOrderIntent(quote: Quote, contact: Contact, offerId: 
     amountGrosze: expected,
     offer,
   });
-  return { ...result, order };
+  return { ...result, order: { ...order, id: result.order_id } };
 }
 
 export async function analyzeModel(file: File) {

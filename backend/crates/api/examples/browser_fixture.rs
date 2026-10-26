@@ -39,7 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ),
         ("admin", "browser-admin@example.invalid", true),
         ("client", "browser-other@example.invalid", true),
+        ("client", "browser-security@example.invalid", true),
     ] {
+        if email == "void@sieciowiec.xyz" && std::env::var("TEST_REGISTER").as_deref() == Ok("1") {
+            continue;
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let secret = new_totp_secret()?;
         let sealed = use_totp

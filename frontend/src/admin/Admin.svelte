@@ -182,12 +182,13 @@
       }
       m.material = f.material_id;
       m.color = f.color_code;
-      m.quality =
-        f.options?.quality === 'fine'
-          ? 'Dokładny · 0,12 mm'
-          : f.options?.quality === 'standard'
-            ? 'Standard · 0,20 mm'
-            : '—';
+      m.quality = f.options?.quality
+        ? ({
+            draft: 'Roboczy · 0,28 mm',
+            standard: 'Standard · 0,20 mm',
+            fine: 'Dokładny · 0,12 mm',
+          }[f.options.quality] ?? '—')
+        : '—';
       m.strength = f.options?.wall_loops ? f.options.wall_loops + ' ściany' : '—';
     }
   }
@@ -511,6 +512,7 @@
                 </h2>
                 {#each orders.filter((o) => o.status === stage) as o}<article
                     class="production-card"
+                    aria-label={`Zlecenie produkcyjne ${o.id}`}
                   >
                     <button class="order-link" onclick={(e) => open(o, e)}
                       >{shortId(o.id)}<IconArrowUpRight size={15} /></button
@@ -539,6 +541,7 @@
           <div class="inbox">
             {#each orders as o}<button
                 class="message-row"
+                aria-label={`Rozmowa z ${o.client}, zamówienie ${o.id}`}
                 onclick={async (e) => {
                   await open(o, e);
                   tab = 'Wiadomości';

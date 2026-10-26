@@ -123,6 +123,7 @@ export type PickupPoint = {
   address: { street: string; postcode: string; city: string };
 };
 export type StripeStatus = {
+  order_id?: string;
   status: 'paid' | 'unpaid';
   total_grosze: number;
   livemode: false;

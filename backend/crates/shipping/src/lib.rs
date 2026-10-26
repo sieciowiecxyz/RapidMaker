@@ -601,7 +601,7 @@ impl Sandbox {
                 .map(|p| {
                     json!({
                         "width":p.outer_mm[0].div_ceil(10), "depth":p.outer_mm[1].div_ceil(10),
-                        "height":p.outer_mm[2].div_ceil(10), "weight":f64::from(p.weight_g)/1000.,
+                        "height":p.outer_mm[2].div_ceil(10), "weight":provider_weight(p.weight_g),
                         "quantity":1, "type":"package"
                     })
                 })
@@ -790,6 +790,11 @@ impl Sandbox {
             ),
         ))
     }
+}
+// Use whole 100 g increments: provider readback rounds kg to one decimal.
+// Round upward before both quoting and creating, never underdeclare actual mass.
+fn provider_weight(grams: u32) -> f64 {
+    f64::from(grams.div_ceil(100)) / 10.
 }
 fn consignment_size(carrier: &str, method: Method) -> usize {
     if method == Method::Courier && ["dpd", "dhl", "gls", "fedex"].contains(&carrier) {
@@ -1387,6 +1392,19 @@ mod tests {
             ),
             Error::NoService(_)
         ));
+    }
+    #[test]
+    fn provider_weight_rounds_up_without_underdeclaring() {
+        for (grams, kg) in [
+            (1, 0.1),
+            (100, 0.1),
+            (101, 0.2),
+            (166, 0.2),
+            (1000, 1.),
+            (69999, 70.),
+        ] {
+            assert_eq!(provider_weight(grams), kg);
+        }
     }
     #[test]
     fn carrier_amount_and_errors_are_not_silently_reinterpreted() {

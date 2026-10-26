@@ -240,8 +240,8 @@ p { text-wrap: pretty; }
 .pigment.unavailable .choice-input { cursor: not-allowed; }
 .pigment.unavailable .pigment-sample { opacity: .45; }
 .pigment.unavailable .pigment-sample::after { content:''; position: absolute; width: 42px; height: 1px; transform: rotate(-45deg); background: var(--ink); }
-.quality-switch { display: grid; grid-template-columns: 1fr 1fr; position: relative; isolation: isolate; border: 1px solid var(--control-line); }
-.quality-indicator { position: absolute; inset: 0 auto 0 0; width: 50%; z-index: -1; background: var(--soft); border-bottom: 2px solid var(--accent); transition: transform 280ms var(--ease); }
+.quality-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: relative; isolation: isolate; border: 1px solid var(--control-line); }
+.quality-indicator { position: absolute; inset: 0 auto 0 0; width: calc(100% / 3); z-index: -1; background: var(--soft); border-bottom: 2px solid var(--accent); transition: transform 280ms var(--ease); }
 .quality-choice { display: flex; gap: 12px; align-items: center; padding: 14px 12px; position: relative; cursor: pointer; min-height: 78px; }
 .quality-choice strong { display: block; font-size: 12px; font-weight: 700; }
 .quality-choice small { display: block; font-size: 9px; color: var(--muted); margin-top: 3px; }
