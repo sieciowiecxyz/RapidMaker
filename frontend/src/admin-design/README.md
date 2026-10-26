@@ -1,10 +1,10 @@
 # Panel operatora RapidMaker
 
-Uruchom `npm run dev` i otwórz `/admin.html`. Osobny punkt wejścia rozszerza prototyp frontend, bez zmiany witryny klienta. `npm run build` buduje oba punkty wejścia.
+Uruchom `npm run dev` i otwórz `/admin-design.html`. Rzeczywisty chroniony panel działa pod `/admin.html`; jego kontrakt opisuje `docs/admin-production.md`. Osobny punkt wejścia rozszerza prototyp frontend, bez zmiany witryny klienta. `npm run build` buduje oba punkty wejścia.
 
 Próbka zawiera 8 fikcyjnych zamówień: listę i filtry, wyszukiwanie po numerze/kliencie/pliku, eksport CSV, szczegóły modeli, ceny, liczbę gotowych sztuk, osobny stan płatności, termin, etapy produkcji, notatki, historię i szkice odpowiedzi. Dane zapisywane są pod kluczem `rapidmaker-admin-demo-v1` w localStorage. Daty są stałym scenariuszem z 24 października 2026.
 
-Brak logowania i połączenia z backendem. Brak rzeczywistych plików, podglądu 3D, wysyłania wiadomości, przyjmowania płatności i etykiet wysyłkowych. Nie używać do przechowywania prawdziwych danych klientów. Integracja z formularzem zamówień i zabezpieczonym API to kolejny etap.
+Brak logowania i połączenia z backendem. Brak rzeczywistych plików, podglądu 3D, wysyłania wiadomości, przyjmowania płatności i etykiet wysyłkowych. Nie używać do przechowywania prawdziwych danych klientów. Ten osobny wzorzec celowo pozostaje bez integracji; połączony panel to `/admin.html`.
 
 ## Płatności i faktury
 

@@ -29,7 +29,7 @@ export function validateModel(model: Model, materials: Material[]): string[] {
     errors.push('dostępny kolor');
   if (settings.color === 'custom' && !customColors.some((item) => item.id === settings.customShade))
     errors.push('odcień niestandardowy');
-  if (!['standard', 'fine'].includes(settings.quality)) errors.push('jakość');
+  if (!['draft', 'standard', 'fine'].includes(settings.quality)) errors.push('jakość');
   if (!['light', 'standard', 'reinforced'].includes(settings.strength)) errors.push('wytrzymałość');
   return errors;
 }
@@ -42,5 +42,5 @@ export function settingsSummary(settings: PrintSettings, materials: Material[]):
     settings.color === 'custom'
       ? `${shade?.name ?? 'Wybierz odcień'} (${shade?.hex ?? '?'})`
       : material?.colors.find((item) => item.id === settings.color)?.name;
-  return `${material?.name ?? 'Wybierz materiał'} · ${color ?? 'Wybierz kolor'} · ${settings.quality === 'fine' ? 'Dokładny' : settings.quality === 'standard' ? 'Standard' : 'Wybierz jakość'} · ${{ light: 'Lekka', standard: 'Standard', reinforced: 'Wzmocniona' }[settings.strength] ?? 'Wybierz wytrzymałość'}`;
+  return `${material?.name ?? 'Wybierz materiał'} · ${color ?? 'Wybierz kolor'} · ${settings.quality === 'fine' ? 'Dokładny' : settings.quality === 'standard' ? 'Standard' : settings.quality === 'draft' ? 'Roboczy' : 'Wybierz jakość'} · ${{ light: 'Lekka', standard: 'Standard', reinforced: 'Wzmocniona' }[settings.strength] ?? 'Wybierz wytrzymałość'}`;
 }

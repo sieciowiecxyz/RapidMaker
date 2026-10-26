@@ -14,12 +14,15 @@
     progress = $state(''),
     selectedId = $state('');
   let generation = 0;
+  let editorRevision = $state(0);
+  let advancedOpen = $state(false);
   let quoteValid = $state(false);
   let selected = $derived(cart?.models.find((model) => model.id === selectedId) ?? cart?.models[0]);
   onMount(() => {
     refresh();
   });
-  async function refresh() {
+  async function refresh(resetEditor = false) {
+    if (resetEditor) editorRevision++;
     const mine = ++generation;
     busy = true;
     quoteValid = false;
@@ -111,7 +114,7 @@
     <p class="muted">Dodaj części. Wybierz materiał, kolor i sposób wykonania dla każdej z nich.</p>
   </div>
   {#if error}<p class="alert error" role="alert">
-      {error} <button class="button ghost" onclick={refresh}>Spróbuj ponownie</button>
+      {error} <button class="button ghost" onclick={() => refresh(true)}>Spróbuj ponownie</button>
     </p>{/if}
   <div class="configure-layout work-surface">
     <div class="config-main">
@@ -244,19 +247,20 @@
             >
           </div>
           {#if printOptions}
-            {#key model.id}<PrintChoices
+            {#key `${model.id}:${editorRevision}`}<PrintChoices
                 {model}
                 {materials}
                 catalog={printOptions}
                 {busy}
                 onchange={(changes) => patch(model, changes)}
+              />
+              <AdvancedOptions
+                bind:open={advancedOpen}
+                {model}
+                catalog={printOptions}
+                {busy}
+                onchange={(changes) => patch(model, changes)}
               />{/key}
-            <AdvancedOptions
-              {model}
-              catalog={printOptions}
-              {busy}
-              onchange={(changes) => patch(model, changes)}
-            />
           {/if}
         </article>
       {/if}
@@ -307,7 +311,7 @@
         </p>
         <p class="guest-note">
           {cart.quote?.manual
-            ? 'Ręczna wycena wymaga zalogowania.'
+            ? 'Możesz poprosić o wycenę emailem bez konta. Obsługa oferty w panelu wymaga zalogowania.'
             : 'Możesz zamówić bez zakładania konta.'}
         </p>
       {:else}<p class="muted">Dodaj model, aby skonfigurować wydruk.</p>{/if}

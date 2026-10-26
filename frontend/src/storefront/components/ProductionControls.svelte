@@ -48,11 +48,26 @@
 
   <fieldset class="quality-field"><legend class="control-legend">Jakość <span>Porównaj warstwy</span></legend>
     <div class="quality-switch">
-      <span class="quality-indicator" style:opacity={quality ? 1 : 0} style:transform={`translateX(${quality === 'fine' ? 100 : 0}%)`} aria-hidden="true"></span>
-      {#each [{id:'standard', name:'Standard', detail:'Codzienne zastosowania'}, {id:'fine', name:'Dokładny', detail:'Drobniejsze detale'}] as item}
+      <span
+        class="quality-indicator"
+        style:opacity={quality ? 1 : 0}
+        style:transform={`translateX(${['standard', 'fine', 'draft'].indexOf(quality) * 100}%)`}
+        aria-hidden="true"
+      ></span>
+      {#each [{ id: 'standard', name: 'Standard', detail: 'Codzienne zastosowania' }, { id: 'fine', name: 'Dokładny', detail: 'Drobniejsze detale' }, { id: 'draft', name: 'Roboczy', detail: 'Szybszy wydruk' }] as item}
         <label class="quality-choice" class:selected={quality === item.id}>
-          <input class="choice-input" type="radio" name="quality" value={item.id} bind:group={quality} />
-          <span class="layer-sample" class:fine={item.id === 'fine'} aria-hidden="true">{#each Array(item.id === 'fine' ? 9 : 5) as _}<i></i>{/each}</span>
+          <input
+            class="choice-input"
+            type="radio"
+            name="quality"
+            value={item.id}
+            bind:group={quality}
+          />
+          <span class="layer-sample" class:fine={item.id === 'fine'} aria-hidden="true"
+            >{#each Array(item.id === 'fine' ? 9 : item.id === 'draft' ? 3 : 5) as _}<i
+              ></i>{/each}</span
+          >
+
           <span><strong>{item.name}</strong><small>{item.detail}</small></span>
         </label>
       {/each}

@@ -8,6 +8,7 @@
     "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 18430 --strictPort",
     "test:e2e": "npm run build && playwright test",
+    "test:all": "python tests/run-all.py",
     "format": "prettier --write src vite.config.ts playwright.config.ts",
     "format:check": "prettier --check src vite.config.ts playwright.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json"

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { accounts, login, mail } from './helpers';
 
 test.use({ screenshot: 'off', trace: 'off' });

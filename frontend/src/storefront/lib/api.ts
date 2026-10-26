@@ -2,6 +2,7 @@ import * as checkout from '../../lib/api';
 import type { DeliveryMethod, PrintModel, PrintOptionsCatalog } from '../../lib/types';
 import { getSampleModels as samples } from './mock';
 import { validateModel } from './modelSettings';
+import { customColors } from './colors';
 import type { Material, Model, Quote, QuoteOptions } from './types';
 
 export async function getMaterials(): Promise<Material[]> {
@@ -12,11 +13,35 @@ export async function getMaterials(): Promise<Material[]> {
     { id: 'custom', name: 'Niestandardowy', hex: '#a7b5a2', available: true },
   ];
   return [
-    {id:'pla',family:'PLA',name:'PLA',description:'Modele poglądowe i prototypy. Dobry wybór na początek.',colors},
-    {id:'petg',family:'PETG',name:'PETG',description:'Części użytkowe i obudowy.',colors},
-    {id:'asa',family:'ASA',name:'ASA',description:'Elementy do zastosowań zewnętrznych.',colors},
-    {id:'pa',family:'PA-CF',name:'PA-CF',description:'Poliamid wzmacniany włóknem węglowym do elementów konstrukcyjnych.',colors:colors.filter(c=>c.id==='black')},
-    {id:'tpu',family:'TPU',name:'TPU',description:'Elastyczne elementy, osłony i amortyzacja.',colors},
+    {
+      id: 'pla',
+      family: 'PLA',
+      name: 'PLA',
+      description: 'Modele poglądowe i prototypy. Dobry wybór na początek.',
+      colors,
+    },
+    { id: 'petg', family: 'PETG', name: 'PETG', description: 'Części użytkowe i obudowy.', colors },
+    {
+      id: 'asa',
+      family: 'ASA',
+      name: 'ASA',
+      description: 'Elementy do zastosowań zewnętrznych.',
+      colors,
+    },
+    {
+      id: 'pa',
+      family: 'PA-CF',
+      name: 'PA-CF',
+      description: 'Poliamid wzmacniany włóknem węglowym do elementów konstrukcyjnych.',
+      colors: colors.filter((c) => c.id === 'black'),
+    },
+    {
+      id: 'tpu',
+      family: 'TPU',
+      name: 'TPU',
+      description: 'Elastyczne elementy, osłony i amortyzacja.',
+      colors,
+    },
   ];
 }
 
@@ -33,14 +58,50 @@ function validate(models: Model[], materials: Material[]) {
   }
 }
 
+const profiles: Record<string, string> = {
+  pla: 'GFA00',
+  petg: 'GFG02',
+  asa: 'GFB01',
+  pa: 'GFN03',
+  tpu: 'GFU01',
+};
+const defaults: Record<string, Record<string, string>> = {
+  GFA00: { black: '10101', white: '10100', green: '10501' },
+  GFG02: { black: '33102', white: '33100', green: '33500' },
+  GFB01: { black: '45101', white: '45100', green: '45500' },
+  GFU01: { black: '50101', white: '50100' },
+  GFN03: { black: 'black' },
+};
+type ProductionMaterial = Awaited<ReturnType<typeof checkout.getMaterials>>[number];
+function selection(model: Model, catalog: ProductionMaterial[]) {
+  const settings = model.settings!;
+  const shade =
+    settings.color === 'custom'
+      ? customColors.find((c) => c.id === settings.customShade)
+      : undefined;
+  const series = settings.material === 'pla' && shade?.id.match(/^bambu-(GFA\d{2})-/)?.[1];
+  const id = series || profiles[settings.material] || settings.material;
+  const material = catalog.find((item) => item.id === id);
+  if (!material) throw new Error('Brak konfiguracji wybranego materiału. Spróbuj później.');
+  const code = shade && series ? shade.code : !shade ? defaults[id]?.[settings.color] : undefined;
+  const color = code ? material.colors.find((item) => item.code === code) : undefined;
+  const colorPreference = color
+    ? undefined
+    : shade
+      ? `${shade.name} · ${shade.series}${shade.code ? ' · ' + shade.code : ''} (${shade.hexes.join(', ')})`
+      : ({ black: 'Czarny', white: 'Biały', green: 'Zielony' } as Record<string, string>)[
+          settings.color
+        ];
+  if (!color && !colorPreference) throw new Error('Wybierz kolor modelu.');
+  return { material, color: color?.code ?? '', colorPreference };
+}
 function productionModel(
   model: Model,
-  materials: Material[],
+  materials: ProductionMaterial[],
   catalog: PrintOptionsCatalog,
 ): PrintModel {
   const settings = model.settings!;
-  const material = materials.find((item) => item.id === settings.material)!;
-  const color = material.colors.find((item) => item.id === settings.color)!;
+  const resolved = selection(model, materials);
   const strength =
     settings.strength === 'reinforced' ? 'strong' : (settings.strength as 'light' | 'standard');
   const previous = model.checkoutOptions;
@@ -56,12 +117,12 @@ function productionModel(
     name: model.name,
     format: /\.(step|stp)$/i.test(model.name) ? 'STEP' : /\.3mf$/i.test(model.name) ? '3MF' : 'STL',
     parts: 1,
-    units: 'mm',
+    units: previous?.units ?? 'mm',
     options: {
-      materialId: settings.material,
-      color: color.id,
+      materialId: resolved.material.id,
+      color: resolved.color,
       quantity: model.quantity,
-      quality: settings.quality as 'standard' | 'fine',
+      quality: settings.quality as 'draft' | 'standard' | 'fine',
     },
     strength: selected === strength ? previous!.strength : strength,
     advanced: {
@@ -79,6 +140,7 @@ function productionModel(
       ...previous?.advanced,
       ...(selected === strength ? {} : { wallCount: preset.wallCount, infill: preset.infill }),
     },
+    colorPreference: resolved.colorPreference,
     analysis: model.analysis,
     dimensions: model.analysis
       ? model.analysis.dimensions_mm.map((value) => Math.round(value * 10) / 10).join(' × ') + ' mm'
@@ -88,37 +150,60 @@ function productionModel(
   };
 }
 export async function getQuote(options: QuoteOptions): Promise<Quote> {
-  const materials = await getMaterials();
-  // Configuration is local; the production server must confirm a price separately.
-  for (const model of options.models) {
-    const issues = validateModel(model, materials);
-    if (issues.length) throw new Error(`${model.name}: uzupełnij ${issues.join(', ')}.`);
-  }
-  if (!options.models.length || options.models.length > 10) throw new Error('Dodaj od 1 do 10 części.');
-  return {lines:[],total:0,setup:0,delivery:0,manual:true};
+  validate(options.models, await getMaterials());
+  const [materials, catalog] = await Promise.all([
+    checkout.getMaterials(),
+    checkout.getPrintOptions(),
+  ]);
+  const models = options.models.map((model) => productionModel(model, materials, catalog));
+  const result = await checkout.quoteModels(models, 'pickup', undefined, options.manual);
+  const quote = result.checkout;
+  return {
+    lines: quote.print_lines.map((line) => ({
+      id: line.model_id,
+      unitPrice: line.unit_grosze / 100,
+      subtotal: line.total_grosze / 100,
+    })),
+    total: quote.print_grosze / 100,
+    setup: quote.setup_grosze / 100,
+    delivery: 0,
+    manual: result.manual || quote.packing.status === 'manual_review',
+    reason: quote.reason ?? quote.packing.reason,
+  };
 }
 export async function prepareCheckout(
   models: Model[],
   delivery: string,
   manual = false,
+  notes = '',
 ): Promise<void> {
-  const materials = await getMaterials();
-  validate(models, materials);
-  const catalog = await checkout.getPrintOptions();
+  validate(models, await getMaterials());
+  const [materials, catalog] = await Promise.all([
+    checkout.getMaterials(),
+    checkout.getPrintOptions(),
+  ]);
+  const resolved = models.map((model) => productionModel(model, materials, catalog));
   const oldCart = await checkout.getCart();
   for (const item of oldCart.models) await checkout.removeModel(item.id);
-  for (const model of models) {
-    const cart = await checkout.addModel(model.name);
+  for (const draft of resolved) {
+    const cart = await checkout.addModel(draft.name);
     const added = cart.models[cart.models.length - 1];
-    const draft = productionModel(model, materials, catalog);
-    if (manual)
-      draft.notes = [draft.notes, 'Indywidualne wymagania — proszę o kontakt przed realizacją.']
+    if (manual || notes.trim())
+      draft.notes = [
+        draft.notes,
+        notes.trim(),
+        ...(manual ? ['Indywidualne wymagania — proszę o kontakt przed realizacją.'] : []),
+      ]
         .filter(Boolean)
         .join(' ');
     await checkout.updateModel(added.id, { ...draft, id: added.id });
   }
   await checkout.setDelivery(
-    (['courier', 'locker', 'pickup'].includes(delivery) ? delivery : 'courier') as DeliveryMethod,
+    (['courier', 'locker', 'pickup'].includes(delivery)
+      ? delivery
+      : oldCart.delivery === 'locker'
+        ? 'locker'
+        : 'courier') as DeliveryMethod,
     oldCart.postalCode,
   );
   saveDraft(models, delivery);
@@ -141,35 +226,26 @@ export async function restoreCheckoutDraft(): Promise<{
   }
   const cart = await checkout.getCart();
   if (!cart.models.length) return null;
-  const materials = await getMaterials();
+  const saved = loadDraft()?.models ?? [];
   return {
-    delivery: cart.delivery,
-    models: cart.models.map((model) => ({
-      id: model.id,
-      name: model.name,
-      quantity: model.options.quantity,
-      sample: !model.analysis,
-      analysis: model.analysis,
-      status: model.analysis ? 'ready' : undefined,
-      settings: {
-        material: model.options.materialId,
-        color:
-          materials
-            .find((item) => item.id === model.options.materialId)
-            ?.colors.find(
-              (color) => color.id === model.options.color || color.name === model.options.color,
-            )?.id ?? '',
-        customShade: '',
-        quality: model.options.quality === 'fine' ? 'fine' : 'standard',
-        strength:
-          model.strength === 'strong'
-            ? 'reinforced'
-            : model.strength === 'light'
-              ? 'light'
-              : 'standard',
-      },
-      checkoutOptions: { advanced: model.advanced, notes: model.notes, strength: model.strength },
-    })),
+    delivery: cart.delivery === 'pickup' ? 'pickup' : 'shipping',
+    models: cart.models.map((model) => {
+      const family = Object.keys(profiles).find(key => profiles[key] === model.options.materialId)
+        ?? (model.options.materialId.startsWith('GFA') ? 'pla' : '');
+      const shade = customColors.find(c => c.id === `bambu-${model.options.materialId}-${model.options.color}`);
+      const basic = Object.entries(defaults[model.options.materialId] ?? {}).find(([, code]) => code === model.options.color)?.[0];
+      const previous = saved.find(item => item.analysis?.id === model.analysis?.id && item.name === model.name)?.settings;
+      return {
+        id:model.id, name:model.name, quantity:model.options.quantity,
+        sample:!model.analysis, analysis:model.analysis, status:model.analysis ? 'ready' as const : undefined,
+        settings:{
+          material:family, color:basic ?? 'custom', customShade:shade?.id ?? '', ...previous,
+          quality:model.options.quality,
+          strength:model.strength === 'strong' ? 'reinforced' : model.strength === 'light' ? 'light' : 'standard',
+        },
+        checkoutOptions:{advanced:model.advanced,notes:model.notes,strength:model.strength,units:model.units},
+      };
+    }),
   };
 }
 

@@ -25,6 +25,7 @@ export type QuoteOptions = {
 };
 export type DemoModel = { name: string; dimensions: string; weight: string };
 export type PrintModel = DemoModel & {
+  colorPreference?: string;
   id: string;
   format: 'STL' | 'STEP' | '3MF';
   parts: number;
@@ -123,6 +124,7 @@ export type PickupPoint = {
   address: { street: string; postcode: string; city: string };
 };
 export type StripeStatus = {
+  order_id?: string;
   status: 'paid' | 'unpaid';
   total_grosze: number;
   livemode: false;

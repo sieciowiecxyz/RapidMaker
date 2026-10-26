@@ -85,7 +85,7 @@ impl Storage {
             let q = uuid::Uuid::new_v4().to_string();
             let filename: String = model.try_get("filename")?;
             let dimensions: Vec<f64> = model.try_get("dimensions_mm")?;
-            let snapshot = json!({"kind":"manual","owner_hash":owner,"user_id":user,"model_id":model_id,"model_sha256":model.try_get::<String,_>("sha256")?,"expires_at":until,"dimensions_mm":dimensions,"quantity":quantity,"material_id":part["material_id"],"color_code":part["color_code"],"options":part["options"]});
+            let snapshot = json!({"kind":"manual","owner_hash":owner,"user_id":user,"model_id":model_id,"model_sha256":model.try_get::<String,_>("sha256")?,"expires_at":until,"dimensions_mm":dimensions,"quantity":quantity,"material_id":part["material_id"],"color_code":part["requested_color"].as_str().map_or(&part["color_code"], |_| &part["requested_color"]),"requested_color":part["requested_color"],"options":part["options"]});
             sqlx::query("INSERT INTO quotes(id,request,result,user_id) VALUES($1,$2,$3,$4)")
                 .bind(&q)
                 .bind(snapshot)

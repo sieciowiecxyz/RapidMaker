@@ -1,7 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { accounts, login, mail, fillStripeCard } from './helpers';
+import { fillAuthorContact } from './checkout-helpers';
 
 test.use({ screenshot: 'off', trace: 'off' });
 test('real manual quote, admin publication, iCloud notice, Stripe payment and email reply', async ({
@@ -23,21 +24,28 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment and em
     .getByLabel('Dodaj modele STL, STEP lub 3MF')
     .setInputFiles(resolve('../backend/crates/geometry/tests/fixtures/huge_cube_1000mm.stl'));
   await expect(page.getByRole('img', { name: /Model z pliku huge_cube_1000mm.stl/ })).toBeVisible();
-  await page.locator('input[name=material][value=GFA00]').check();
+  await page.locator('input[name=material][value=pla]').check();
   await page.locator('input[name=color]').first().check();
   await page.locator('input[name=quality][value=standard]').check();
   await page.locator('input[name=strength][value=standard]').check();
   await expect(page.getByText('Wymagana ręczna wycena', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Przejdź do dostawy', exact: true }).click();
+  await page.locator('.quote-contact').click();
+  await fillAuthorContact(page);
+  await page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Zapytaj o wycenę', exact: true })).toBeVisible();
   await page.getByLabel('Imię i nazwisko', { exact: true }).fill('Test Rapidmaker');
   await page.getByLabel('Telefon', { exact: true }).fill('500600700');
   await page.getByRole('radio', { name: 'Odbiór osobisty', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Chcę fakturę na firmę', exact: true }).check();
+  await page.getByLabel('Nazwa firmy', { exact: true }).fill('Firma testowa');
+  await page.getByLabel('NIP', { exact: true }).fill('1234567883');
+  await page.getByRole('checkbox', { name: 'Chcę fakturę na firmę', exact: true }).uncheck();
   await page.getByLabel('Uwagi i wymagania').fill('Podział modelu na części, odbiór osobisty.');
   await page.getByRole('button', { name: 'Wyślij zapytanie o wycenę', exact: true }).click();
   await expect(page).toHaveURL(/\/konto\/zamowienia\/[a-f0-9-]{36}/);
   const id = new URL(page.url()).pathname.split('/').at(-1)!;
   const initial = await (await page.request.get(`/api/account/orders/${id}`)).json();
+  expect(initial.contact.invoice ?? null).toBeNull();
   expect(initial.amount_grosze).toBeNull();
   expect(initial.manual_offer.state).toBe('awaiting_quote');
   const adminContext = await browser.newContext(),
@@ -103,7 +111,10 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment and em
         { timeout: 40_000 },
       )
       .toBe('paid');
-    console.log('Manual offer: UI request/admin publication/private preview/Stripe paid PASS');
+    expect((await mail({ mode: 'legal', reference: id, after: cursor.after })).received).toBe(true);
+    console.log(
+      'Manual offer: UI request/admin publication/private preview/Stripe paid and terms email PASS',
+    );
     const adminMe = await (await adminPage.request.get('/api/auth/me')).json();
     const headers = { Origin: 'http://localhost:18437', 'X-CSRF-Token': adminMe.csrf_token };
     const mailCursor = await mail({ mode: 'watermark' });

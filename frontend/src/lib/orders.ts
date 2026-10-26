@@ -105,6 +105,7 @@ async function scope() {
     throw new ApiError(403, 'Potwierdź dostęp kluczem passkey.');
   return {
     admin: session?.role === 'admin',
+    userId: session?.id ?? null,
     prefix: session?.role === 'admin' ? '/api/admin/orders' : '/api/account/orders',
   };
 }
@@ -285,6 +286,7 @@ export async function getOrder(id: string): Promise<LiveOrder> {
     access.admin ? apiRequest<Refund[]>(path + '/refunds') : Promise.resolve([]),
   ]);
   const result = convert(raw, files.files, page, refunds);
+  if (!access.admin) result.ownerId = access.userId;
   type Shipment = { packages: { tracking: { numbers?: string[]; number?: string } }[] };
   const delivery = await apiRequest<Shipment | { shipment: Shipment | null }>(path + '/shipment');
   const shipment = 'shipment' in delivery ? delivery.shipment : delivery;

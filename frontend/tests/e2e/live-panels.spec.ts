@@ -13,7 +13,16 @@ async function fixture(page: Page, role = 'client', verified = true) {
     { id: 'm1', sequence: 1, operator: true, body: 'Model sprawdzony.', created_at: 1792840200 },
   ];
   let prefs = { email_order_updates: true, email_chat_messages: false };
+  let production = {
+    revision: 0,
+    stage: 'preparation',
+    due_date: null,
+    private_notes: '',
+    progress: [],
+    qc_passed: false,
+  };
   const raw = () => ({
+    production,
     id,
     status: state,
     payment_state: 'paid',
@@ -125,6 +134,12 @@ async function fixture(page: Page, role = 'client', verified = true) {
           read_sequence: 0,
           unread: 1,
         };
+    } else if (path.endsWith('/production')) {
+      if (method === 'PUT') {
+        production = { ...req.postDataJSON(), revision: production.revision + 1 };
+        if (production.stage === 'printing') state = 'in_production';
+      }
+      data = production;
     } else if (path.endsWith('/status')) {
       state = req.postDataJSON().status;
       data = { ok: true };
@@ -218,9 +233,9 @@ test('admin status and chat use CSRF, exact totals and clear expired data', asyn
   await page.goto('/admin.html');
   await page.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
   await expect(page.getByText('0,52', { exact: false })).toBeVisible();
-  await expect(page.locator('input[type=date]')).toBeDisabled();
+  await expect(page.locator('input[type=date]')).toBeEnabled();
   await page.getByRole('button', { name: 'Dalej: Drukowanie', exact: true }).click();
-  await expect(page.locator('.detail-summary select')).toHaveValue('in_production');
+  await expect(page.locator('.detail-summary select')).toHaveValue('production:printing');
   await page.getByRole('button', { name: 'Wiadomości', exact: true }).last().click();
   await page.getByLabel('Twoja odpowiedź').fill('Wydruk rozpoczęty.');
   await page.getByRole('button', { name: 'Wyślij wiadomość', exact: true }).click();

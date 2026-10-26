@@ -16,7 +16,7 @@ export type Model = {
   analysis?: NonNullable<PrintModel['analysis']>;
   status?: 'analyzing' | 'ready' | 'error';
   error?: string;
-  checkoutOptions?: Pick<PrintModel, 'advanced' | 'notes' | 'strength'>;
+  checkoutOptions?: Pick<PrintModel, 'advanced' | 'notes' | 'strength' | 'units'>;
 };
 export type Material = {
   family?: 'PLA' | 'ABS' | 'PETG' | 'ASA' | 'PA-CF' | 'TPU';

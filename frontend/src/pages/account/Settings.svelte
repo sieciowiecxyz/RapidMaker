@@ -7,6 +7,7 @@
   import Button from '../../components/ui/Button.svelte';
   let { onSession = () => {} }: { onSession?: () => void } = $props();
   let profile = $state<Profile | null>(null);
+  let securityRevision = $state(0);
   let loading = $state(true);
   let busy = $state(false);
   let error = $state('');
@@ -106,11 +107,11 @@
         <Button type="submit" disabled={busy}>{busy ? 'Zapisywanie…' : 'Zapisz ustawienia'}</Button>
       </div>
     </form>
-    <AccountSecurity />
-    <Passkeys
-      bootstrapMode={new URLSearchParams(location.search).get('bootstrap') === '1'}
-      {onSession}
-    />
+    <AccountSecurity onchange={() => securityRevision++} />
+    {#key securityRevision}<Passkeys
+        bootstrapMode={new URLSearchParams(location.search).get('bootstrap') === '1'}
+        {onSession}
+      />{/key}
     <section class="panel stack">
       <h2>Usunięcie konta</h2>
       <p class="muted">

@@ -22,6 +22,8 @@ struct Part {
     quantity: u32,
     material_id: String,
     color_code: String,
+    #[serde(default)]
+    requested_color: Option<String>,
     options: Options,
 }
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -53,6 +55,9 @@ struct Payment {
     legal_version: String,
     version: i64,
     request_id: String,
+}
+fn valid_preference(value: &str) -> bool {
+    !value.trim().is_empty() && value.len() <= 200 && !value.chars().any(char::is_control)
 }
 fn conflict() -> super::checkout::Error {
     error(
@@ -110,12 +115,15 @@ async fn request(
         if !catalog.iter().any(|m| {
             m.id == part.material_id
                 && super::quotes::customer_material(&m.id)
-                && super::quotes::known_color(m, &part.color_code)
+                && match &part.requested_color {
+                    Some(color) => part.color_code.is_empty() && valid_preference(color),
+                    None => super::quotes::known_color(m, &part.color_code),
+                }
         }) {
             return Err(error(
                 StatusCode::BAD_REQUEST,
                 "invalid_material",
-                "Wybierz PLA, ABS albo TPU oraz kolor należący do tego profilu.",
+                "Wybierz materiał oraz kolor z katalogu lub jawnie opisaną preferencję do ręcznej wyceny.",
             ));
         }
     }
@@ -252,4 +260,15 @@ async fn payment(
             json!({"attempt_id":a.id,"order_id":id,"state":a.state,"client_secret":secret,"payment_intent_id":a.provider_id,"total_grosze":a.amount_grosze}),
         ),
     ))
+}
+
+#[cfg(test)]
+mod selection_tests {
+    #[test]
+    fn requested_color_is_a_bounded_manual_preference() {
+        assert!(super::valid_preference("Czarny / PA-CF"));
+        for invalid in ["", "   ", "green\nforged", &"x".repeat(201)] {
+            assert!(!super::valid_preference(invalid));
+        }
+    }
 }

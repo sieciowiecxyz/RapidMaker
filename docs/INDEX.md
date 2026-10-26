@@ -6,12 +6,24 @@
 
 Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, trackingiem i wysyłką emaila. Anulowanie L2 sprawdzone w sandboxie; podjazdy L1 zaimplementowane, potwierdzenie rezerwacji blokuje `carrierConnectionError` DPD. Rozmowy przez stronę i email: CH0–CH4 wdrożone i sprawdzone lokalnie. Checkout, adres i dostawa działają jako lokalny backend. ARCHITECTURE.md opisuje faktyczny stack i granice. Czytaj tylko potrzebne pliki. Dawne plany, w tym GOALS.md, są w historii Git; dowody wcześniejszych etapów są w milestones/backend.md. Stare statusy nie są dowodami działania.
 
-- [Plan finalizacji](PLAN.md)
-  - przeczytaj gdy: finalizujesz stronę i integracje.
-  - opis: podglądy, wyceny, płatność, retencja i spójność strony.
-- [Milestones finalizacji](MILESTONES.md)
-  - przeczytaj gdy: wdrażasz kolejny etap backendu.
-  - opis: kolejność F0–F6, kryteria i bieżący checkpoint.
+- [Plan integracji Piotra](PLAN.md)
+  - przeczytaj gdy: sprawdzasz całą stronę i integracje.
+  - opis: połączenie PR #4 z rzeczywistym backendem.
+- [Milestones integracji](MILESTONES.md)
+  - przeczytaj gdy: realizujesz bieżący plan testów.
+  - opis: etapy I0–I5, kryteria i bieżący checkpoint.
+- [Raport E2E przed integracją](E2E-REPORT.md)
+  - przeczytaj gdy: chcesz poznać wyniki i ograniczenia testów.
+  - opis: wyniki na main 0db0058; bieżąca integracja ma osobny raport.
+- [Integracja Piotra — kontrakt](frontend-contract.md)
+  - przeczytaj gdy: zmieniasz wygląd lub adaptery.
+  - opis: stały UI, prawdziwe profile i granice API.
+- [Integracja Piotra — wyniki](integration-piotr.md)
+  - przeczytaj gdy: weryfikujesz merge PR #4.
+  - opis: wykonane testy i pozostałe ograniczenia.
+- [Mapa kontrolek](e2e-controls.md)
+  - przeczytaj gdy: zmieniasz interakcje strony.
+  - opis: źródła przycisków/formularzy; mapy scenariuszy obok.
 - [Rozmowy i email](chat-email.md)
   - przeczytaj gdy: rozwijasz chat i odpowiadanie z poczty.
   - opis: API historii, SMTP/IMAP, konfiguracja i dowody CH0–CH4.
@@ -44,6 +56,9 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
   - przeczytaj gdy: konfigurujesz lokalne API lub dostęp współpracownika.
   - opis: SOPS, klucze SSH i odszyfrowanie konfiguracji.
 
+- [Panel produkcji i szkice](admin-production.md)
+  - przeczytaj gdy: rozwijasz dane operatora.
+  - opis: wersjonowanie, QC, postęp i granice szkicu faktury.
 - [Backend](../backend/README.md)
   - przeczytaj gdy: rozwijasz backend Rust.
   - opis: mapa crate’ów, ich stan i uruchamianie.

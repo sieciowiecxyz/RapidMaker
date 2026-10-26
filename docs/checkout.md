@@ -68,7 +68,7 @@ Wynik zawiera zwycięski `packing` i do 3 zatwierdzonych usług **dla tego sameg
 - Limity: 30 szkiców i prób/właściciela/dobę, 10 tys. oczekujących globalnie; dostawa 30 zapytań/min/właściciela, 300/min globalnie, 4 równoległe obliczenia dostawy oraz dotychczasowy limit 4 pozostałych operacji dostawców w procesie. JSON i odpowiedzi mają limity rozmiaru/czasu. Sekretów, adresów i danych kart nie logujemy.
 - Zakończone zdarzenia Stripe: deduplikacja 30 dni; szkice bez prób sprzątane po TTL przy kolejnym utworzeniu. Zamówienia, próby i nierozstrzygnięte przypadki zachowujemy do audytu/rozstrzygnięcia; brak automatycznego usuwania ich po 24 h.
 
-Stare `/api/checkout/quote`, `/session`, `/intent`, statusy i resume pozostają adapterami tego samego trwałego silnika. Wygasłe dawne oferty RAM trzeba przeliczyć; istniejące zamówienia ze Stripe zachowują odczyt statusu. Sekret PaymentIntent zwraca tylko autoryzowany endpoint resume; nigdy szkic ani log. Frontend kont/admina nadal wymaga migracji auth/CSRF.
+Stare `/api/checkout/quote`, `/session`, `/intent`, statusy i resume pozostają adapterami tego samego trwałego silnika. Utworzenie płatności/status zwracają autoryzowany `order_id` trwałego zamówienia; UI klienta używa go do linku szczegółów, nigdy lokalnego UUID szkicu. Wygasłe dawne oferty RAM trzeba przeliczyć; istniejące zamówienia ze Stripe zachowują odczyt statusu. Sekret PaymentIntent zwraca tylko autoryzowany endpoint resume; nigdy szkic ani log. Frontend kont/admina nadal wymaga migracji auth/CSRF.
 
 ## Lokalny webhook i odzyskiwanie
 

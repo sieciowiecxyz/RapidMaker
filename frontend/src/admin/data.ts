@@ -1,3 +1,4 @@
+import type { Production, InvoiceDraft } from './production';
 import type { ManualOffer } from '../lib/manualQuotes';
 export const stages = [
   'Oczekuje na wycenę',
@@ -5,6 +6,7 @@ export const stages = [
   'Nowe',
   'Przygotowanie',
   'Drukowanie',
+  'Kontrola jakości',
   'Pakowanie',
   'Wysłane',
   'Zakończone',
@@ -42,6 +44,9 @@ export type OrderFile = {
 };
 export type Order = {
   id: string;
+  production?: Production | null;
+  invoiceDraft?: InvoiceDraft | null;
+  invoiceContact: { buyer: string; address: string; nip: string };
   client: string;
   email: string;
   date: string;
@@ -69,6 +74,8 @@ export type Order = {
 export type ServerOrder = {
   id: string;
   status: string;
+  production?: Production | null;
+  invoice_draft?: InvoiceDraft | null;
   payment_state: string | null;
   amount_grosze: number | null;
   manual_offer?: ManualOffer;
@@ -82,6 +89,13 @@ export type ServerOrder = {
     postal_code?: string;
     city?: string;
     delivery_address?: string;
+    invoice?: {
+      company?: string;
+      nip?: string;
+      street?: string;
+      postal_code?: string;
+      city?: string;
+    };
   };
   lines: {
     model_id: string;
@@ -119,8 +133,39 @@ export function orderFromServer(row: ServerOrder): Order {
     client: row.contact.name || row.contact.email || 'Klient',
     email: row.contact.email || '',
     date: new Date(row.created_at * 1000).toISOString().slice(0, 10),
-    due: '',
-    status: labels[row.status] || 'Nowe',
+    due: row.production?.due_date ?? '',
+    production: row.production,
+    invoiceDraft: row.invoice_draft,
+    invoiceContact: {
+      buyer: row.contact.invoice?.company || row.contact.name || row.contact.email || 'Klient',
+      address: row.contact.invoice
+        ? [
+            row.contact.invoice.street,
+            [row.contact.invoice.postal_code, row.contact.invoice.city].filter(Boolean).join(' '),
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : [
+            row.contact.street,
+            [row.contact.postalCode ?? row.contact.postal_code, row.contact.city]
+              .filter(Boolean)
+              .join(' '),
+          ]
+            .filter(Boolean)
+            .join(', '),
+      nip: row.contact.invoice?.nip ?? '',
+    },
+    status:
+      ['paid', 'in_production'].includes(row.status) && row.production
+        ? (
+            {
+              preparation: 'Przygotowanie',
+              printing: 'Drukowanie',
+              qc: 'Kontrola jakości',
+              packing: 'Pakowanie',
+            } as const
+          )[row.production.stage]
+        : labels[row.status] || 'Nowe',
     state: row.status,
     paid,
     payment:
@@ -166,11 +211,11 @@ export function orderFromServer(row: ServerOrder): Order {
       qty: l.quantity,
       price: l.unit_grosze == null ? null : l.unit_grosze / 100,
       amount: l.total_grosze == null ? null : l.total_grosze / 100,
-      done: 0,
+      done: row.production?.progress.find((p) => p.model_id === l.model_id)?.done ?? 0,
       quality: '—',
       strength: '—',
     })),
-    notes: [],
+    notes: row.production?.private_notes ? [row.production.private_notes] : [],
     history: [
       'Złożono zamówienie: ' + new Date(row.created_at * 1000).toLocaleString('pl-PL'),
       ...(paid
@@ -185,15 +230,17 @@ export function orderFromServer(row: ServerOrder): Order {
   };
 }
 export function nextStatus(o: Order): { state: string; label: Stage } | null {
-  const state =
-    o.state === 'paid'
-      ? 'in_production'
-      : o.state === 'in_production'
-        ? 'ready'
-        : o.state === 'ready' && o.pickup
-          ? 'completed'
-          : null;
-  return state ? { state, label: labels[state] } : null;
+  if (['paid', 'in_production'].includes(o.state)) {
+    const stage = o.production?.stage ?? (o.state === 'in_production' ? 'printing' : 'preparation');
+    const next = {
+      preparation: ['production:printing', 'Drukowanie'],
+      printing: ['production:qc', 'Kontrola jakości'],
+      qc: ['production:packing', 'Pakowanie'],
+      packing: ['ready', 'Pakowanie'],
+    }[stage];
+    return { state: next[0], label: next[1] as Stage };
+  }
+  return o.state === 'ready' && o.pickup ? { state: 'completed', label: 'Zakończone' } : null;
 }
 export const total = (o: Order) => o.amount;
 export const pieces = (o: Order) => o.models.reduce((s, m) => s + m.qty, 0);

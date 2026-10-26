@@ -1,5 +1,6 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
+ import { csvCell } from '../admin/data';
  import { IconLayoutList, IconCube, IconMessage, IconArrowUpRight, IconSearch, IconX, IconChevronRight, IconArrowRight, IconCheck, IconClock, IconPackage, IconArrowLeft, IconSun, IconMoon, IconAlertCircle, IconDownload, IconCreditCard, IconFileInvoice } from '@tabler/icons-svelte';
  import Finance, { type InvoiceDraft } from './Finance.svelte';
  import { seed, stages, total, pieces, money, type Order, type Stage } from './data';
@@ -37,7 +38,7 @@
  function advance(o:Order){const i=stages.indexOf(o.status);if(i<stages.length-1)updateStatus(o,stages[i+1]);}
  function retreat(o:Order){const i=stages.indexOf(o.status);if(i>0)updateStatus(o,stages[i-1]);}
  function addNote(){if(!selected||!note.trim())return;selected.notes.unshift(note.trim());selected.history.unshift('Dodano notatkę wewnętrzną.');note='';save();feedback='Notatka zapisana.';}
- function exportCsv(){const lines=[['Zamówienie','Klient','Status','Płatność','Termin','Wartość'],...visible.map(o=>[o.id,o.client,o.status,o.paid?'Opłacone':'Nieopłacone',o.due,String(total(o))])];const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(r=>r.map(v=>'"'+v.replaceAll('"','""')+'"').join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rapidmaker-zamowienia-demo.csv';a.click();URL.revokeObjectURL(url);}
+ function exportCsv(){const lines=[['Zamówienie','Klient','Status','Płatność','Termin','Wartość'],...visible.map(o=>[o.id,o.client,o.status,o.paid?'Opłacone':'Nieopłacone',o.due,String(total(o))])];const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(r=>r.map(csvCell).join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rapidmaker-zamowienia-demo.csv';a.click();URL.revokeObjectURL(url);}
  function theme(){light=!light;document.documentElement.dataset.theme=light?'light':'dark';}
  function keyboard(e:KeyboardEvent){if(e.key==='Escape'&&selected)close();}
 </script>

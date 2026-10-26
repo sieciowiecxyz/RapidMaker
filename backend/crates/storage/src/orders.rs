@@ -126,7 +126,7 @@ impl Storage {
         )
         .await?;
         Ok(sqlx::query_scalar(
-            "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state,'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id ORDER BY o.created_at DESC LIMIT 100",
+            "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state,'manual_offer',mq.offer,'production',pr.value,'invoice_draft',d.value) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id LEFT JOIN order_production pr ON pr.order_id=o.id LEFT JOIN invoice_drafts d ON d.order_id=o.id ORDER BY o.created_at DESC LIMIT 100",
         )
         .fetch_all(&self.pool)
         .await?)
@@ -178,6 +178,16 @@ impl Storage {
             })
         {
             return Ok(false);
+        }
+        if status == "ready" {
+            let managed: Option<Value> =
+                sqlx::query_scalar("SELECT value FROM order_production WHERE order_id=$1")
+                    .bind(id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if managed.is_some_and(|p| p["stage"] != "packing" || p["qc_passed"] != true) {
+                return Ok(false);
+            }
         }
         let user: Option<String> = row.try_get("user_id")?;
         let contact: Value = row.try_get("contact")?;
