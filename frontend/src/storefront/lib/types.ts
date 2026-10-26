@@ -37,6 +37,7 @@ export type Quote = {
   total: number;
   delivery: number;
   manual: boolean;
+  provisional?: boolean;
   setup?: number;
   reason?: string;
 };

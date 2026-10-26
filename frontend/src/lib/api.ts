@@ -204,20 +204,34 @@ export async function quoteModels(
 ): Promise<{ checkout: CheckoutQuote; manual: boolean }> {
   if (!models.length || models.length > 10) throw new Error('Dodaj od 1 do 10 części.');
   const materials = await getMaterials();
-  manual ||= models.some((model) => {
+  if (manual)
+    return manualQuote('Wybrano indywidualne wymagania. Zespół potwierdzi zakres, cenę i termin.');
+  for (const model of models) {
     const material = materials.find((item) => item.id === model.options.materialId);
-    return (
-      !model.analysis ||
-      !!model.colorPreference ||
-      model.analysis.dimensions_mm.some((axis) => axis > 500) ||
-      !material?.compatible ||
+    const name = model.name;
+    if (!model.analysis) return manualQuote(`${name}: dodaj plik i poczekaj na analizę geometrii.`);
+    if (model.analysis.dimensions_mm.some((axis) => axis > 500))
+      return manualQuote(
+        `${name}: model przekracza 500 mm. Zespół sprawdzi podział lub inną metodę wykonania.`,
+      );
+    if (!material) return manualQuote(`${name}: wybranego materiału nie ma w katalogu wyceny.`);
+    if (model.colorPreference)
+      return manualQuote(
+        `${name}: odcień ${model.colorPreference} dla ${material.name} wymaga potwierdzenia przed zamówieniem.`,
+      );
+    if (
       !material.colors.some(
         (color) => color.code === model.options.color || color.name === model.options.color,
-      ) ||
-      needsManualReview(model)
-    );
-  });
-  if (manual) return manualQuote();
+      )
+    )
+      return manualQuote(
+        `${name}: wybrany kolor nie należy do ${material.name}. Wybierz kolor lub poproś o potwierdzenie odcienia.`,
+      );
+    if (needsManualReview(model))
+      return manualQuote(
+        `${name}: dodatkowe wymagania lub sposób wykonania wymagają potwierdzenia zespołu.`,
+      );
+  }
   const parts = [];
   for (const model of models) {
     let quoteId: string | undefined;

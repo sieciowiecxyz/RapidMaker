@@ -156,8 +156,32 @@ export async function getQuote(options: QuoteOptions): Promise<Quote> {
     checkout.getPrintOptions(),
   ]);
   const models = options.models.map((model) => productionModel(model, materials, catalog));
-  const result = await checkout.quoteModels(models, 'pickup', undefined, options.manual);
+  const preferences = models.filter((model) => model.colorPreference);
+  // A display shade does not change the material's measured print time/consumption.
+  // Quote a reference color only; checkout keeps the original preference for confirmation.
+  const measuredModels = models.map((model) => {
+    if (!model.colorPreference || options.manual) return model;
+    const material = materials.find((item) => item.id === model.options.materialId)!;
+    const reference =
+      material.colors.find((color) => color.code === defaults[material.id]?.black) ??
+      material.colors[0];
+    if (!reference) return model;
+    return {
+      ...model,
+      colorPreference: undefined,
+      options: { ...model.options, color: reference.code ?? reference.name },
+    };
+  });
+  const result = await checkout.quoteModels(measuredModels, 'pickup', undefined, options.manual);
   const quote = result.checkout;
+  const provisional =
+    preferences.length > 0 && quote.print_lines.length === models.length && quote.print_grosze > 0;
+  const confirmation = preferences
+    .map(
+      (model) =>
+        `${model.name}: odcień ${model.colorPreference} dla ${materials.find((item) => item.id === model.options.materialId)!.name} wymaga potwierdzenia.`,
+    )
+    .join(' ');
   return {
     lines: quote.print_lines.map((line) => ({
       id: line.model_id,
@@ -167,8 +191,11 @@ export async function getQuote(options: QuoteOptions): Promise<Quote> {
     total: quote.print_grosze / 100,
     setup: quote.setup_grosze / 100,
     delivery: 0,
-    manual: result.manual || quote.packing.status === 'manual_review',
-    reason: quote.reason ?? quote.packing.reason,
+    manual: result.manual || quote.packing.status === 'manual_review' || preferences.length > 0,
+    provisional,
+    reason: provisional
+      ? `Cena z pomiaru slicera dla wybranego materiału, bez dopłaty za niestandardowy odcień. ${confirmation}`
+      : (quote.reason ?? quote.packing.reason),
   };
 }
 export async function prepareCheckout(
@@ -230,20 +257,44 @@ export async function restoreCheckoutDraft(): Promise<{
   return {
     delivery: cart.delivery === 'pickup' ? 'pickup' : 'shipping',
     models: cart.models.map((model) => {
-      const family = Object.keys(profiles).find(key => profiles[key] === model.options.materialId)
-        ?? (model.options.materialId.startsWith('GFA') ? 'pla' : '');
-      const shade = customColors.find(c => c.id === `bambu-${model.options.materialId}-${model.options.color}`);
-      const basic = Object.entries(defaults[model.options.materialId] ?? {}).find(([, code]) => code === model.options.color)?.[0];
-      const previous = saved.find(item => item.analysis?.id === model.analysis?.id && item.name === model.name)?.settings;
+      const family =
+        Object.keys(profiles).find((key) => profiles[key] === model.options.materialId) ??
+        (model.options.materialId.startsWith('GFA') ? 'pla' : '');
+      const shade = customColors.find(
+        (c) => c.id === `bambu-${model.options.materialId}-${model.options.color}`,
+      );
+      const basic = Object.entries(defaults[model.options.materialId] ?? {}).find(
+        ([, code]) => code === model.options.color,
+      )?.[0];
+      const previous = saved.find(
+        (item) => item.analysis?.id === model.analysis?.id && item.name === model.name,
+      )?.settings;
       return {
-        id:model.id, name:model.name, quantity:model.options.quantity,
-        sample:!model.analysis, analysis:model.analysis, status:model.analysis ? 'ready' as const : undefined,
-        settings:{
-          material:family, color:basic ?? 'custom', customShade:shade?.id ?? '', ...previous,
-          quality:model.options.quality,
-          strength:model.strength === 'strong' ? 'reinforced' : model.strength === 'light' ? 'light' : 'standard',
+        id: model.id,
+        name: model.name,
+        quantity: model.options.quantity,
+        sample: !model.analysis,
+        analysis: model.analysis,
+        status: model.analysis ? ('ready' as const) : undefined,
+        settings: {
+          material: family,
+          color: basic ?? 'custom',
+          customShade: shade?.id ?? '',
+          ...previous,
+          quality: model.options.quality,
+          strength:
+            model.strength === 'strong'
+              ? 'reinforced'
+              : model.strength === 'light'
+                ? 'light'
+                : 'standard',
         },
-        checkoutOptions:{advanced:model.advanced,notes:model.notes,strength:model.strength,units:model.units},
+        checkoutOptions: {
+          advanced: model.advanced,
+          notes: model.notes,
+          strength: model.strength,
+          units: model.units,
+        },
       };
     }),
   };

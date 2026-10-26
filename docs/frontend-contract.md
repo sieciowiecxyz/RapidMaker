@@ -10,9 +10,9 @@ Decyzja właściciela 2026-10-25: zachowujemy pracę wykonaną w lokalnym fronte
 
 ## Kontrakt integracji
 
-Stałe materiały i paleta renderują się lokalnie. Katalog serwera służy rozpoznaniu rzeczywistego profilu/koloru i wycenie, nie budowaniu kontrolek. PLA z serii wybranej na kole zachowuje właściwy profil Bambu. Kolor z palety PLA wybrany dla innego materiału pozostaje jawnie opisaną preferencją do ręcznej oferty; nie podmieniamy materiału ani nie wybieramy najbliższego koloru. PA-CF ma lokalny wybór czarny, bez udawania nieznanego kodu SKU Bambu.
+Stałe materiały i paleta renderują się lokalnie. Katalog serwera służy rozpoznaniu rzeczywistego profilu/koloru i wycenie, nie budowaniu kontrolek. PLA z serii wybranej na kole zachowuje właściwy profil Bambu. Kolor z palety PLA wybrany dla innego materiału pozostaje jawną preferencją do potwierdzenia; nie podmieniamy materiału ani nie wybieramy najbliższego koloru. Slicer mimo to szacuje koszt wybranego materiału na referencyjnym kolorze: UI pokazuje cenę orientacyjną i powód potwierdzenia. Zamówienie zachowuje oryginalny odcień i przechodzi przez ręczną ofertę przed płatnością. PA-CF ma lokalny wybór czarny, bez udawania nieznanego kodu SKU Bambu.
 
-Cena wymaga dopuszczenia profilu, jawnego kosztu i aktualnej polityki cenowej. Nie dopuszczamy profili/nie wymyślamy kosztów normalnej bazy przy mergu. Brak tych danych oznacza ręczną ofertę, którą admin publikuje, a klient opłaca przez Stripe. Dane testowe dotyczą wyłącznie izolowanych baz.
+Cena wymaga dopuszczenia profilu, jawnego kosztu i aktualnej polityki cenowej. Profile i koszty nie włączają się samoczynnie. Lokalny POC można jawnie rozszerzyć przez --pricing-poc-extend; nie nadpisuje istniejących cen ani polityki, nie działa w production. Brak tych danych oznacza ręczną ofertę, którą admin publikuje, a klient opłaca przez Stripe. Dane testowe dotyczą wyłącznie izolowanych baz.
 
 Błąd API nie blokuje lokalnego podglądu STL; analiza/upload pozostają osobnym stanem. STEP i 3MF korzystają z prywatnego GLB po konwersji backendu. Próbka jest jawnie próbką, nie plikiem przesłanym przez klienta. Po odświeżeniu sam File nie istnieje; zachowany serwerowy identyfikator nadal wymaga prawidłowej sesji/własności.
 

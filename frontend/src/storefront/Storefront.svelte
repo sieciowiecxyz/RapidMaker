@@ -384,7 +384,7 @@
                 {/if}
               </div>
             {:else if quoteError}<p class="error">{quoteError}</p><Button variant="text" onclick={() => { simulateError = false; models = [...models]; }}><IconRefresh size={15} /> Ponów przeliczenie</Button>
-            {:else if quote?.manual && !busy}<p class="manual-heading">Wymagana ręczna wycena</p><p class="estimate-lines">Omówimy wymagania, cenę i termin przed realizacją.</p>
+            {:else if quote?.manual && !busy}<p class="manual-heading">{quote.provisional?'Szacowana cena wydruku':'Wymagana ręczna wycena'}</p>{#if quote.provisional}<p class="price">{money(quote.total)}</p>{/if}<p class="estimate-lines">{quote.reason ?? 'Omówimy wymagania, cenę i termin przed realizacją.'}</p>
             {:else}<div class="price-row"><div><p class="price-label">Wydruki · bez dostawy</p><p class="price" class:stale={busy && !!quote}><span class="t-text-soft" use:softValue={quote ? money(quote.total) : 'Przeliczanie…'}></span></p></div>{#if busy}<span class="processing">{quote ? 'Cena nieaktualna' : 'Przeliczanie'}</span>{:else}<IconCheck size={21} stroke={1.7} />{/if}</div>{#if quote}<p class="estimate-lines">{models.reduce((sum, m) => sum + (m.quantity || 0), 0)} szt. / {models.length} modeli z osobnymi ustawieniami / dostawa w następnym kroku</p>{/if}{/if}
           </div>
           <Button class="quote-contact" disabled={!canContact || preparing} onclick={prepareContact}>{preparing?'Przygotowuję…':quote?.manual?'Zapytaj o wycenę':'Przejdź do zamówienia'}<IconArrowUpRight size={17} stroke={1.7} /></Button>

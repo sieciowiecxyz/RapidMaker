@@ -12,3 +12,5 @@
 ## Checkpoint
 
 2026-10-26: PR c6d41f8 + main 0db0058 połączone w osobnym worktree. Działa autorski wybór pięciu rodzin i palety, slicer/API, lokalny STL i prywatny GLB po odświeżeniu. Inline formularz przechodzi do dostawy/Stripe; poprawiony fokus po animacji. Produkcja i szkice zapisują się z kontrolą revision, uprawnień, ilości i QC. Krytyczne zakupy, Paczkomat/kurier oraz panel/refundy sprawdzone. I5: ręczna oferta/email/płatność/odpowiedź i logistyka PASS; raport zakończony. Wynik merge i SHA: [PR #4](https://github.com/sieciowiecxyz/RapidMaker/pull/4). Lokalne AGENTS.md/result.json użytkownika pozostają poza zmianą.
+
+Poprawka po integracji: przygotowanie siatki i automatyczne ustawienie Bambu, lokalny cennik POC oraz czytelna cena dla preferowanego odcienia — PASS na rzeczywistym modelu. Szczegóły: [raport](integration-piotr.md#poprawka-odporności-wyceny--2026-10-26).

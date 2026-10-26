@@ -1,4 +1,4 @@
-//! Explicit one-time localhost setup. Never run automatically or overwrite an operator's prices.
+//! Explicit localhost setup/extension. Never run automatically or overwrite an operator's prices.
 use rapidmaker_pricing::{Rates, foreign_cost_pln_grosze};
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -22,6 +22,13 @@ fn fixed(value: &str, places: usize) -> Result<u32, &'static str> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let extend = args.as_slice() == ["--extend"];
+    if !args.is_empty() && !extend {
+        return Err(
+            "Use no arguments for initial setup, or --extend for missing POC materials".into(),
+        );
+    }
     if std::env::var("AUTH_MODE").as_deref() != Ok("localhost")
         || !std::env::var("STRIPE_SECRET_KEY")?.starts_with("sk_test_")
     {
@@ -68,14 +75,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sqlx::query("LOCK TABLE pricing_config, catalog_materials IN SHARE ROW EXCLUSIVE MODE")
         .execute(&mut *tx)
         .await?;
-    let configured: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pricing_config)")
-        .fetch_one(&mut *tx)
-        .await?;
-    if configured {
-        return Err("Pricing already exists; use admin settings, nothing overwritten".into());
+    let configured: Option<Value> =
+        sqlx::query_scalar("SELECT value FROM pricing_config WHERE id=true")
+            .fetch_optional(&mut *tx)
+            .await?;
+    if extend {
+        if !configured
+            .as_ref()
+            .and_then(|v| v["version"].as_str())
+            .is_some_and(|v| v.starts_with("poc-"))
+        {
+            return Err("Extension requires an existing localhost POC price policy".into());
+        }
+    } else if configured.is_some() {
+        return Err(
+            "Pricing already exists; use --extend for missing POC materials, nothing overwritten"
+                .into(),
+        );
     }
     let mut results = Vec::new();
-    for id in ["GFA00", "GFB00", "GFU01"] {
+    for (id, foreign) in input["materials"]
+        .as_object()
+        .ok_or("Material prices missing")?
+    {
         if !rapidmaker_slicer::material_supported(id) {
             return Err("Trusted P1P preset missing".into());
         }
@@ -86,11 +108,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .is_some()
             || row.try_get::<bool, _>("production_enabled")?
         {
+            if extend {
+                continue; // Preserve existing prices, approvals and explicit operator disabling.
+            }
             return Err("Operator material configuration exists; nothing overwritten".into());
         }
-        let foreign = input["materials"][id]
-            .as_str()
-            .ok_or("Material price missing")?;
+        let foreign = foreign.as_str().ok_or("Material price missing")?;
         let cost = foreign_cost_pln_grosze(fixed(foreign, 2)?, fx)?;
         let reference = json!({"mode":"localhost-poc","foreign_net_budget":foreign,"currency":"EUR",
             "currency_basis":input["currency_basis"],"tax_basis":input["tax_basis"],"source":input["source"],
@@ -99,10 +122,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .bind(id).bind(i64::from(cost)).bind(reference).execute(&mut *tx).await?;
         results.push(json!({"material_id":id,"net_pln_grosze_per_kg":cost}));
     }
-    sqlx::query("INSERT INTO pricing_config(id,value) VALUES(true,$1)")
-        .bind(serde_json::to_value(rates)?)
-        .execute(&mut *tx)
-        .await?;
+    if !extend {
+        sqlx::query("INSERT INTO pricing_config(id,value) VALUES(true,$1)")
+            .bind(serde_json::to_value(rates)?)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     println!(
         "{}",

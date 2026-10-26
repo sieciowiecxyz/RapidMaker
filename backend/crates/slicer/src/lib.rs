@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 use std::{
     collections::BTreeMap,
     fmt, fs,
+    io::Read,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -13,7 +14,7 @@ use tokio::sync::Semaphore;
 
 static BUSY: Semaphore = Semaphore::const_new(1);
 const PROFILES: &str = include_str!("../../../data/bambu/profiles.json");
-pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1-fit1";
+pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1-orient1-fit2";
 
 // Profile availability is separate from the operator's hardware approval.
 static MATERIAL_PROFILES: LazyLock<Result<BTreeMap<String, String>, String>> =
@@ -47,7 +48,7 @@ pub fn material_supported(id: &str) -> bool {
         .is_ok_and(|profiles| profiles.contains_key(id))
 }
 
-/// Conservative box fit: XY arrangement may rotate; changing the model's Z orientation is manual.
+/// Conservative orthogonal fit before Bambu chooses the actual orientation and arrangement.
 /// Limits match the trusted P1P snapshot: 256x256, Z=250 and an excluded 18x28 corner.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ModelFitError {
@@ -62,11 +63,14 @@ pub fn check_model_dimensions([x, y, z]: [f64; 3]) -> Result<(), ModelFitError> 
     if [x, y, z].iter().any(|v| *v > 500.0) {
         return Err(ModelFitError::SizeLimit);
     }
-    // At least one XY orientation must avoid the excluded corner; no invented height swap.
-    if x > 256.0 || y > 256.0 || z > 250.0 || x.min(y) > 238.0 {
-        return Err(ModelFitError::PrinterFit);
+    if [[x, y, z], [x, z, y], [y, z, x]]
+        .iter()
+        .any(|[a, b, h]| *h <= 250.0 && a.max(*b) <= 256.0 && a.min(*b) <= 238.0)
+    {
+        Ok(())
+    } else {
+        Err(ModelFitError::PrinterFit)
     }
-    Ok(())
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
@@ -315,7 +319,12 @@ pub async fn slice_job(
         fs::create_dir(&workspace.0)?;
         fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))?;
         // Copy into our private directory, avoiding changes to the input during execution.
-        fs::copy(model_path, workspace.0.join("model.stl"))?;
+        let mut input = Vec::with_capacity(metadata.len() as usize);
+        fs::File::open(model_path)?
+            .take(64 * 1024 * 1024 + 1)
+            .read_to_end(&mut input)?;
+        prepare_stl(&mut input)?;
+        fs::write(workspace.0.join("model.stl"), input)?;
         write_profiles(&workspace.0, filament, options)?;
         let mut batches = Vec::with_capacity(2);
         let first = run_plate(&workspace, options.quantity.min(512)).await?;
@@ -375,6 +384,60 @@ pub async fn slice_job(
         );
     }
     result
+}
+
+// Existing uploads can contain zero normals. Prepare only the private slicing copy,
+// retaining the customer's source/preview coordinates and replacing no printer settings.
+fn prepare_stl(bytes: &mut [u8]) -> Result<(), Error> {
+    if bytes.len() < 84 || bytes.len() > 64 * 1024 * 1024 {
+        return Err(Error::InvalidModel);
+    }
+    let count = u32::from_le_bytes([bytes[80], bytes[81], bytes[82], bytes[83]]) as usize;
+    if count == 0 || count.checked_mul(50).and_then(|v| v.checked_add(84)) != Some(bytes.len()) {
+        return Err(Error::InvalidModel);
+    }
+    let mut min_z = f64::INFINITY;
+    for facet in bytes[84..].chunks_exact_mut(50) {
+        let p: [[f64; 3]; 3] = std::array::from_fn(|v| {
+            std::array::from_fn(|axis| {
+                let i = 12 + v * 12 + axis * 4;
+                f64::from(f32::from_le_bytes([
+                    facet[i],
+                    facet[i + 1],
+                    facet[i + 2],
+                    facet[i + 3],
+                ]))
+            })
+        });
+        if p.iter()
+            .flatten()
+            .any(|v| !v.is_finite() || v.abs() > 1_000_000.0)
+        {
+            return Err(Error::InvalidModel);
+        }
+        min_z = p.iter().fold(min_z, |z, vertex| z.min(vertex[2]));
+        let u: [f64; 3] = std::array::from_fn(|i| p[1][i] - p[0][i]);
+        let v: [f64; 3] = std::array::from_fn(|i| p[2][i] - p[0][i]);
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let length = n[0].hypot(n[1]).hypot(n[2]);
+        for (out, normal) in facet[..12].chunks_exact_mut(4).zip(n) {
+            out.copy_from_slice(
+                &(if length == 0.0 { 0.0 } else { normal / length } as f32).to_le_bytes(),
+            );
+        }
+    }
+    // All vertices move together; the millimetre shape, scale and winding are unchanged.
+    for facet in bytes[84..].chunks_exact_mut(50) {
+        for i in [20, 32, 44] {
+            let z = f32::from_le_bytes([facet[i], facet[i + 1], facet[i + 2], facet[i + 3]]);
+            facet[i..i + 4].copy_from_slice(&((f64::from(z) - min_z) as f32).to_le_bytes());
+        }
+    }
+    Ok(())
 }
 
 async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Error> {
@@ -450,6 +513,9 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
             "/filament.json",
             "--slice",
             "1",
+            "--orient",
+            "1",
+            "--ensure-on-bed",
             "--arrange",
             "1",
             "--allow-rotations",
@@ -474,12 +540,21 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
     let status = tokio::time::timeout(Duration::from_secs(65), command.status())
         .await
         .map_err(|_| Error::Failed("Slicing exceeded 65 seconds".into()))??;
+    let result = out.join("result.json");
     if !status.success() {
+        tracing::warn!(event = "slicer_exit", exit_code = status.code());
+        // Read only a bounded result from the now-stopped isolated process, never log its payload.
+        if fs::symlink_metadata(&result).is_ok_and(|m| m.is_file() && m.len() <= 1024 * 1024)
+            && let Ok(bytes) = fs::read(&result)
+            && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
+            && value["return_code"].as_i64() == Some(-6)
+        {
+            return Err(Error::InvalidModel);
+        }
         return Err(Error::Failed(
             "Isolated slicer failed; check model or runtime installation".into(),
         ));
     }
-    let result = out.join("result.json");
     let result_metadata = fs::symlink_metadata(&result)?;
     if !result_metadata.is_file() || result_metadata.len() > 1024 * 1024 {
         return Err(Error::Failed("Slicer result exceeded size limit".into()));
@@ -548,6 +623,46 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
 mod tests {
     use super::*;
     #[test]
+    fn old_zero_normal_mesh_is_prepared_without_changing_its_shape() {
+        let mut bytes = include_bytes!("../../geometry/tests/fixtures/cube_20mm.stl").to_vec();
+        for facet in bytes[84..].chunks_exact_mut(50) {
+            facet[..12].fill(0);
+            for i in [20, 32, 44] {
+                let z = f32::from_le_bytes(facet[i..i + 4].try_into().unwrap());
+                facet[i..i + 4].copy_from_slice(&(z + 52.0).to_le_bytes());
+            }
+        }
+        let original = bytes.clone();
+        prepare_stl(&mut bytes).unwrap();
+        for (old, new) in original[84..]
+            .chunks_exact(50)
+            .zip(bytes[84..].chunks_exact(50))
+        {
+            let n: Vec<f32> = new[..12]
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect();
+            assert!((n.iter().map(|v| v * v).sum::<f32>() - 1.0).abs() < 0.00001);
+            for i in [12, 24, 36] {
+                assert_eq!(&old[i..i + 8], &new[i..i + 8]);
+                let before = f32::from_le_bytes(old[i + 8..i + 12].try_into().unwrap());
+                let after = f32::from_le_bytes(new[i + 8..i + 12].try_into().unwrap());
+                assert_eq!(before - 42.0, after);
+            }
+        }
+        bytes[96..100].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(matches!(prepare_stl(&mut bytes), Err(Error::InvalidModel)));
+        assert!(matches!(
+            prepare_stl(&mut [0; 84]),
+            Err(Error::InvalidModel)
+        ));
+        assert!(matches!(
+            prepare_stl(&mut [0; 83]),
+            Err(Error::InvalidModel)
+        ));
+    }
+
+    #[test]
     fn supports_trusted_printer_profiles_but_not_support_only_or_missing_profiles() {
         assert!(material_supported("GFA00"));
         assert!(material_supported("GFB00")); // ABS still requires operator hardware approval.
@@ -559,7 +674,13 @@ mod tests {
     }
     #[test]
     fn measured_geometry_respects_size_limit_build_height_and_xy_rotation() {
-        for dimensions in [[256.0, 238.0, 250.0], [238.0, 256.0, 250.0], [20.0; 3]] {
+        for dimensions in [
+            [256.0, 238.0, 250.0],
+            [238.0, 256.0, 250.0],
+            [20.0; 3],
+            [200.0, 10.0, 250.001],
+            [256.0, 250.0, 238.0],
+        ] {
             assert_eq!(check_model_dimensions(dimensions), Ok(()));
         }
         for axis in 0..3 {
@@ -575,11 +696,7 @@ mod tests {
                 Err(ModelFitError::PrinterFit)
             );
         }
-        for dimensions in [
-            [256.0, 239.0, 250.0],
-            [200.0, 10.0, 250.001],
-            [256.0, 250.0, 238.0],
-        ] {
+        for dimensions in [[256.0, 251.0, 239.0], [257.0, 257.0, 257.0]] {
             assert_eq!(
                 check_model_dimensions(dimensions),
                 Err(ModelFitError::PrinterFit)
@@ -667,6 +784,38 @@ mod tests {
             assert!(matches!(options.validate(), Err(Error::InvalidOptions)));
         }
     }
+    #[tokio::test]
+    #[ignore = "Requires Bambu Studio/bubblewrap; optional SLICER_TEST_MODEL server-owned binary STL"]
+    async fn real_model() {
+        let model = std::env::var_os("SLICER_TEST_MODEL")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../geometry/tests/fixtures/cube_20mm.stl")
+            });
+        for material in ["GFA00", "GFG02"] {
+            let result = slice_job(&model, material, &Options::default())
+                .await
+                .unwrap();
+            eprintln!("{material}: {}", serde_json::to_string(&result).unwrap());
+            assert_eq!(result.quantity, 1);
+            assert_eq!(result.plates, 1);
+            assert!(result.time_seconds > 0 && result.filament_grams > 0.0);
+        }
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-invalid-mesh-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        let mut degenerate = include_bytes!("../../geometry/tests/fixtures/cube_20mm.stl").to_vec();
+        degenerate[84..].fill(0);
+        let invalid = workspace.0.join("invalid.stl");
+        fs::write(&invalid, degenerate).unwrap();
+        assert!(matches!(
+            slice_job(&invalid, "GFA00", &Options::default()).await,
+            Err(Error::InvalidModel)
+        ));
+    }
+
     #[tokio::test]
     #[ignore = "Requires locally installed Bambu Studio and Linux bubblewrap"]
     async fn real_cube() {

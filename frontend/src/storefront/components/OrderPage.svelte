@@ -107,9 +107,10 @@
     </div>
     {#if !reviewed}<aside class="order-summary" aria-label="Podsumowanie modeli">
       <div class="order-summary-title"><h2>Twój projekt.</h2><span>{draft.models.length} {draft.models.length===1?'model':'modeli'}</span></div>
-      <ul>{#each draft.models as model}<li><div><strong>{model.name}</strong><span>{model.quantity} szt.</span></div><p>{settingsSummary(model.settings!,draft.materials)}</p>{#if !manual}<span class="order-line-price">{money(draft.quote.lines.find(line=>line.id===model.id)?.subtotal??0)}</span>{/if}</li>{/each}</ul>
+      <ul>{#each draft.models as model}<li><div><strong>{model.name}</strong><span>{model.quantity} szt.</span></div><p>{settingsSummary(model.settings!,draft.materials)}</p>{#if !manual || draft.quote.provisional}<span class="order-line-price">{money(draft.quote.lines.find(line=>line.id===model.id)?.subtotal??0)}</span>{/if}</li>{/each}</ul>
       <div class="order-summary-delivery"><span>{delivery==='shipping'?'Wysyłka':'Odbiór osobisty'}</span><strong>{delivery==='shipping'?'W następnym kroku':money(0)}</strong></div>
-      <div class="order-total"><span>{manual?'Wycena indywidualna':'Wydruki i przygotowanie'}</span><strong>{manual?'Ustalimy razem':money(draft.quote.total)}</strong></div>
+      <div class="order-total"><span>{draft.quote.provisional?'Szacowana cena wydruku':manual?'Wycena indywidualna':'Wydruki i przygotowanie'}</span><strong>{manual && !draft.quote.provisional?'Ustalimy razem':money(draft.quote.total)}</strong></div>
+      {#if draft.quote.provisional}<p class="order-price-note">{draft.quote.reason} Ostateczną ofertę otrzymasz przed płatnością.</p>{/if}
       <p class="order-price-note">Produkcja do 14 dni kalendarzowych, chyba że oferta określa inny termin. Dostawa i opakowanie zostaną wyliczone przed płatnością.</p>
       <button class="order-back order-edit" onclick={onback}>Zmień modele lub ustawienia<IconArrowLeft size={16}/></button>
     </aside>{/if}

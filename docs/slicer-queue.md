@@ -38,3 +38,7 @@ Osobny proces: API uruchom z `SLICER_WORKER_MODE=external python backend/run.py`
 Izolowany PostgreSQL: równoległe przejęcie, odzyskanie lease i odrzucenie starego workera, retry, deduplikacja/limity, atomowy snapshot, claim w trakcie pracy i ochrona sprzątania — PASS. Rzeczywisty HTTP/Bambu: szybki 202, odmowa obcemu, restart API, zabicie procesu workera i wznowienie po wymuszonym wygaśnięciu lease, pojedynczy snapshot oraz checkout z ceną serwera — PASS. Test używał osobnej bazy/katalogu i stawek testowych. Nie zmieniał katalogu cen normalnego środowiska ani nie wykonywał płatności/nadania.
 
 Build Rust, fmt, Clippy all-targets, 16 testów jednostkowych API/storage oraz svelte-check/Vite build — PASS. Regresja kolejki na izolowanym PG — PASS; pozostałych 6 ignorowanych testów PG nie powtarzano w tym kroku. Rust backend/crates: 10439 → 11156 (+717) linii kodu razem z testami inline, bez komentarzy/pustych/generowanych plików. Nowe pliki produkcyjne: worker API, moduł storage i migracja; bez nowych zależności.
+
+## Przygotowanie do slicera
+
+Nowe STL mają normalne zgodne z kolejnością wierzchołków. Starsze uploady są poprawiane w prywatnej kopii slicera: kontrola binarnego formatu/rozmiaru/liczb, normalne i przesunięcie na Z=0. Oryginał i GLB nie zmieniają się. Bambu wykonuje `--orient 1 --ensure-on-bed --arrange 1 --allow-rotations`; ograniczenia stołu i finalny wynik slicera pozostają wiążące. Zmiana profilu `orient1-fit2` unieważnia poprzednie wyceny.

@@ -172,6 +172,22 @@ pub fn source_to_stl(
     source_to_production(filename, input, limits, three_mf_limits).map(|output| output.stl)
 }
 
+fn triangle_normal([a, b, c]: [[f32; 3]; 3]) -> [f32; 3] {
+    let u: [f64; 3] = std::array::from_fn(|i| f64::from(b[i]) - f64::from(a[i]));
+    let v: [f64; 3] = std::array::from_fn(|i| f64::from(c[i]) - f64::from(a[i]));
+    let n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let length = n[0].hypot(n[1]).hypot(n[2]);
+    if length == 0.0 {
+        [0.0; 3]
+    } else {
+        n.map(|value| (value / length) as f32)
+    }
+}
+
 pub struct ProductionOutput {
     pub stl: Vec<u8>,
     pub glb: Vec<u8>,
@@ -224,13 +240,16 @@ pub fn source_to_production(
         output.extend_from_slice(&count.to_le_bytes());
         for triangle in scene.indices.chunks_exact(3) {
             check_timeout(started, limits)?;
-            // STL normals may be zero: geometry and winding define the surface.
-            output.extend_from_slice(&[0; 12]);
-            for index in triangle {
-                let position = scene
-                    .positions_mm
-                    .get(*index as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
+            let positions = [triangle[0], triangle[1], triangle[2]]
+                .map(|index| scene.positions_mm.get(index as usize).copied());
+            let [Some(a), Some(b), Some(c)] = positions else {
+                return Err(PreviewError::MalformedInput);
+            };
+            // Some slicers mistake zero-normal binary STL for ASCII, depending on its vertices.
+            for coordinate in triangle_normal([a, b, c]) {
+                output.extend_from_slice(&coordinate.to_le_bytes());
+            }
+            for position in [a, b, c] {
                 for coordinate in position {
                     output.extend_from_slice(&coordinate.to_le_bytes());
                 }
@@ -1675,6 +1694,28 @@ mod tests {
                     / 6.0
             })
             .sum()
+    }
+
+    #[test]
+    fn canonical_stl_writes_unit_normals_with_preserved_winding() {
+        let input = b"solid test\nfacet normal 0 0 0\nouter loop\nvertex 0 0 54\nvertex 0 161 57\nvertex 0 161 54\nendloop\nendfacet\nfacet normal 0 0 0\nouter loop\nvertex 0 0 54\nvertex 0 161 54\nvertex 1 0 54\nendloop\nendfacet\nendsolid test";
+        let output = source_to_stl(
+            "offset.stl",
+            input,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        let normal: Vec<f32> = output[84..96]
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        assert_eq!(normal, [-1.0, 0.0, 0.0]);
+        assert_eq!(triangle_normal([[0.0; 3]; 3]), [0.0; 3]);
+        assert_eq!(
+            triangle_normal([[0.0; 3], [f32::MAX, 0.0, 0.0], [0.0, f32::MAX, 0.0]]),
+            [0.0, 0.0, 1.0]
+        );
     }
 
     #[test]

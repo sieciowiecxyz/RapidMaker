@@ -25,3 +25,13 @@ Pierwszy przebieg miał 14/18 PASS. Naprawiono fokus po animacji i odtwarzanie p
 Rust: **28 171 → 28 966 (+795 LOC)** względem main 0db0058, `tokei --type Rust`: `backend/crates/`, razem kod produkcyjny, testy inline/integracyjne i przykłady; bez pustych linii/komentarzy, wygenerowanego kodu i vendora. Nie rozdzielono inline testów od produkcji. Nowe moduły API/storage produkcji i migracja0021 mają jedną odpowiedzialność; bez nowych zależności.
 
 Granice: koszty/dopuszczenia zwykłej bazy pozostają decyzją operatora; fixture nie zmienia produkcji. Inny kolor dla wybranego filamentu pozostaje jawną preferencją ręcznej oferty. admin-design/checkout-design są oznaczonymi wzorcami. Szkic faktury nie wystawia dokumentu/PDF/KSeF.
+
+## Poprawka odporności wyceny — 2026-10-26
+
+Naprawiono eksport normalnych STL, przygotowanie starszych uploadów i ustawienie geometrii na stole. Slicer automatycznie orientuje i układa części; błąd parsowania modelu kończy zadanie bez powtarzania tej samej próby. Rozmiary źródłowe i prywatne GLB nie zmieniają się.
+
+Jawnie rozszerzony lokalny cennik POC: pięć rodzin i serie PLA z presetów, EUR × NBP 4,4026 z 26.10.2026. Istniejące ceny/polityka zachowane; drugie `--pricing-poc-extend` nie zmieniło niczego. Nie jest to zweryfikowany cennik produkcyjny.
+
+PASS: rzeczywisty plik STEP 160×161×5 mm przez HTTP → geometrię → kolejkę → Bambu → cenę dla PLA/PETG/ASA/PA-CF/TPU. PETG, 1 szt., Standard/3 ściany/20%: 5635 s, 65,65 g, 59,73 zł brutto bez dostawy. Faktyczny frontend localhost pokazał tę cenę dla PETG czarnego i szacunek dla PETG Matcha; zachował pierwotną preferencję odcienia w ręcznym zgłoszeniu, bez podmiany na czarny. Brak błędów JS.
+
+PASS: 3 celowane testy geometrii, 6 reguł slicera, rzeczywisty stary STL i obrócona/przesunięta kopia; odrzucenie błędnego modelu przez Bambu; reguła API dopasowania po obrocie; 2 kontrakty UI ceny/powodu; Svelte check/build, fmt i Clippy zmienionych crate’ów. Pełny zestaw E2E i długi batch 1–1000 nie były powtarzane. Istniejące ostrzeżenie wygenerowanego mostu C++ pozostaje. Rust: +207 LOC względem 946ecfc, łącznie produkcja/testy/przykłady w backend/crates, bez pustych linii i komentarzy (`tokei`). Bez nowych zależności; nowy plik to focused test UI `quote-feedback.spec.ts`.

@@ -400,7 +400,6 @@ mod tests {
         for (dimensions, reason) in [
             ([500.01, 1.0, 1.0], "size_limit"),
             ([256.0, 239.0, 250.0], "printer_fit"),
-            ([200.0, 10.0, 251.0], "printer_fit"),
         ] {
             let (status, Json(body)) = automatic_geometry(dimensions).unwrap_err();
             assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -408,6 +407,7 @@ mod tests {
             assert_eq!(body["reason"], reason);
         }
         assert!(automatic_geometry([238.0, 256.0, 250.0]).is_ok());
+        assert!(automatic_geometry([200.0, 10.0, 251.0]).is_ok());
         assert_eq!(
             automatic_geometry([f64::NAN, 1.0, 1.0]).unwrap_err().0,
             StatusCode::BAD_REQUEST
