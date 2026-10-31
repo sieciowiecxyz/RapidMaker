@@ -45,6 +45,9 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 - [Logi](logging.md)
   - przeczytaj gdy: diagnozujesz backend lub zbierasz logi.
   - opis: JSON, poziomy, korelacja i ochrona danych.
+- [Aktualny lokalny frontend Piotra](../frontend-design/README.md)
+  - pełny prototyp z portu 5173, zatwierdzone wykończenia, wzornik i efekty WebGL; osobny od integracji backendu.
+
 - [Brief frontendu](rapidmaker-frontend-brief.md)
   - przeczytaj gdy: rozwijasz samodzielny prototyp Svelte.
   - opis: widoki, konfigurator FDM, mocki i granice lokalnego checkout API.

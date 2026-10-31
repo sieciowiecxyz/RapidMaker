@@ -1,0 +1,27 @@
+{
+  "name": "rapidmaker-concept",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.0.0",
+    "@fontsource-variable/oxanium": "^5.0.0",
+    "@tabler/icons-svelte": "^3.0.0",
+    "earcut": "^3.2.4",
+    "gsap": "^3.15.0",
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/earcut": "^3.0.0",
+    "svelte-check": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^7.0.0"
+  }
+}

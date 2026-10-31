@@ -1,0 +1,10 @@
+import { mount } from 'svelte';
+import '@fontsource-variable/manrope';
+import '@fontsource-variable/oxanium';
+import './app.css';
+import './transitions.css';
+import './light.css';
+import './coral-preview.css';
+import './print-background.css';
+import App from './App.svelte';
+mount(App, { target: document.getElementById('app')! });

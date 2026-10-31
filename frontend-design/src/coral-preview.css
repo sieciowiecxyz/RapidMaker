@@ -1,0 +1,15 @@
+/* Coral direction preview: lime remains the primary selection color. */
+:root { --accent-coral: #ff5c77; --on-coral: #231015; }
+.hero-copy h1 .coral-highlight { color: var(--accent-coral); }
+.chamber-top i { background: var(--accent-coral); }
+.quote-contact.button-primary:not(:disabled),
+.order-submit .button-primary:not(:disabled) {
+  background: var(--accent-coral);
+  border-color: var(--accent-coral);
+  color: var(--on-coral);
+}
+@media (hover:hover) and (pointer:fine) {
+  .quote-contact.button-primary:hover:not(:disabled),
+  .order-submit .button-primary:hover:not(:disabled) { background: #ff7b91; border-color: #ff7b91; }
+}
+:root[data-theme='light'] .hero-copy h1 .coral-highlight { color: #bd2548; }
