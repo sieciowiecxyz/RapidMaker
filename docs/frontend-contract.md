@@ -29,3 +29,12 @@ Panel `/admin.html` korzysta z trwałych metadanych produkcji i szkiców faktur.
 Wykonać svelte-check/build oraz oględziny desktop/mobile: czarny default, wszystkie serie palety, PA-CF czarny, realny lokalny STL, przykład 10 sztuk, przekrój i dysza. Backend/sandboxy wymagają osobnej konfiguracji; same wzorce nie dowodzą integracji.
 
 Wyniki integracji i ograniczenia: [integration-piotr.md](integration-piotr.md). Trasa `/zamowienie` nadal obsługuje wyniki/wznowienia płatności, a konto klienta — trwałe zamówienia i rozmowy.
+
+
+## Akceptacja wyglądu 2026-10-31
+
+Trzeci akcent: koral #FF5C77 na słowie „pomysł”, wskaźniku podglądu i aktywnym głównym przycisku. Ikony telefonu, emaila i ich strzałki pozostają limonkowe. Jasny motyw ma ciemniejszy koral #BD2548 dla czytelności.
+
+Tło: szerokie 35 konturów prowadzone przez nagłówek, podgląd, główną akcję i kontakt. Wybrany został wariant „Po” z łagodniejszym zakrętem przy wycenie, ale zakończeniem z wariantu „Przed” przy kontakcie. Nie dodawać dodatkowego punktu omijającego akapit „Ustalimy…”: próba została odrzucona. Linie dochodzą poza dolną krawędź strony. Wzór jest statyczny, dopasowuje się do układu przez ResizeObserver, nie uruchamia ciągłej animacji. Ukryty w jasnym motywie. Usunięty dopisek „Od pierwszego prototypu po serię gotową do wykorzystania.”
+
+Implementacja: `src/storefront/components/FlowBackground.svelte`, `coral.css`, `print-background.css`. Źródło akceptacji: lokalny podgląd 127.0.0.1:5173. Zmiana dotyczy wyglądu, bez zastępowania nowszych adapterów/API z main.
