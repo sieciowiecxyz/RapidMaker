@@ -29,3 +29,9 @@ Panel `/admin.html` korzysta z trwałych metadanych produkcji i szkiców faktur.
 Wykonać svelte-check/build oraz oględziny desktop/mobile: czarny default, wszystkie serie palety, PA-CF czarny, realny lokalny STL, przykład 10 sztuk, przekrój i dysza. Backend/sandboxy wymagają osobnej konfiguracji; same wzorce nie dowodzą integracji.
 
 Wyniki integracji i ograniczenia: [integration-piotr.md](integration-piotr.md). Trasa `/zamowienie` nadal obsługuje wyniki/wznowienia płatności, a konto klienta — trwałe zamówienia i rozmowy.
+
+## Aktualizacja lokalnego wzorca 2026-10-31: wykończenia i kolory
+
+Pełny zatwierdzony prototyp z portu 5173 jest w [`frontend-design`](../frontend-design/README.md), wraz z konfiguracją i lockfile. Nie podmienia zintegrowanej aplikacji `frontend` ani API. Nowe decyzje zastępują poprzednie zasady koła i zielonego koloru w lokalnym wzorcu: po Niestandardowym wybiera się wykończenie, potem kolor z prostokątnego wzornika; koło zostało odrzucone. Trzecim kolorem jest Dowolny z etykietą „10% taniej” i koralowo-limonkowym gradientem.
+
+Zatwierdzono poglądowe efekty Matte / Silk / Marble / Sparkle / Translucent i wielobarwne gradienty Silk. Przycisk dodatkowych wykończeń ma miniatury, opis liczby opcji, zwykły kolor pozostałych kafelków i trwałe limonkowe zaznaczenie po wyborze dodatkowej serii. Rabat wymaga serwerowej reguły przy integracji; prototyp liczy demonstracyjne ceny. Szczegóły i granice: README wzorca.
