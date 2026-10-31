@@ -1,9 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import FlowGlow from './FlowGlow.svelte';
+  let {mode='pulse',paused=false,shape='bulge',length='medium',speed='normal',oncycle}:{mode:'off'|'pulse'|'band'|'wave'|'comet';paused?:boolean;shape?:'trail'|'bulge'|'premium';length?:'short'|'medium'|'long';speed?:'slow'|'normal'|'fast';oncycle?:()=>void}=$props();
+  let hidden=$state(false);
+  const trailSize=$derived(({short:12,medium:32,long:75})[length]);
+  const travelTime=$derived(({slow:28,normal:18,fast:10})[speed]);
   type Point={x:number;y:number;spread:number};
   let width=$state(1800),height=$state(2000);
   let contours=$state<string[]>([]);
   let accent=$state('');
+  const litContours=$derived(mode==='band'?contours.slice(8,27):mode==='wave'?contours.filter((_,i)=>i%4===1):[accent]);
   function smooth(points:{x:number;y:number}[], contactApproachX?:number){
     let d=`M ${points[0].x} ${points[0].y}`;
     for(let i=0;i<points.length-1;i++){
@@ -17,6 +23,7 @@
   }
   onMount(()=>{
     let frame=0,active=true;
+    const visibility=()=>hidden=document.hidden;visibility();document.addEventListener('visibilitychange',visibility);
     const measure=()=>{
       frame=0;if(!active)return;
       const w=document.documentElement.clientWidth,h=document.body.scrollHeight;
@@ -55,10 +62,29 @@
     const main=document.getElementById('main');if(main)observer.observe(main);
     window.addEventListener('resize',schedule);
     void document.fonts.ready.then(schedule);schedule();
-    return()=>{active=false;observer.disconnect();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);};
+    return()=>{document.removeEventListener('visibilitychange',visibility);active=false;observer.disconnect();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);};
   });
 </script>
 <svg class="flow-background" viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false">
   <g fill="none" stroke="#B5EE4B" stroke-width=".8" opacity=".115">{#each contours as path}<path d={path}/>{/each}</g>
   <path d={accent} fill="none" stroke="#FF5C77" stroke-width="1.1" opacity=".32"/>
+  {#if mode!=='off'}
+    {#key `${shape}-${mode}-${length}-${speed}`}
+    {#if shape!=='trail'}<FlowGlow premium={shape==='premium'} paths={litContours} {mode} {length} {speed} {oncycle} paused={paused||hidden}/>
+    {:else}
+        <g class="glow-trails" class:stopped={paused||hidden} data-mode={mode} style={`--trail:${trailSize};--gap:${1000-trailSize};--travel:${travelTime}s`} fill="none" stroke-linecap="round">
+          {#each litContours as path,i}<g style={`--delay:${mode==='wave'?-i*.42:0}s;--glow:${mode==='pulse'||mode==='comet'||i===Math.floor(litContours.length/2)?'#FF5C77':'#B5EE4B'}`}><path class="glow-halo" d={path} pathLength="1000"/><path class="glow-soft" d={path} pathLength="1000"/><path class="glow-core" d={path} pathLength="1000"/></g>{/each}
+        </g>
+    {/if}
+    {/key}
+  {/if}
 </svg>
+
+<style>
+ .glow-trails path{stroke:var(--glow);animation:travel var(--travel) linear infinite;animation-delay:var(--delay);stroke-dasharray:var(--trail) var(--gap);stroke-dashoffset:-65}
+ .glow-halo{stroke-width:20;opacity:.105}.glow-soft{stroke-width:8;opacity:.30}.glow-core{stroke-width:2.6;opacity:1}
+ .glow-trails[data-mode=band] .glow-halo{stroke-width:13;opacity:.055}.glow-trails[data-mode=band] .glow-soft{stroke-width:5;opacity:.2}.glow-trails[data-mode=band] .glow-core{stroke-width:2;opacity:.85}
+ .glow-trails.stopped path{animation-play-state:paused}
+ @keyframes travel{from{stroke-dashoffset:-65}to{stroke-dashoffset:-1065}}
+ @media(prefers-reduced-motion:reduce){.glow-trails{display:none}}
+</style>

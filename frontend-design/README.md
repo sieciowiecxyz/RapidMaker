@@ -34,4 +34,10 @@ STL jest przetwarzany lokalnie, bez uploadu. STEP/3MF nie mają tu lokalnego pod
 
 Integracja ma zachować te widoki i interakcje oraz rzeczywiste sesje, kontrolę plików, checkout, płatności, wiadomości i serwerowe kwoty aplikacji `../frontend`. Nie kopiować mocków do produkcyjnego adaptera ani podmieniać endpointów.
 
+## Animowane światło tła
+
+Zatwierdzono Glow Premium: jasny cienki rdzeń, miękka poświata i wygasające końce. Domyślnie działa Impuls; po dwóch jego przebiegach pojawia się jeden przebieg Fali, potem wraca Impuls. Oba mają długość Długa i prędkość Wolno. Przebieg trwa około 28 sekund aktywnego czasu; animacja zatrzymuje się w ukrytej karcie i przy ograniczonym ruchu. W jasnym motywie tło pozostaje ukryte.
+
+Panel porównania jest schowany pod Narzędzia podglądu → Porównaj animacje tła. Zachowuje trzy wersje Smuga / Zgrubienie / Glow Premium oraz Impuls / Pas / Fala / Kometa, długość i prędkość. Zmiana wyboru restartuje animację i wyłącza pauzę. Zamknięcie porównania przywraca zaakceptowane ustawienia automatyczne. `FlowBackground.svelte` zachowuje geometrię linii; `FlowGlow.svelte` rysuje krótkie, zwężające się segmenty wzdłuż krzywych, do 30 fps, z usunięciem tickera przy odmontowaniu.
+
 Weryfikacja zapisu: svelte-check i Vite build. Lokalne oględziny: wzornik, Silk Neon City, Marble, przycisk dodatkowych wykończeń i gradient Dowolny. Osobno sprawdzono rabat per model i brak rabatu na dostawę. Backend, produkcyjne płatności i pełne E2E nie są zakresem tego zapisu.

@@ -5,6 +5,23 @@
   import { resolveColor, resolveFilament } from './lib/colorMatching';
   import { softValue } from './lib/motion';
   import FlowBackground from './components/FlowBackground.svelte';
+  import FlowGlowDemo from './components/FlowGlowDemo.svelte';
+  let glowMode=$state<'off'|'pulse'|'band'|'wave'|'comet'>('pulse');
+  let glowPaused=$state(false);
+  let glowShape=$state<'trail'|'bulge'|'premium'>('premium');
+  let glowLength=$state<'short'|'medium'|'long'>('long');
+  let glowSpeed=$state<'slow'|'normal'|'fast'>('slow');
+  let glowPreview=$state(false);
+  let pulseCycles=0;
+  function nextGlowCycle(){
+    if(glowPreview)return;
+    if(glowMode==='wave'){glowMode='pulse';pulseCycles=0;}
+    else if(++pulseCycles>=2)glowMode='wave';
+  }
+  function toggleGlowPreview(){
+    glowPreview=!glowPreview;
+    if(!glowPreview){glowMode='pulse';glowShape='premium';glowLength='long';glowSpeed='slow';glowPaused=false;pulseCycles=0;}
+  }
   import PrintScene from './components/PrintScene.svelte';
   import PrintTransition from './components/PrintTransition.svelte';
   import OrderPage from './components/OrderPage.svelte';
@@ -254,7 +271,8 @@
   }
 </script>
 
-<FlowBackground/>
+<FlowBackground oncycle={nextGlowCycle} shape={glowShape} mode={glowMode} paused={glowPaused} length={glowLength} speed={glowSpeed}/>
+{#if glowPreview}<FlowGlowDemo bind:shape={glowShape} bind:mode={glowMode} bind:paused={glowPaused} bind:length={glowLength} bind:speed={glowSpeed}/>{/if}
 <div inert={transitioning} aria-busy={transitioning}>
 <a class="skip-link button button-primary" href={checkoutOpen?'#zamowienie':'#main'}>Przejdź do treści</a>
 <div class="prototype-bar">Propozycja nowej strony. Podgląd STL działa lokalnie. Pliki pozostają w przeglądarce, ceny są przykładowe.</div>
@@ -359,7 +377,7 @@
 
   <section id="kontakt" class="content-section" aria-labelledby="contact-title"><div class="contact-grid"><div><h2 id="contact-title" tabindex="-1">Porozmawiajmy<br />o Twojej części.</h2><p class="contact-lead">Prześlij model lub opisz, czego potrzebujesz. Ustalimy materiał, cenę i termin realizacji.</p>{#if contactContext}<p class="contact-context">{contactContext}</p>{/if}<div class="contact-links" class:contact-glow={contactGlow}><a class="contact-link" href="tel:+48537320816"><IconPhone size={21} stroke={1.6} />537 320 816<IconArrowUpRight size={16} /></a><a class="contact-link" href="mailto:rapidmaker@rapidmaker.pl?subject=Wycena%20druku%203D"><IconMail size={21} stroke={1.6} />rapidmaker@rapidmaker.pl<IconArrowUpRight size={16} /></a></div><div class="address"><p><strong>Pracownia RapidMaker</strong></p><p>Zielony Krąg 1, 05-500 Piaseczno</p><small>Pon.-pt. 9:00-17:00. Wizyty po umówieniu.</small></div></div><div class="map"><iframe title="Mapa dojazdu do RapidMaker w Piasecznie" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2452.44230244811!2d20.994547177129274!3d52.07167776932459!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47192fc6e84dd8ff%3A0xf49d7b6dd1af3606!2sRapid%20Maker!5e0!3m2!1spl!2spl!4v1687527970408!5m2!1spl!2spl" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe><div class="map-footer"><span>Odbiór osobisty po umówieniu</span><a href="https://www.google.com/maps/dir/?api=1&destination=ul.+Zielony+Kr%C4%85g+1,+05-500+Piaseczno" target="_blank" rel="noreferrer">Wyznacz trasę</a></div></div></div></section>
 
-  <details class="prototype-tools"><summary>Narzędzia podglądu</summary><div class="specimen-tools"><Button variant="text" onclick={changeTheme}>Zmień motyw</Button><Button variant="text" onclick={async () => { if (!models.length) await useSample(); simulateError = true; document.getElementById('wycena')?.scrollIntoView(); }}>Symuluj błąd wyceny</Button></div></details>
+  <details class="prototype-tools"><summary>Narzędzia podglądu</summary><div class="specimen-tools"><Button variant="text" onclick={toggleGlowPreview}>{glowPreview?'Wróć do automatycznego światła':'Porównaj animacje tła'}</Button><Button variant="text" onclick={changeTheme}>Zmień motyw</Button><Button variant="text" onclick={async () => { if (!models.length) await useSample(); simulateError = true; document.getElementById('wycena')?.scrollIntoView(); }}>Symuluj błąd wyceny</Button></div></details>
 </main>
 <footer class="shell"><span>RapidMaker / Piaseczno</span><span>Próbka projektu. Wycena i kontakt teraz, zakup w kolejnym etapie.</span><a href="#main">Wróć na górę</a></footer>
 

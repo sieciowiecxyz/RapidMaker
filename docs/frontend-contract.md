@@ -35,3 +35,7 @@ Wyniki integracji i ograniczenia: [integration-piotr.md](integration-piotr.md). 
 Pełny zatwierdzony prototyp z portu 5173 jest w [`frontend-design`](../frontend-design/README.md), wraz z konfiguracją i lockfile. Nie podmienia zintegrowanej aplikacji `frontend` ani API. Nowe decyzje zastępują poprzednie zasady koła i zielonego koloru w lokalnym wzorcu: po Niestandardowym wybiera się wykończenie, potem kolor z prostokątnego wzornika; koło zostało odrzucone. Trzecim kolorem jest Dowolny z etykietą „10% taniej” i koralowo-limonkowym gradientem.
 
 Zatwierdzono poglądowe efekty Matte / Silk / Marble / Sparkle / Translucent i wielobarwne gradienty Silk. Przycisk dodatkowych wykończeń ma miniatury, opis liczby opcji, zwykły kolor pozostałych kafelków i trwałe limonkowe zaznaczenie po wyborze dodatkowej serii. Rabat wymaga serwerowej reguły przy integracji; prototyp liczy demonstracyjne ceny. Szczegóły i granice: README wzorca.
+
+### Światło tła: finalny wybór 2026-10-31
+
+W lokalnym wzorcu `frontend-design` pozostaje Glow Premium, Impuls, długość Długa, prędkość Wolno; co dwa przebiegi Impulsu włącza się jeden przebieg Fali z tymi samymi parametrami. Wcześniejsze Smuga/Zgrubienie i pozostałe warianty są w porównaniu dostępnym z Narzędzi podglądu. Każda zmiana wyboru restartuje animację. Bazowa geometria szerokich konturów pozostaje zatwierdzona. Ograniczony ruch, ukryta karta i jasny motyw nie uruchamiają ruchu tła.
