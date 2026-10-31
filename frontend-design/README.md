@@ -41,3 +41,5 @@ Zatwierdzono Glow Premium: jasny cienki rdzeń, miękka poświata i wygasające 
 Panel porównania jest schowany pod Narzędzia podglądu → Porównaj animacje tła. Zachowuje trzy wersje Smuga / Zgrubienie / Glow Premium oraz Impuls / Pas / Fala / Kometa, długość i prędkość. Zmiana wyboru restartuje animację i wyłącza pauzę. Zamknięcie porównania przywraca zaakceptowane ustawienia automatyczne. `FlowBackground.svelte` zachowuje geometrię linii; `FlowGlow.svelte` rysuje krótkie, zwężające się segmenty wzdłuż krzywych, do 30 fps, z usunięciem tickera przy odmontowaniu.
 
 Weryfikacja zapisu: svelte-check i Vite build. Lokalne oględziny: wzornik, Silk Neon City, Marble, przycisk dodatkowych wykończeń i gradient Dowolny. Osobno sprawdzono rabat per model i brak rabatu na dostawę. Backend, produkcyjne płatności i pełne E2E nie są zakresem tego zapisu.
+
+Tło pozostaje dopasowywane: zmiany krzywych są płynne i ignorują niewielkie przesunięcia; geometria światła jest obliczana bez kosztownych odczytów SVG.

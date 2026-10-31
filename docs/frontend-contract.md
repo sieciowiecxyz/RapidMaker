@@ -39,3 +39,5 @@ Zatwierdzono poglądowe efekty Matte / Silk / Marble / Sparkle / Translucent i w
 ### Światło tła: finalny wybór 2026-10-31
 
 W lokalnym wzorcu `frontend-design` pozostaje Glow Premium, Impuls, długość Długa, prędkość Wolno; co dwa przebiegi Impulsu włącza się jeden przebieg Fali z tymi samymi parametrami. Wcześniejsze Smuga/Zgrubienie i pozostałe warianty są w porównaniu dostępnym z Narzędzi podglądu. Każda zmiana wyboru restartuje animację. Bazowa geometria szerokich konturów pozostaje zatwierdzona. Ograniczony ruch, ukryta karta i jasny motyw nie uruchamiają ruchu tła.
+
+Aktualizacja wydajności: dopasowywane kontury płynnie śledzą większe zmiany układu; drobne przesunięcia są pomijane. Krzywe światła liczone są bez powtarzanych odczytów geometrii SVG. Stały wariant został odrzucony.

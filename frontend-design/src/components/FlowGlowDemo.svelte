@@ -1,6 +1,6 @@
 <script lang="ts">
   import {IconPlayerPause,IconPlayerPlay,IconChevronDown,IconChevronUp} from '@tabler/icons-svelte';
-  let {mode=$bindable('pulse'),paused=$bindable(false),shape=$bindable('bulge'),length=$bindable('medium'),speed=$bindable('normal')}:{mode:'off'|'pulse'|'band'|'wave'|'comet';paused?:boolean;shape?:'trail'|'bulge'|'premium';length?:'short'|'medium'|'long';speed?:'slow'|'normal'|'fast'}=$props();
+  let {mode=$bindable('pulse'),paused=$bindable(false),shape=$bindable('bulge'),length=$bindable('medium'),speed=$bindable('normal'),layout=$bindable('adaptive')}:{mode:'off'|'pulse'|'band'|'wave'|'comet';paused?:boolean;shape?:'trail'|'bulge'|'premium';length?:'short'|'medium'|'long';speed?:'slow'|'normal'|'fast';layout?:'fixed'|'adaptive'}=$props();
   let open=$state(true);
   const options=[{id:'pulse',name:'Impuls',detail:'Jedna koralowa smuga po centralnej linii.'},{id:'band',name:'Pas',detail:'Szeroki pas światła na sąsiednich liniach.'},{id:'wave',name:'Fala',detail:'Limonkowe impulsy przesunięte w czasie.'},{id:'comet',name:'Kometa',detail:'Limonkowa główka i zwężający się koralowy ogon.'},{id:'off',name:'Wył.',detail:'Obecne, nieruchome tło.'}] as const;
 </script>

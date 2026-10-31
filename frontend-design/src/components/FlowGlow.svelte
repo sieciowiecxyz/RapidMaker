@@ -1,6 +1,7 @@
 <script lang="ts">
   import {onMount,tick} from 'svelte';
   import gsap from 'gsap';
+  import {sampleFlowPath} from '../lib/flowGeometry';
   let {paths,mode,length,speed,paused=false,premium=false,oncycle}:{paths:string[];mode:'pulse'|'band'|'wave'|'comet';length:'short'|'medium'|'long';speed:'slow'|'normal'|'fast';paused?:boolean;premium?:boolean;oncycle?:()=>void}=$props();
   let host:SVGGElement;
   type XY={x:number;y:number};
@@ -8,18 +9,16 @@
   let configure=(_paths:string[])=>{};
   $effect(()=>{premium;configure(paths);});
   onMount(()=>{
-    let tracks:Track[]=[],alive=true,phase=0,last=0,drawn=0;
+    let tracks:Track[]=[],alive=true,phase=0,last=0,drawn=0,configured=false,geometryRevision=0;
     const reduced=matchMedia('(prefers-reduced-motion:reduce)');
-    configure=(curves)=>{void tick().then(()=>{
-      if(!alive)return;
+    configure=(curves)=>{const revision=++geometryRevision;void tick().then(()=>{
+      if(!alive||revision!==geometryRevision)return;
       tracks=curves.filter(Boolean).map((curve,i)=>{
-        const source=document.createElementNS('http://www.w3.org/2000/svg','path');source.setAttribute('d',curve);
-        const total=source.getTotalLength();
-        const points=Array.from({length:513},(_,j)=>{const p=source.getPointAtLength(total*j/512);return {x:p.x,y:p.y};});
+        const {total,points}=sampleFlowPath(curve);
         const lane=host.querySelectorAll<SVGGElement>('.bulge-lane')[i];
         return {points,total,halo:lane.querySelector<SVGPathElement>('.halo')!,soft:lane.querySelector<SVGPathElement>('.soft')!,core:lane.querySelector<SVGPathElement>('.core')!,gradients:Array.from(lane.querySelectorAll<SVGLinearGradientElement>('linearGradient'))};
       });
-      phase=tracks.length?Math.min(.8,(window.scrollY+350)/tracks[0].total):0;
+      if(!configured&&tracks.length){phase=Math.min(.8,(window.scrollY+350)/tracks[0].total);configured=true;}
       draw();
     });};
     const point=(track:Track,distance:number)=>{

@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import gsap from 'gsap';
   import FlowGlow from './FlowGlow.svelte';
-  let {mode='pulse',paused=false,shape='bulge',length='medium',speed='normal',oncycle}:{mode:'off'|'pulse'|'band'|'wave'|'comet';paused?:boolean;shape?:'trail'|'bulge'|'premium';length?:'short'|'medium'|'long';speed?:'slow'|'normal'|'fast';oncycle?:()=>void}=$props();
+  let {mode='pulse',paused=false,shape='bulge',length='medium',speed='normal',oncycle,layout='adaptive'}:{mode:'off'|'pulse'|'band'|'wave'|'comet';paused?:boolean;shape?:'trail'|'bulge'|'premium';length?:'short'|'medium'|'long';speed?:'slow'|'normal'|'fast';oncycle?:()=>void;layout?:'fixed'|'adaptive'}=$props();
   let hidden=$state(false);
+  let remeasure=()=>{};
+  $effect(()=>{layout;remeasure();});
   const trailSize=$derived(({short:12,medium:32,long:75})[length]);
   const travelTime=$derived(({slow:28,normal:18,fast:10})[speed]);
   type Point={x:number;y:number;spread:number};
@@ -22,11 +25,14 @@
     return d;
   }
   onMount(()=>{
-    let frame=0,active=true;
+    let frame=0,active=true,fixedWidth=0;
+    let displayed:Point[]=[];let approach:number|undefined;let tween:gsap.core.Tween|undefined;
     const visibility=()=>hidden=document.hidden;visibility();document.addEventListener('visibilitychange',visibility);
     const measure=()=>{
       frame=0;if(!active)return;
-      const w=document.documentElement.clientWidth,h=document.body.scrollHeight;
+      const w=document.documentElement.clientWidth;
+      if(layout==='fixed'&&fixedWidth===w)return;
+      const h=document.body.scrollHeight;
       const rect=(selector:string)=>{
         const e=document.querySelector<HTMLElement>(selector);
         if(!e || !e.getClientRects().length)return null;
@@ -49,23 +55,37 @@
         ];
       }else return;
       const contactApproachX=!order && card ? Math.min(w-10,card.right+(w<760?10:45)) : undefined;
-      const paths=Array.from({length:35},(_,i)=>{
-        const offset=(i-17)*(w<760?14:24);
-        return smooth(points.map(p=>({x:p.x+offset*p.spread,y:p.y})),contactApproachX===undefined?undefined:contactApproachX+offset*points[3].spread);
-      });
-      const coral=smooth(points.map(p=>({x:p.x,y:p.y})),contactApproachX);
-      if(JSON.stringify(paths)!==JSON.stringify(contours)){width=w;height=h;contours=paths;accent=coral;}
+      const render=(current:Point[],currentApproach:number|undefined)=>{
+        const paths=Array.from({length:35},(_,i)=>{
+          const offset=(i-17)*(w<760?14:24);
+          return smooth(current.map(p=>({x:p.x+offset*p.spread,y:p.y})),currentApproach===undefined?undefined:currentApproach+offset*current[3].spread);
+        });
+        width=w;height=h;contours=paths;accent=smooth(current.map(p=>({x:p.x,y:p.y})),currentApproach);
+      };
+      const changed=displayed.length!==points.length||displayed.some((p,i)=>Math.abs(p.x-points[i].x)>2||Math.abs(p.y-points[i].y)>2);
+      if(!changed){height=h;return;}
+      tween?.kill();
+      if(!displayed.length||displayed.length!==points.length||matchMedia('(prefers-reduced-motion: reduce)').matches){displayed=points;approach=contactApproachX;render(displayed,approach);return;}
+      const start=displayed.map(p=>({...p})),startApproach=approach??contactApproachX,progress={value:0};
+      tween=gsap.to(progress,{value:1,duration:.2,ease:'power2.out',onUpdate:()=>{
+        displayed=points.map((p,i)=>({x:start[i].x+(p.x-start[i].x)*progress.value,y:start[i].y+(p.y-start[i].y)*progress.value,spread:start[i].spread+(p.spread-start[i].spread)*progress.value}));
+        approach=contactApproachX===undefined?undefined:(startApproach??contactApproachX)+(contactApproachX-(startApproach??contactApproachX))*progress.value;
+        render(displayed,approach);
+      }});
+
     };
     const schedule=()=>{if(!frame&&active)frame=requestAnimationFrame(measure);};
+    remeasure=()=>{fixedWidth=0;schedule();};
     const observer=new ResizeObserver(schedule);
     observer.observe(document.body);
     const main=document.getElementById('main');if(main)observer.observe(main);
     window.addEventListener('resize',schedule);
-    void document.fonts.ready.then(schedule);schedule();
-    return()=>{document.removeEventListener('visibilitychange',visibility);active=false;observer.disconnect();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);};
+    void document.fonts.ready.then(()=>{fixedWidth=0;schedule();});schedule();
+    return()=>{document.removeEventListener('visibilitychange',visibility);active=false;tween?.kill();remeasure=()=>{};observer.disconnect();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);};
   });
 </script>
-<svg class="flow-background" viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false">
+<div class="flow-layer" aria-hidden="true">
+<svg class="flow-background" data-layout={layout} viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false">
   <g fill="none" stroke="#B5EE4B" stroke-width=".8" opacity=".115">{#each contours as path}<path d={path}/>{/each}</g>
   <path d={accent} fill="none" stroke="#FF5C77" stroke-width="1.1" opacity=".32"/>
   {#if mode!=='off'}
@@ -79,8 +99,10 @@
     {/key}
   {/if}
 </svg>
+</div>
 
 <style>
+ .flow-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1}.flow-layer>.flow-background{z-index:0}
  .glow-trails path{stroke:var(--glow);animation:travel var(--travel) linear infinite;animation-delay:var(--delay);stroke-dasharray:var(--trail) var(--gap);stroke-dashoffset:-65}
  .glow-halo{stroke-width:20;opacity:.105}.glow-soft{stroke-width:8;opacity:.30}.glow-core{stroke-width:2.6;opacity:1}
  .glow-trails[data-mode=band] .glow-halo{stroke-width:13;opacity:.055}.glow-trails[data-mode=band] .glow-soft{stroke-width:5;opacity:.2}.glow-trails[data-mode=band] .glow-core{stroke-width:2;opacity:.85}

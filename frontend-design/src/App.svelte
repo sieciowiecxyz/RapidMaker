@@ -11,7 +11,8 @@
   let glowShape=$state<'trail'|'bulge'|'premium'>('premium');
   let glowLength=$state<'short'|'medium'|'long'>('long');
   let glowSpeed=$state<'slow'|'normal'|'fast'>('slow');
-  let glowPreview=$state(false);
+  let glowPreview=$state(new URLSearchParams(location.search).get('background')==='compare');
+  let glowLayout=$state<'fixed'|'adaptive'>('adaptive');
   let pulseCycles=0;
   function nextGlowCycle(){
     if(glowPreview)return;
@@ -271,8 +272,8 @@
   }
 </script>
 
-<FlowBackground oncycle={nextGlowCycle} shape={glowShape} mode={glowMode} paused={glowPaused} length={glowLength} speed={glowSpeed}/>
-{#if glowPreview}<FlowGlowDemo bind:shape={glowShape} bind:mode={glowMode} bind:paused={glowPaused} bind:length={glowLength} bind:speed={glowSpeed}/>{/if}
+<FlowBackground layout={glowLayout} oncycle={nextGlowCycle} shape={glowShape} mode={glowMode} paused={glowPaused} length={glowLength} speed={glowSpeed}/>
+{#if glowPreview}<FlowGlowDemo bind:layout={glowLayout} bind:shape={glowShape} bind:mode={glowMode} bind:paused={glowPaused} bind:length={glowLength} bind:speed={glowSpeed}/>{/if}
 <div inert={transitioning} aria-busy={transitioning}>
 <a class="skip-link button button-primary" href={checkoutOpen?'#zamowienie':'#main'}>Przejdź do treści</a>
 <div class="prototype-bar">Propozycja nowej strony. Podgląd STL działa lokalnie. Pliki pozostają w przeglądarce, ceny są przykładowe.</div>
