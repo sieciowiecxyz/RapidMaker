@@ -1,0 +1,7 @@
+/* Fit the in-flow page height: the measured SVG must never enlarge its own scroll container. */
+body { position:relative; isolation:isolate; }
+.flow-background { position:absolute; top:0; left:0; display:block; width:100%; height:100%; pointer-events:none; z-index:-1; overflow:hidden; }
+:root:not([data-theme='light']) body { background-color:#090f0c; background-image:none; }
+:root[data-theme='light'] .flow-background { display:none; }
+:root:not([data-theme='light']) .header { border-bottom-color:#344538; }
+:root:not([data-theme='light']) .quote-card { background:#111a14; }

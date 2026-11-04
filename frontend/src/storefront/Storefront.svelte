@@ -4,10 +4,13 @@
   import './app.css';
   import './transitions.css';
   import './light.css';
+  import './coral.css';
+  import './print-background.css';
   import { apiFetch } from '../lib/http';
   import type { StlMesh } from './lib/stlParser';
   import { customColors } from './lib/colors';
   import { softValue } from './lib/motion';
+  import FlowBackground from './components/FlowBackground.svelte';
   import PrintScene from './components/PrintScene.svelte';
   import PrintTransition from './components/PrintTransition.svelte';
   import OrderPage from './components/OrderPage.svelte';
@@ -296,6 +299,7 @@
 
 </script>
 
+<FlowBackground/>
 <div inert={transitioning} aria-busy={transitioning}>
 <a class="skip-link button button-primary" href={checkoutOpen?'#zamowienie':'#main'}>Przejdź do treści</a>
 
@@ -329,7 +333,7 @@
 <main id="main" class="shell">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
-      <h1 id="hero-title"><span class="hero-word">Twój pomysł.</span><span class="hero-word hero-accent">Realna część.</span></h1>
+      <h1 id="hero-title"><span class="hero-word">Twój <span class="coral-highlight">pomysł.</span></span><span class="hero-word hero-accent">Realna część.</span></h1>
       <p class="intro"><strong class="intro-lead">Prototyp, część zamienna czy <span>krótka seria.</span></strong><span class="intro-detail">Wydrukujemy Twój model i pomożemy dobrać materiał do jego zadania.</span></p>
       <div class="capabilities"><span><IconCheck size={15} stroke={2} /> Druk FDM</span><span><IconCheck size={15} stroke={2} /> Projektowanie 3D</span><span><IconCheck size={15} stroke={2} /> Odbiór w Piasecznie</span></div>
     </div>
@@ -396,7 +400,7 @@
   </section>
 
   <section id="oferta" class="content-section" aria-labelledby="services-title">
-    <div class="section-head"><h2 id="services-title">Części, które mają zadanie.</h2><p>Od pierwszego prototypu po serię gotową do wykorzystania.</p></div>
+    <div class="section-head"><h2 id="services-title">Części, które mają zadanie.</h2></div>
     <div class="services"><div class="services-main service"><h3>Druk FDM i krótkie serie</h3><p>Prototypy, obudowy, uchwyty i części zamienne. Dobieramy materiał oraz sposób wykonania do zastosowania elementu.</p><div class="material-list"><span>PLA</span><span>PETG</span><span>ASA</span><span>TPU</span></div></div><div><div class="service"><h3>Projektowanie i skanowanie 3D</h3><p>Nie masz gotowego pliku? Opowiedz, co część ma robić. Pomożemy przygotować model i dostosować go do druku.</p></div><div class="service"><h3>Więcej technologii</h3><p>Projekty w MJF i SLA realizujemy przez partnerów. Skontaktuj się z nami, żeby ustalić odpowiedni proces.</p></div></div></div>
   </section>
 
