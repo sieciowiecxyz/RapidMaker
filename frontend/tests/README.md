@@ -17,3 +17,11 @@ Raporty JSON, screeny i diagnostyka są ignorowane przez Git i prywatne w tests/
 Dla konkretnej regresji: `python frontend/tests/run-integration.py --local-accounts security.spec.ts`, albo `--sandbox --client-totp panels.spec.ts`. Emailowy auth wymaga `--sandbox auth.spec.ts`; rejestracja `--sandbox --registration registration.spec.ts` (E2E_REGISTRATION_METHOD=password/passkey). `--local-accounts` nie ładuje sekretów dostawców. Cennik i dopuszczenie trzech rodzin materiałów w fixture dotyczą wyłącznie nowej bazy testowej.
 
 Inwentaryzacja: `node frontend/tests/inventory-controls.mjs > docs/e2e-controls.md`. Lista szablonów nie jest wynikiem testu ani obietnicą wszystkich kombinacji. Wartości dynamiczne i wyłączone funkcje są opisane w docs/e2e-*-inventory.md. Usunięto stare flows.spec.ts i shipping.spec.ts zależne od nieistniejącego logowania demonstracyjnego; ich aktualne zachowania zastępują realne configurator/models/boundaries/checkout/shipping-checkout/panels/journey oraz kontrakty operations. Nie przywracamy fikcyjnych danych, żeby stare scenariusze przechodziły.
+
+Korpus lokalny (opcjonalny, bez dostawców):
+```sh
+E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" \
+E2E_CORPUS_LIMIT=5 E2E_REPORT_NAME=corpus-first5 \
+python frontend/tests/run-integration.py corpus.spec.ts
+```
+Uruchamiaj z root projektu po buildzie. Limit 1–100; pominięcie zmiennej manifestu nie uruchamia korpusu w zwykłych zestawach. Test weryfikuje SHA/rozmiar, upload, prywatny GLB i cenę zmierzoną przez slicer (PLA, 1 sztuka). Cennik to jawny fixture nowej bazy, nie walidacja rentowności produkcji. Odrzucenie pliku ponad 32 MiB jest oczekiwane; limit 25 MiB dotyczy wygenerowanego GLB. Ręczna wycena z powodu gabarytu jest oznaczana `manual-quote`, nie stanowi dowodu automatycznej wyceny. Inne błędy powodują FAIL. Corpus pozostaje lokalny i ignorowany przez Git.

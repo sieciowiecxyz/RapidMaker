@@ -4,7 +4,7 @@
 !.env.example
 
 # Builds and dependencies
-**/target/
+**/target
 **/node_modules/
 **/dist/
 
@@ -21,3 +21,6 @@ frontend/test-results/
 .codex/
 .DS_Store
 *.log
+
+# Downloaded third-party models (local test corpus)
+/backend/test-models/makerworld

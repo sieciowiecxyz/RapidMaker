@@ -2163,6 +2163,7 @@ dependencies = [
  "gltf",
  "lib3mf",
  "ply-rs-bw",
+ "quick-xml",
  "serde_json",
  "tobj",
  "tracing",

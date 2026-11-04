@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 tracing.workspace = true
 gltf = { version = "1.4.1", features = ["import"] }
+quick-xml = "0.42"
 lib3mf = { version = "0.1.7", default-features = false }
 ply-rs-bw = "4.0.0"
 cxx = "1"

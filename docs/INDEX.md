@@ -78,3 +78,7 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 - [Checkout — kontrakt](checkout.md)
   - przeczytaj gdy: używasz adresów, dostawy lub płatności.
   - opis: trwały checkout, webhooki, odzyskiwanie prób i zwroty płatności.
+
+- [Testy rzeczywistych modeli i całej strony](plans/corpus-quality.md)
+  - przeczytaj gdy: kontynuujesz korpus i testy E2E.
+  - opis: aktywny cel, dowody i brakujące kroki.

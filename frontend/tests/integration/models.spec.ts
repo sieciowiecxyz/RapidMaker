@@ -208,3 +208,25 @@ test('multiple clients receive isolated results while costly conversions are bou
     await Promise.all(clients.map((client) => client.dispose()));
   }
 });
+
+test('geometry resource limits explain a rejection without calling the model malformed', async ({
+  page,
+}) => {
+  // A 16 MiB STL remains below upload bytes, but exceeds the expanded vertex budget.
+  const triangles = 333334;
+  const data = Buffer.alloc(84 + 50 * triangles);
+  data.writeUInt32LE(triangles, 80);
+  await page.goto('/wycena');
+  const uploaded = page.waitForResponse(
+    (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',
+  );
+  await page
+    .getByLabel('Dodaj modele STL, STEP lub 3MF')
+    .setInputFiles({ name: 'detailed.stl', mimeType: 'application/octet-stream', buffer: data });
+  const response = await uploaded;
+  expect(response.status()).toBe(422);
+  expect(await response.json()).toMatchObject({ code: 'model_resource_limit' });
+  await expect(
+    page.getByText('Model przekracza limit złożoności lub rozpakowanego pliku.', { exact: false }),
+  ).toBeVisible();
+});

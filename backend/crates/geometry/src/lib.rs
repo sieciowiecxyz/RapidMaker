@@ -849,11 +849,141 @@ fn scene_from_gltf(
     builder.finish()
 }
 
+// Bambu painting is slicer metadata, not geometry. Ignore only these known triangle
+// attributes; leave vertices, transforms and unknown attributes to the strict parser.
+fn geometry_xml(xml: &str) -> Result<Option<String>, PreviewError> {
+    if ![
+        "paint_supports",
+        "paint_seam",
+        "paint_color",
+        "mmu_segmentation",
+    ]
+    .iter()
+    .any(|attr| xml.contains(attr))
+    {
+        return Ok(None);
+    }
+    let mut changed = false;
+    use quick_xml::{Reader, Writer, events::Event};
+    let mut reader = Reader::from_str(xml);
+    let mut writer = Writer::new(Vec::with_capacity(xml.len()));
+    loop {
+        let event = reader
+            .read_event()
+            .map_err(|_| PreviewError::MalformedInput)?;
+        let empty = matches!(event, Event::Empty(_));
+        match event {
+            Event::Eof => break,
+            Event::Start(ref element) | Event::Empty(ref element)
+                if element.local_name().as_ref() == "triangle" =>
+            {
+                let mut cleaned = element.to_owned();
+                cleaned.clear_attributes();
+                for attr in element.attributes() {
+                    let attr = attr.map_err(|_| PreviewError::MalformedInput)?;
+                    if !matches!(
+                        attr.key.as_ref(),
+                        "paint_supports" | "paint_seam" | "paint_color" | "mmu_segmentation"
+                    ) {
+                        cleaned.push_attribute(attr);
+                    } else {
+                        changed = true;
+                    }
+                }
+                writer
+                    .write_event(if empty {
+                        Event::Empty(cleaned)
+                    } else {
+                        Event::Start(cleaned)
+                    })
+                    .map_err(|_| PreviewError::MalformedInput)?;
+            }
+            other => writer
+                .write_event(other)
+                .map_err(|_| PreviewError::MalformedInput)?,
+        }
+    }
+    if !changed {
+        return Ok(None);
+    }
+    String::from_utf8(writer.into_inner())
+        .map(Some)
+        .map_err(|_| PreviewError::MalformedInput)
+}
+
+// Preserve lib3mf's complete package validation after removing painting metadata.
+// Paths and expanded ZIP sizes have already passed validate_3mf_container.
+fn geometry_package<'a>(
+    input: &'a [u8],
+    limits: &ConversionLimits,
+    started: Instant,
+) -> Result<std::borrow::Cow<'a, [u8]>, PreviewError> {
+    use std::{borrow::Cow, io::Write};
+    let mut source =
+        zip::ZipArchive::new(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
+    let mut replacements = HashMap::new();
+    for index in 0..source.len() {
+        check_timeout(started, limits)?;
+        let mut entry = source
+            .by_index(index)
+            .map_err(|_| PreviewError::MalformedInput)?;
+        if entry
+            .name()
+            .map_err(|_| PreviewError::UnsafeContainer)?
+            .ends_with(".model")
+        {
+            let mut xml = String::new();
+            entry
+                .read_to_string(&mut xml)
+                .map_err(|_| PreviewError::MalformedInput)?;
+            if let Some(xml) = geometry_xml(&xml)? {
+                replacements.insert(index, xml);
+            }
+            check_timeout(started, limits)?;
+        }
+    }
+    if replacements.is_empty() {
+        return Ok(Cow::Borrowed(input));
+    }
+    let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for index in 0..source.len() {
+        check_timeout(started, limits)?;
+        let entry = source
+            .by_index(index)
+            .map_err(|_| PreviewError::MalformedInput)?;
+        if let Some(xml) = replacements.remove(&index) {
+            output
+                .start_file(
+                    entry
+                        .name()
+                        .map_err(|_| PreviewError::UnsafeContainer)?
+                        .as_ref(),
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .map_err(|_| PreviewError::MalformedInput)?;
+            output
+                .write_all(xml.as_bytes())
+                .map_err(|_| PreviewError::MalformedInput)?;
+        } else {
+            output
+                .raw_copy_file(entry)
+                .map_err(|_| PreviewError::MalformedInput)?;
+        }
+    }
+    check_timeout(started, limits)?;
+    output
+        .finish()
+        .map(|file| Cow::Owned(file.into_inner()))
+        .map_err(|_| PreviewError::MalformedInput)
+}
+
 fn scene_from_3mf(
     input: &[u8],
     limits: &ConversionLimits,
     started: Instant,
 ) -> Result<MeshScene, PreviewError> {
+    let normalized = geometry_package(input, limits, started)?;
+    let input = normalized.as_ref();
     let config =
         ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient);
     let model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
@@ -1667,11 +1797,75 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires a local real-world 3MF path"]
-    fn local_real_3mf() {
-        let input = std::fs::read(std::env::var("TEST_3MF_PATH").expect("TEST_3MF_PATH")).unwrap();
+    fn bambu_triangle_painting_preserves_geometry_and_rejects_unknown_attributes() {
+        for input in [
+            THREEMF_SIMPLE,
+            include_bytes!("../tests/fixtures/production_parts.3mf").as_slice(),
+        ] {
+            assert!(matches!(
+                geometry_package(input, &ConversionLimits::default(), Instant::now()).unwrap(),
+                std::borrow::Cow::Borrowed(_)
+            ));
+            let baseline = source_to_production(
+                "part.3mf",
+                input,
+                &ConversionLimits::default(),
+                &ThreeMfLimits::default(),
+            )
+            .unwrap();
+            for attribute in [
+                "paint_supports",
+                "paint_seam",
+                "paint_color",
+                "mmu_segmentation",
+                "unknown_geometry",
+            ] {
+                let mut source = zip::ZipArchive::new(Cursor::new(input)).unwrap();
+                let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+                for index in 0..source.len() {
+                    let mut entry = source.by_index(index).unwrap();
+                    let name = entry.name().unwrap().into_owned();
+                    if name.ends_with(".model") {
+                        let mut xml = String::new();
+                        entry.read_to_string(&mut xml).unwrap();
+                        let xml =
+                            xml.replace("<triangle ", &format!("<triangle {attribute}=\"01\" "));
+                        output
+                            .start_file(name, zip::write::SimpleFileOptions::default())
+                            .unwrap();
+                        output.write_all(xml.as_bytes()).unwrap();
+                    } else {
+                        output.raw_copy_file(entry).unwrap();
+                    }
+                }
+                let painted = output.finish().unwrap().into_inner();
+                let result = source_to_production(
+                    "part.3mf",
+                    &painted,
+                    &ConversionLimits::default(),
+                    &ThreeMfLimits::default(),
+                );
+                if attribute == "unknown_geometry" {
+                    assert!(result.is_err());
+                } else {
+                    let result = result.unwrap();
+                    assert_eq!(baseline.stl, result.stl);
+                    assert_eq!(baseline.glb, result.glb);
+                    assert_eq!(baseline.dimensions_mm, result.dimensions_mm);
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires TEST_MODEL_PATH (legacy TEST_3MF_PATH also accepted)"]
+    fn local_real_model() {
+        let path = std::env::var("TEST_MODEL_PATH")
+            .or_else(|_| std::env::var("TEST_3MF_PATH"))
+            .expect("TEST_MODEL_PATH");
+        let input = std::fs::read(&path).unwrap();
         let out = source_to_production(
-            "real.3mf",
+            &path,
             &input,
             &ConversionLimits::default(),
             &ThreeMfLimits::default(),

@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use rapidmaker_geometry::{
-    ConversionLimits, ThreeMfLimits, source_to_preview_glb, source_to_production,
+    ConversionLimits, PreviewError, ThreeMfLimits, source_to_preview_glb, source_to_production,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -275,10 +275,10 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
             .map_err(|_| "Model conversion timed out")?
             .map_err(|_| "Model conversion unavailable")?;
         if !status.success() {
-            return Err(if status.code() == Some(65) {
-                "Unsupported or invalid model geometry"
-            } else {
-                "Model conversion unavailable"
+            return Err(match status.code() {
+                Some(65) => "Unsupported or invalid model geometry",
+                Some(66) => "Model resource limit",
+                _ => "Model conversion unavailable",
             }
             .into());
         }
@@ -340,6 +340,19 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
     result
 }
 
+fn is_resource_limit(error: &PreviewError) -> bool {
+    matches!(
+        error,
+        PreviewError::InputTooLarge
+            | PreviewError::OutputTooLarge
+            | PreviewError::ParseTimeout
+            | PreviewError::TooManyVertices
+            | PreviewError::TooManyTriangles
+            | PreviewError::TooManyContainerEntries
+            | PreviewError::ContainerTooLarge
+    )
+}
+
 /// Called before Tokio starts, so parser panics/resource exhaustion stay in this child.
 pub fn worker() -> bool {
     let mut args = std::env::args();
@@ -351,6 +364,7 @@ pub fn worker() -> bool {
     ) {
         return false;
     }
+    let mut resource_limited = false;
     let result = args
         .next()
         .ok_or_else(|| "Missing model path".to_string())
@@ -371,7 +385,10 @@ pub fn worker() -> bool {
                     },
                     &ThreeMfLimits::default(),
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    resource_limited = is_resource_limit(&e);
+                    e.to_string()
+                })?;
                 let metadata = serde_json::to_vec(&PreparedModel {
                     dimensions_mm: output.dimensions_mm,
                 })
@@ -391,7 +408,7 @@ pub fn worker() -> bool {
         })
         .is_err()
     {
-        std::process::exit(65);
+        std::process::exit(if resource_limited { 66 } else { 65 });
     }
     true
 }
@@ -551,4 +568,33 @@ fn solid_volume(glb: &[u8], center: [f64; 3]) -> Option<f64> {
         }
     }
     (total_volume.is_finite() && total_volume > 0.0).then_some(total_volume)
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+    #[test]
+    fn resource_errors_are_distinct_from_invalid_or_unsafe_geometry() {
+        for error in [
+            PreviewError::InputTooLarge,
+            PreviewError::OutputTooLarge,
+            PreviewError::ParseTimeout,
+            PreviewError::TooManyVertices,
+            PreviewError::TooManyTriangles,
+            PreviewError::TooManyContainerEntries,
+            PreviewError::ContainerTooLarge,
+        ] {
+            assert!(is_resource_limit(&error));
+        }
+        for error in [
+            PreviewError::MalformedInput,
+            PreviewError::UnsafeContainer,
+            PreviewError::DuplicateContainerPath,
+            PreviewError::ExternalReferenceDisabled,
+            PreviewError::NonFiniteCoordinate,
+            PreviewError::EmptyMesh,
+        ] {
+            assert!(!is_resource_limit(&error));
+        }
+    }
 }

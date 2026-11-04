@@ -309,6 +309,11 @@ async fn upload(
                     StatusCode::TOO_MANY_REQUESTS,
                     "Trwa analiza innego modelu. Spróbuj za chwilę.",
                 )
+            } else if message == "Model resource limit" {
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({
+                    "code": "model_resource_limit",
+                    "message": "Model przekracza limit złożoności lub rozpakowanego pliku. Zmniejsz szczegółowość siatki lub wyeksportuj tylko potrzebne części i spróbuj ponownie."
+                })))
             } else if message == "Model conversion unavailable" {
                 error(
                     StatusCode::SERVICE_UNAVAILABLE,
