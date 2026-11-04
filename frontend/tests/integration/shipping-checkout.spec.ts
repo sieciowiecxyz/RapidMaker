@@ -57,7 +57,15 @@ for (const method of ['locker', 'courier'] as const) {
     await expect(page.locator('.embedded-contact')).toContainText('void@sieciowiec.xyz');
     const carriers = page.locator('input[name="carrier"]');
     await expect(carriers.first()).toBeVisible({ timeout: 45_000 });
+    await expect(
+      page.getByText('Analiza modelu jest wymagana do wyceny dostawy.', { exact: false }),
+    ).toHaveCount(0);
+    await expect(carriers.first().locator('..')).toHaveCSS('display', 'flex');
     for (let i = 0; i < (await carriers.count()); i++) {
+      // Finish scrolling before the native click; the authored page scrolls smoothly.
+      await carriers
+        .nth(i)
+        .evaluate((node) => node.scrollIntoView({ behavior: 'instant', block: 'center' }));
       await carriers.nth(i).check();
       await expect(carriers.nth(i)).toBeChecked();
     }

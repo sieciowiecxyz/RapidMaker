@@ -14,7 +14,7 @@ use tokio::sync::Semaphore;
 
 static BUSY: Semaphore = Semaphore::const_new(1);
 const PROFILES: &str = include_str!("../../../data/bambu/profiles.json");
-pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1-orient1-fit2";
+pub const PROFILE_VERSION: &str = "02.08.00.06-p1p-hardened-0.4-pei-supports1-orient1-fit2-cpu2";
 
 // Profile availability is separate from the operator's hardware approval.
 static MATERIAL_PROFILES: LazyLock<Result<BTreeMap<String, String>, String>> =
@@ -440,13 +440,46 @@ fn prepare_stl(bytes: &mut [u8]) -> Result<(), Error> {
     Ok(())
 }
 
+// Use a subset of the calling thread's allowed CPUs, including restricted hosts.
+// Limiting parallelism avoids exhausting the unchanged aggregate CPU budget in seconds.
+fn slicer_cpus(status: &str) -> Result<String, Error> {
+    let invalid = || Error::Failed("Slicer CPU affinity unavailable".into());
+    let list = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .ok_or_else(invalid)?
+        .trim();
+    let mut cpus = Vec::with_capacity(2);
+    for range in list.split(',') {
+        let (first, last) = range.split_once('-').unwrap_or((range, range));
+        let first = first.parse::<u32>().map_err(|_| invalid())?;
+        let last = last.parse::<u32>().map_err(|_| invalid())?;
+        if first > last {
+            return Err(invalid());
+        }
+        for cpu in first..=last {
+            cpus.push(cpu.to_string());
+            if cpus.len() == 2 {
+                return Ok(cpus.join(","));
+            }
+        }
+    }
+    if cpus.is_empty() {
+        Err(invalid())
+    } else {
+        Ok(cpus.join(","))
+    }
+}
+
 async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Error> {
     let out = workspace.0.join("out");
     if out.exists() {
         fs::remove_dir_all(&out)?;
     }
     fs::create_dir(&out)?;
-    let mut command = tokio::process::Command::new("/usr/bin/prlimit");
+    let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status")?)?;
+    let mut command = tokio::process::Command::new("/usr/bin/taskset");
+    command.args(["--cpu-list", &cpus, "/usr/bin/prlimit"]);
     command.args([
         "--as=4294967296",
         "--cpu=60",
@@ -784,6 +817,30 @@ mod tests {
             assert!(matches!(options.validate(), Err(Error::InvalidOptions)));
         }
     }
+    #[test]
+    fn cpu_affinity_stays_inside_the_allowed_set() {
+        for (allowed, expected) in [
+            ("0-31", "0,1"),
+            ("4,8-15", "4,8"),
+            ("8-9", "8,9"),
+            ("7", "7"),
+        ] {
+            assert_eq!(
+                slicer_cpus(&format!("Name: test\nCpus_allowed_list:\t{allowed}\n")).unwrap(),
+                expected
+            );
+        }
+        for invalid in [
+            "",
+            "Cpus_allowed_list:",
+            "Cpus_allowed_list: 5-2",
+            "Cpus_allowed_list: x",
+            "Cpus_allowed_list: 1-",
+        ] {
+            assert!(slicer_cpus(invalid).is_err());
+        }
+    }
+
     #[tokio::test]
     #[ignore = "Requires Bambu Studio/bubblewrap; optional SLICER_TEST_MODEL server-owned binary STL"]
     async fn real_model() {

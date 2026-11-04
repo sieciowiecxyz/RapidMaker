@@ -175,17 +175,19 @@
   });
   let validationAttempted = $state(false);
   const missingGeometry = $derived(
-    cart?.models.some((model) => {
-      const dimensions = model.analysis?.dimensions_mm;
-      const weight = model.analysis?.weight_g;
-      return (
-        !dimensions ||
-        dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
-        weight == null ||
-        !Number.isFinite(weight) ||
-        weight <= 0
-      );
-    }) ?? false,
+    cart?.quote?.checkout?.packing.status !== 'estimated' &&
+      (cart?.models.some((model) => {
+        const dimensions = model.analysis?.dimensions_mm;
+        const weight = model.analysis?.weight_g;
+        return (
+          !dimensions ||
+          dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
+          weight == null ||
+          !Number.isFinite(weight) ||
+          weight <= 0
+        );
+      }) ??
+        false),
   );
   const fieldErrors: Partial<Record<keyof Contact, string>> = $derived({
     ...(quoteFresh ? cart?.quote?.checkout?.field_errors : {}),
@@ -1041,7 +1043,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
   }
-  .embedded label {
+  .embedded label:not(.delivery-option):not(.checkbox) {
     display: grid;
     gap: 8px;
     font-size: 13px;
