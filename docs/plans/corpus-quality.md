@@ -15,30 +15,22 @@
 ## Review gate
 After each implementation step, request a GPT-6-Sol xhigh review across correctness, security/authorization, money integrity, resource limits, error handling, concurrency, test evidence, simplicity, maintainability and visual/contract compatibility. Resolve findings and request another review as needed; never fabricate a 10/10 score. A review score alone does not prove completion.
 
-## Progress
-- Branch `codex/corpus-quality`; detailed verified outcomes and remaining limits: [checkpoint report](../corpus-report.md).
-- Corpus41/100 (34 3MF,7 STL,41 distinct hashes). MakerWorld CAPTCHA is visible; user handoff requested and pending. No MakerWorld STEP yet.
-- Latest41-case run:15 measured prices,6 manual,5 expected413,15 resource-limit failures. No unclassified decode/proxy failures remain in this run;15 positive-pipeline assertions remain FAIL. Do not describe PASS totals as automatic prices.
-- Fixed known Bambu triangle metadata, slicer CPU parallelism (same budgets), actionable geometry errors, embedded delivery CSS/warning and EPIPE oversize status. Normal author style preserved.
-- Real auth/security/mail, checkout/shipping sandbox, partial/full refunds and selected desktop/mobile reviewed; report records exact scope. No production-profitability or all-assets claim.
-- Geometry21 PASS; slicer7 PASS plus native real model; build0errors/0warnings. Audits:Rust0 vulnerabilities/warnings; one underlying low development deepmerge advisory without upstream patch.
-- Sol xhigh reviews identify no blocker for targeted fixes but remain below10/10 for full scope. Keep full goal active.
-- Next: complete downloads when available, resolve corpus acceptance/policy for resource-bound models without hiding failures, verify production cost inputs, full asset and remaining E2E coverage.
-- Pricing checkpoint:6 Rust tests PASS with five fixed invoice oracles; real slicer q1/2/10/100/1000 physical and batch-aggregation checks PASS. API q1/10/1000 full-component oracle1 PASS7.9s. This is arithmetic under explicit fixture costs, not proven production profitability.
-- Configurator6 PASS130s (real local API, injected network faults only), including178 PLA shades/UI state, five families, advanced controls, desktop/mobile WebGL zoom pixels. Sol reviews preserve limits of evidence; full asset/auth/concurrency scope remains separate.
+## Current checkpoint
 
-- Runtime checkpoint: launcher+ELF SHA-256 persisted/deduplicated and checked by worker/cart. Fresh build and API regression1 PASS8.3s (fresh/missing/wrong/restored identity plus batch money oracles). Shared libraries/assets and in-flight update races remain outside this guard; restart after changes. Manual quote/iCloud/Stripe/email→chat journey1 PASS176.7s.
+Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior results: [report](../corpus-report.md).
 
-- Corpus preparation is now reproducible offline: prepare-corpus.py plus5 synthetic regressions and41-case read-only validation PASS. Exact vertex indexing preserves triangles while rescuing cases3/6(prices) and36(preview/manual); geometry23PASS, freshbuildPASS, full41 rerun26PASS15FAIL withzero new failures, realformatUI1PASS. Sol review8–9/10; large-container policy,100 downloads and broader coverage remain open.
+- **Downloads:**41/100 distinct sources/hashes;34 3MF,7 STL, no MakerWorld STEP. Originals and manifest remain ignored/private. Remaining59 require human MakerWorld CAPTCHA completion; no bypass.
+- **Corpus:**`corpus41-mirrors`,27 PASS/14 FAIL/203.2s;15 measured prices,7 manual quotes,5 expected413,14 resource rejections. No skips/flaky. Mirror support rescued case22 without changing any other outcome. Limits:512 ZIP entries,50 MiB expanded/25 MiB per entry,1M unique vertices/triangles; worker30s/2GiB. Do not mask resource failures as successful quotation.
+- **Prices:**fixed integer invoice oracles and real slicer quantities1/2/10/100/1000; API checks every money component and batch sums. Fixture purchase cost100 PLN net/kg proves arithmetic, not production profitability. Runtime fingerprint guards launcher/ELF, not all installed libraries/assets.
+- **Models/UI:**STL/STEP/3MF private GLB, exact indexing, mirror winding, preserved painting compatibility. Geometry28 PASS/1 optional ignored, Clippy/build PASS. Configurator6 PASS includes178 PLA shade choices and five families; this is not178 independent slicer runs.
+- **Appearance:**public/account routes56 captures, populated panels44, showcases20. Both themes/desktop/mobile, fonts/images/static errors/overflow and real canvas interaction checked within those scenarios. Manual screenshots inspected; no claim of every SVG or pixel-perfect future visual baselines. Piotr style preserved.
+- **Accounts/commerce:**real local MFA/ownership plus separate iCloud auth, registration(password/virtual passkey), manual offer/email→chat, Stripe sandbox payment/refunds and shipping runs recorded in report. Physical passkey and all possible provider/failure combinations are not proved.
+- **Combined core:**source `564977f`, `core.json`:30 PASS/0 FAIL/0 skipped/0 flaky,241.3s. Includes current label/mirror/showcase changes, real local API/slicer/MFA and populated panels; external providers run separately.
+- **Reviews:**GPT-6-Sol xhigh after each implementation; actionable findings fixed, scores honest and still below10/10 for full scope. No review score replaces tests.
 
-- Visual checkpoint: public/account/admin theme reset reproduced and fixed through one small preference helper, noCSS redesign.5 realAPI/localMFA tests PASS38.2s:14 routevariants x2themes x2viewports=56screenshots; images/fonts/staticasseterrors/overflow, explicit headings, admin toggle/reload, deniedstoragefallback.4 screenshots manuallyviewed. Empty fixture panels only; populatedorder/dialog/Stripe and allSVG coverage remain open. Sol scopedreview8–9/10.
+## Next
 
-- Concurrent quote checkpoint:4guests/8requests→4ownedjobs/4snapshots, cache reuse, real runningworker + responsivecatalog, foreign completed matchingcheckout409/owned exactmoney200. Focused1PASS3.4s; counts scoped to own validatedmodelIDs. Wholecore27PASS195.9s after dedicated negativeTOTPfixture; latest oracle edits targeted-retested only. UniquevertexlimitUI fixture corrected/PASS. New concurrency+visual suites registered in core. Sol8–9/10, no productionauth/visual changes.
-
-- Populated/registration checkpoint: real iCloud firstpassword+virtualpasskey1PASS each; unpaidmanualorder+chat/privateGLB2themes2widths1PASS10s/44captures. Fixedone statuscontrast1.32→6.66light/13.38dark throughsharedtoken, no layoutredesign. Fullcore28PASS245.1s. RunnerTERMcleanupfaults addressed and manuallyinjected; finalcleanuprevision normal1PASS1.3s (fullcoreprecededlastcleanup tweak). Sol7–9 scoped, no blocker; readable material/colorlabels completed in nextcheckpoint.
-
-- Order-label checkpoint: trusted snapshotmaterial/color names forautomatic/manual quotes, requestedcolorpreserved, legacycurrentcatalogfallback andmissingcatalogIDfallback. UItextonly/controlledswatches, physicalIDs/options/prices/fingerprintsunchanged.3 real integration PASS27s incllegacy/missingcatalog/customcolor/automaticbatchmoney;2 helper/CSV testsPASS. Rust+frontendbuildPASS, two screenshots inspected. Sol8–9/money10, no remaining scopedfindings; not a new fullcore run.
-
-- Mirror checkpoint: private 3MF normalization preserves original transforms and corrects winding after existing package validation. Entry cap512; other caps unchanged. Geometry28 PASS/1 optional ignored, Clippy/API build PASS; real case22 private GLB/manual quote1 PASS10.1s. Full41:27 PASS/14 FAIL203.2s,15 prices/7 manual/5 expected413/14 resource rejections; only case22 changed. Sol xhigh: two P2 fixed, no further established regression, scores7–8/N/A. No10/10 claim. Downloads remain41/100 pending human MakerWorld CAPTCHA.
-
-- Showcase checkpoint: 2 PASS/8.7s,20 views across five procedural samples, both themes and widths1440/390. Real canvas pixels distinguish nonblank/changed geometry; normal screenshots inspected for all five intended shapes. Fonts/images/static errors/pageerrors/overflow checked. Registered in core; no new full-core run, product/style unchanged. Sol8–9/N/A, no remaining scoped findings. Exact future shape matching has no golden baseline.
+1. Complete100 source downloads once CAPTCHA is cleared; extend manifest and rerun corpus without fabricating formats, dropping difficult cases or hiding failures.
+2. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.
+3. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
+4. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.
