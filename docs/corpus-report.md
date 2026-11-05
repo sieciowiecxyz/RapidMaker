@@ -110,3 +110,9 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 - Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, opłacone zamówienia/dialogi we wszystkich stanach, wszystkie grafiki/SVG i większe obciążenie. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.
+
+## Modele pokazowe — rzeczywisty obraz WebGL
+
+`showcase-current.json`: **2 PASS/8,7s**, bez pominięć/flaky; pięć autorskich obiektów × dwa motywy × desktop1440/mobilny390px =20 widoków. Sprawdza wybór materiału, podpis, prawdziwy kontekst WebGL, niepustą i różną sylwetkę każdego modelu, obrazy/fonty, błędy skryptów/zasobów i szerokość strony. Maska powstaje ze zrzutu płótna; magentowe tło wyklucza przezroczystość/cień i napisy. Oczekiwanie na piksele zapobiega ocenie poprzedniej klatki. Osobne20 zrzutów zachowuje normalny wygląd strony. Ręcznie obejrzano wszystkie pięć kształtów na reprezentatywnych zrzutach, w tym mobilny TPU.
+
+Test zarejestrowany w `core`; pełny zestaw po jego dodaniu **NOT RUN**. Nie zmieniono kodu produktu ani stylu. To kontrola renderowania i ręczna ocena kształtów, nie automatyczne porównanie ze wzorcowymi PNG; inny, lecz różny obiekt może spełnić asercję sylwetki. Sol xhigh: brak pozostałych ustalonych uwag, oceny8–9/N/A, bez deklaracji10/10.
