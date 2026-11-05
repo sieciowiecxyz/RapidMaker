@@ -20,7 +20,7 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior results: [report](../corpus-report.md).
 
 - **Downloads:**41/100 distinct sources/hashes;34 3MF,7 STL, no MakerWorld STEP. Originals and manifest remain ignored/private. Remaining59 require human MakerWorld CAPTCHA completion; no bypass.
-- **Corpus:**`corpus41-total64`,29 PASS/12 FAIL/221.2s;15 measured prices,9 manual quotes,5 expected413,12 resource rejections. No skips/flaky. Mirror support rescued case22, entry32 MiB rescued case25, total64 MiB rescued case5. Latest run changes only case5. Limits:512 ZIP entries,64 MiB expanded/32 MiB per entry,1M unique vertices/triangles; worker30s/2GiB unchanged. Do not mask resource failures as successful quotation.
+- **Corpus:**`corpus41-entry64`,30 PASS/11 FAIL/262.2s;16 measured prices,9 manual quotes,5 expected413,11 resource rejections. No skips/flaky. Latest run changes only case9 to measured price; earlier fixes rescued5/22/25. Limits:512 ZIP entries,64 MiB expanded/per entry,1M unique vertices/triangles; worker30s/2GiB unchanged. Do not mask resource failures as successful quotation. A separate bounded192MiB diagnostic of the preceding12 failures identified topology/metadata/triangle/time barriers;192MiB is NOT application policy.
 - **Prices:**fixed integer invoice oracles and real slicer quantities1/2/10/100/1000; API checks every money component and batch sums. Fixture purchase cost100 PLN net/kg proves arithmetic, not production profitability. Runtime fingerprint guards launcher/ELF, not all installed libraries/assets.
 - **Models/UI:**STL/STEP/3MF private GLB, exact indexing, mirror winding, preserved painting compatibility. Geometry29 PASS/1 optional ignored, Clippy/build PASS. Configurator6 PASS includes178 PLA shade choices and five families; this is not178 independent slicer runs.
 - **Appearance:**public/account routes56 captures, populated panels44, showcases20. Both themes/desktop/mobile, fonts/images/static errors/overflow and real canvas interaction checked within those scenarios. Manual screenshots inspected; no claim of every SVG or pixel-perfect future visual baselines. Piotr style preserved.
@@ -34,5 +34,6 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 
 1. Complete100 source downloads once CAPTCHA is cleared; extend manifest and rerun corpus without fabricating formats, dropping difficult cases or hiding failures.
 2. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.
-3. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
-4. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.
+3. Verify newly admitted complex3MF previews through actual UI upload and rendered pixels, beyond API/GLB-header checks.
+4. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
+5. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.

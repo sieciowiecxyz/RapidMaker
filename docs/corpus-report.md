@@ -4,22 +4,23 @@ Cel nadal aktywny. Pobrano **41/100** różnych projektów MakerWorld: 34 × 3MF
 
 ## Rzeczywisty korpus
 
-`corpus41-total64`: 41 przypadków,221,2s, bez pominięć i flaky. Porównanie z `corpus41-entry32`: poprawiony przypadek5, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki22 i25.
+`corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.
 
 | Wynik | Liczba | Co potwierdza |
 | --- | ---: | --- |
-| Automatyczna cena | 15 | Upload, GLB, prawdziwy slicer, dodatnie pomiary i całkowitoliczbowe koszty |
+| Automatyczna cena | 16 | Upload, GLB, prawdziwy slicer, dodatnie pomiary i całkowitoliczbowe koszty |
 | Ręczna wycena | 9 | Podgląd działa; gabaryt przekracza politykę automatycznej wyceny/P1P |
 | Za duży upload | 5 | Prawidłowe HTTP 413 powyżej 32 MiB |
-| Limit geometrii | 12 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
+| Limit geometrii | 11 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
 
-Runner zwrócił **29 PASS / 12 FAIL**, nie „41 działa”. Dwanaście testów nadal oczekuje obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 64 MiB łącznie / 32 MiB wpis / 512 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
+Runner zwrócił **30 PASS / 11 FAIL**, nie „41 działa”. Jedenaście testów nadal oczekuje obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 64 MiB łącznie / 64 MiB wpis / 512 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
 
 Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 17 limitów, 3 błędy proxy oraz 2 niewyjaśnione odrzucenia parsera. Model 2 otrzymuje **wycenę ręczną**, nie automatyczną cenę.
 
 ## Poprawki i dowody
 
-- Łączny limit rozpakowanego3MF50→64 MiB; wpis32 MiB,512 wpisów oraz siatka/wyjście/RAM/czas bez zmian. Model5 zawiera około48 MiB geometrii i dodatkowy PDF; żadnego elementu nie usunięto. Upload/GLB/ręczna wycena przechodzą w9,8s; cały projekt ma1163×864×91mm. Izolowana próba diagnostyczna:9,35s/około183 MiB peak RSS,312275 wierzchołków/637320 trójkątów; to nie pomiar RAM API ani automatyczna cena. Granice rzeczywistych ZIP:32 MiB i32 MiB+1 na wpis,64 MiB i64 MiB+1 łącznie, z unikalnymi nazwami. Geometria29 PASS/1 opcjonalny ignored, fmt/Clippy/build PASS. Pełne41 jak wyżej; poza modelem5 brak zmiany wyników. Większy dopuszczony rozmiar może zwiększyć pracę parsera; limity procesu nadal obowiązują.
+- Limit pojedynczego wpisu32→64 MiB przy niezmienionych64 MiB łącznie. Model9 (około49,4 MiB jeden wpis/50,9 MiB łącznie,98×100×54mm) przechodzi upload, prywatny GLB i rzeczywisty slicer z rachunkiem kosztów: osobno1 PASS35,2s, potem PASS w całym korpusie. Granice ZIP:64 MiB,64 MiB+1 oraz32+32 MiB i dodatkowy1 bajt. Geometria29 PASS/1 opcjonalny ignored, fmt/Clippy/build PASS. Pozostałe limity i walidatory bez zmian; nie dopuszczono diagnostycznych192 MiB. Duży pojedynczy XML może zwiększać chwilową pracę parsera; proces nadal ma2 GiB/25s CPU/30s wall. Pełne41 jak wyżej; zmienił się tylko model9. Sprawdzenie rzeczywistego dużego podglądu przez formularz UI pozostaje oddzielnym krokiem.
+- Poprzedni etap: łączny limit rozpakowanego3MF50→64 MiB; wpis32 MiB,512 wpisów oraz siatka/wyjście/RAM/czas bez zmian. Model5 zawiera około48 MiB geometrii i dodatkowy PDF; żadnego elementu nie usunięto. Upload/GLB/ręczna wycena przechodzą w9,8s; cały projekt ma1163×864×91mm. Izolowana próba diagnostyczna:9,35s/około183 MiB peak RSS,312275 wierzchołków/637320 trójkątów; to nie pomiar RAM API ani automatyczna cena. Granice rzeczywistych ZIP:32 MiB i32 MiB+1 na wpis,64 MiB i64 MiB+1 łącznie, z unikalnymi nazwami. Geometria29 PASS/1 opcjonalny ignored, fmt/Clippy/build PASS. Tamten przebieg miał29 PASS/12 FAIL; zmienił się wyłącznie model5. Większy dopuszczony rozmiar może zwiększyć pracę parsera; limity procesu nadal obowiązują.
 - Poprzedni etap: limit pojedynczego wpisu25→32 MiB przy ówczesnym limicie łącznym50 MiB uratował model25 (43,9 MiB łącznie/28,7 MiB jeden wpis). Upload/GLB/ręczna wycena przechodzą w13s. Izolowana próba:12,7s/około157 MiB peak RSS,248333 wierzchołki/497026 trójkątów,464×534×12mm. Była to ręczna wycena; poprzedni korpus miał28 PASS/13 FAIL.
 - Odbicia w 3MF: przypadek22 ma434 wpisy i lustrzaną transformację odrzucaną przez lib3mf. Prywatna kopia normalizuje jej wyznacznik do walidacji, sprawdza dopasowanie i przywraca dokładną macierz; wynikowe odbicie odwraca orientację trójkątów. Oryginał niezmieniony. Limit wpisów256→512; bajty, siatka, RAM i czas bez zmian. Root przechodzi dotychczasową walidację pakietu; części podrzędne zachowują wcześniejszy parser XML. Normalizacja ma kontrole czasu i tworzy kopię XML tylko przy zmianie. Geometria**28 PASS/1 opcjonalny ignored**, Clippy/build PASS; testy pojedynczego/podwójnego odbicia, orientacji/objętości/współrzędnych, małej skali, błędnych macierzy, dopasowania i granicy512/513. Rzeczywisty upload/GLB/ręczna wycena**1 PASS10,1s**; pełne41 jak wyżej. Model obejmuje cały projekt około801×559×35mm, więc nie uzyskał automatycznej ceny. Sol xhigh: dwie uwagi poprawione, brak dalszej ustalonej regresji; oceny7–8/10, część kategorii N/A. Nie oznacza10/10 ani kompletnej walidacji wszystkich części 3MF.
 - Bambu `paint_*`/`face_property`: pomijane tylko jako ustawienia trójkątów w kopii geometrycznej. Wierzchołki, transformacje, oryginał i pełna walidacja pakietu pozostają. 21 testów geometrii PASS; model 28 przechodzi do ręcznej wyceny, model 36 po indeksowaniu uzyskuje podgląd i ręczną wycenę. Znaczenie pól sprawdzono w [źródle Bambu v02.08.02.61](https://github.com/bambulab/BambuStudio/blob/v02.08.02.61/src/libslic3r/Format/bbs_3mf.cpp).
@@ -129,3 +130,17 @@ Test zarejestrowany w `core`; po jego dodaniu cały aktualny zestaw przeszedł30
 Źródło pierwotnego przebiegu `70c3bae`: `sandbox.json` **7 PASS/2 FAIL/136,9s**, bez pominięć/flaky. Przeszły: zamknięcie nieopłaconej płatności przed usunięciem uploadu, opłacony odbiór/paczkomat/kurier, oferta Furgonetki i jej ponowne użycie, panele/pliki/chat/produkcja/zwroty częściowe i pełne/odmowa nadmiernego zwrotu oraz edycje katalogu/cennika. Oba FAIL zatrzymały się na kliknięciu DHL podczas płynnego przewijania.
 
 Test logistyczny kończy teraz przewijanie przez `scrollIntoView(instant)`, potem wykonuje zwykłe `.check()` i sprawdza zaznaczenie; bez force/retry/ręcznego ustawiania checked i zmian kodu produktu. Późniejszy przebieg po tej poprawce testu, `logistics-current.json`: **2 PASS/73,5s**, bez pominięć/flaky i adnotacji blokady dostawcy. DHL/Furgonetka sandbox: opłacone zamówienia, produkcja/QC, potwierdzenie paczek/kosztu, nadanie, PDF, udany podjazd i anulowanie; osobne zamówienie ma tracking i status shipped po przekazaniu. Nie dowodzi rzeczywistego odbioru/doręczenia ani działania podjazdów DPD. To wcześniejsze7 PASS + późniejsze2 PASS; **pełnych9 po poprawce NOT RUN**. Sol xhigh: brak ustalonych uwag, prostota10, pozostałe właściwe kategorie9/N/A.
+
+## Diagnoza pozostałych dużych projektów
+
+Na źródle `fc52df5` wykonano osobne próby12 przypadków w kopii diagnostycznej: limit ZIP192/192 MiB, nie ustawienia aplikacji. Nadal2 GiB RAM,25s CPU/30s wall,1 mln wierzchołków/trójkątów,GLB25 MiB; kolejno, bez pomijania walidacji. Wszystkie hashe zgodne z manifestem.
+
+| Przypadki | Wynik diagnostyczny |
+| --- | --- |
+| 7,9,13,31,38 | Konwersja działa; czasy9,6–24,8s, RAM169–255 MiB. Część jest blisko limitu czasu; nie oznacza dopuszczenia wszystkich w API. |
+| 19,20,39,40 | `TooManyTriangles`; nie zwiększono limitu siatki. |
+| 14 | lib3mf odrzuca krawędź niemanifoldową (`InvalidModel/E3001`). |
+| 32 | lib3mf odrzuca niezadeklarowany prefiks przestrzeni nazw metadanych (`InvalidXml/E2003`); to nie dowód wadliwych trójkątów. |
+| 24 | Exit137 po25,15s; przyczyna sygnału niepotwierdzona, bez klasyfikowania jako OOM/błędna geometria. |
+
+Próby używały debug build. Nie przeniesiono limitu192 MiB do aplikacji. Dane szczegółowe pozostają prywatne; powyższe wyniki opisują diagnostykę, nie aktualne wyniki produkcyjnej ścieżki korpusu.

@@ -51,7 +51,7 @@ impl Default for ThreeMfLimits {
         Self {
             max_entry_count: 512,
             max_uncompressed_bytes: 64 * 1024 * 1024,
-            max_entry_bytes: 32 * 1024 * 1024,
+            max_entry_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -1942,8 +1942,8 @@ mod tests {
         let mib = 1024 * 1024;
         let limits = ThreeMfLimits::default();
         for (sizes, accepted) in [
-            (vec![32 * mib], true),
-            (vec![32 * mib + 1], false),
+            (vec![64 * mib], true),
+            (vec![64 * mib + 1], false),
             (vec![32 * mib, 32 * mib], true),
             (vec![32 * mib, 32 * mib, 1], false),
         ] {
