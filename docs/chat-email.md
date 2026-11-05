@@ -1,6 +1,6 @@
 # Rozmowa zamówienia: strona i email
 
-Status: CH0–CH4 PASS lokalnie, 2026-10-24. SMTP/IMAP i historia są zaimplementowane. Bez frontendu, WebSocketów, załączników i nowego brokera.
+Status: CH0–CH4 wdrożone; frontend klienta/admina, SMTP/IMAP i wspólna historia działają lokalnie. Rzeczywisty przepływ email → chat: [aktualny raport](corpus-report.md). Bez WebSocketów, załączników i nowego brokera.
 
 ## Cel i punkt wyjścia
 

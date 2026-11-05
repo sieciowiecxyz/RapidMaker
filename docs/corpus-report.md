@@ -2,6 +2,12 @@
 
 Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
+## Bieżąca regresja całości — HEAD97c10dd
+
+`core.json`: **31 PASS/237,4s**,0 FAIL/skipped/flaky — realne API/DB/parser/slicer, wyceny i koszyk, współbieżność, własność/retencja, konfigurator, motywy/zasoby/przykłady, panele z danymi i ustawienia bezpieczeństwa. `contracts.json`: **21 PASS/5,7s**,0 FAIL/skipped/flaky — osobny przebieg kontrolowanych kontraktów UI/narzędzi. Nie jest to jeden wspólny52-testowy run ani nowe potwierdzenie Stripe/Furgonetki/iCloud; aktualne regresje dostawców mają własne wpisy niżej. Oba przebiegi wykonano po zmianach zwrotów/emaili/lokalnych potwierdzeń i usunięciu martwej makiety.
+
+Uaktualniono checkpoint i sprzeczne historyczne opisy w email/chat/checkout: interfejsy i odpowiedzi email nie są już makietami, sandbox obejmuje zwroty i logistykę. Sol xhigh zweryfikował źródła liczb i wskazał te rozbieżności; zachowano pełny zakres obrazów/przykładów i klikalnych przepływów. Roboczy audyt całego celu nadal8–9/10 (zasoby7), nie żądane10/10; siedem nieobsłużonych modeli pozostaje jawne.
+
 ## Aktualne całe41 — limit96 MiB
 
 `corpus41-96.json` na `23ecfbc` (zmiany testu wizualnego nie dotyczą tego przebiegu): **34 PASS / 7 FAIL**,419,5s,0 skipped/flaky. Bez zmiany asercji201 dla nieobsługiwanych modeli.

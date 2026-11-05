@@ -88,4 +88,4 @@ python backend/run.py --checkout-close UUID_PROBY
 
 Pierwsze polecenie odczytuje i uzgadnia znaną płatność. Drugie odzyskuje referencję po utracie odpowiedzi: Stripe musi potwierdzić metadata, kwotę i walutę. Trzecie zamyka otwarty Hosted Checkout i zapisuje potwierdzone wygaśnięcie; nie tworzy nowej płatności. Dawny PaymentIntent anuluj w Stripe i uzgodnij pierwszym poleceniem. Nie oznaczaj `unknown` jako nieopłaconego ręcznie w SQL.
 
-Testy lokalne nie obejmują Stripe live, publicznego TLS/proxy, refundacji ani nadawania paczek. Pakowanie pozostaje ostrożnym szacunkiem wymagającym kalibracji; samo pole volume nie dowodzi fizycznego dopasowania. Pełny przebieg sandbox sprawdzamy przez API/Stripe CLI, bez pisania strony.
+Testy lokalne obejmują frontend/API, Stripe test, częściowe/pełne/równoległe zwroty oraz Furgonetkę sandbox: wycenę, nadanie, PDF/tracking, podjazd i anulowanie; dokładne przebiegi/ograniczenia: [raport](corpus-report.md). Nie obejmują Stripe live ani publicznego TLS/proxy i fizycznego przewozu. Pakowanie pozostaje ostrożnym szacunkiem wymagającym kalibracji; samo volume nie dowodzi fizycznego dopasowania.

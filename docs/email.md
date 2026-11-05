@@ -83,15 +83,15 @@ Dwa pola przy koncie: `email_order_updates` i `email_chat_messages`, domyślnie 
 | Zmiana statusu realizacji | Właściciel zamówienia | Tak |
 | Nowa wiadomość w rozmowie | Drugi uprawniony uczestnik | Tak, klient |
 
-Mail o rozmowie zawiera krótkie powiadomienie i link do panelu, bez treści prywatnego chatu. Link wymaga sesji oraz sprawdzenia własności, nie działa jako token dostępu. Admin odpowiada w panelu; `Reply-To` prowadzi na obsługiwaną skrzynkę, odpowiedź email nie trafia automatycznie do rozmowy. Dla gościa utrwal kontakt i preferencję statusów przy zamówieniu, bez tworzenia konta; dostęp do szczegółów zależy od mechanizmu własności zamówienia.
+Email o rozmowie kopiuje nową wiadomość, nie całą historię, i zawiera link do chronionego panelu. Link wymaga sesji oraz sprawdzenia własności, nie działa jako token dostępu. Klient/operator mogą odpowiedzieć w panelu lub emailowo; IMAP przyjmuje odpowiedź po sprawdzeniu podpisanej referencji, uczestnictwa i ograniczeń MIME. Szczegóły: [chat-email.md](chat-email.md). Dla gościa utrwal kontakt i preferencję statusów przy zamówieniu, bez tworzenia konta; dostęp do szczegółów zależy od mechanizmu własności zamówienia.
 
 Gotowe gdy: klient może wyłączyć opcjonalne wiadomości, nadal otrzymuje kod/potwierdzenie, obcy użytkownik nie zmienia preferencji ani nie otwiera cudzej rozmowy.
 
 ## Warunki i późniejszy zakres
 
-- E1–E4 działają w backendzie. Widoki kont/chat/preferences nadal są mockami; UI oraz produkcyjne webhooki wymagają podłączenia; backend auth/passkey i własność plików przez konto są już wdrożone. API nie wysyła wiadomości z frontendowych mocków.
+- E1–E4, konta/chat/preferencje i ich frontend korzystają z rzeczywistego backendu. Realne iCloud MFA, odpowiedź email → chat oraz powiadomienie o potwierdzonym zwrocie sprawdzono lokalnie; źródła i zakres: [raport](corpus-report.md). Nie oznacza to wdrożenia produkcyjnego.
 - Przed wysyłką do klientów sprawdzić uprawnienie `From`, odbiór na zewnętrznej skrzynce, SPF/DKIM/DMARC domeny oraz aktualne limity iCloud. Duży ruch może wymagać dostawcy transakcyjnego; nie budujemy teraz abstrakcji na zapas.
-- IMAP i odpowiedzi email → chat później: korelacja wątków, uwierzytelnienie nadawcy, deduplikacja, limity MIME i ochrona przed pętlami. Nagłówek `From` sam nie wystarcza do uprawnień.
-- Przy implementacji: fmt, Clippy i testy zmienionych crate’ów, bez pełnego E2E i testerów-subagentów. Zmierz Rust LOC przed/po, osobno produkcja/testy, jeśli narzędzie pozwala; nie deklaruj PASS bez wykonania.
+- IMAP i odpowiedzi email → chat działają: podpisana korelacja, aktualne uprawnienia, deduplikacja i limity MIME. Nagłówek `From` sam nie wystarcza do uprawnień.
+- Weryfikacja: fmt/Clippy i celowane testy; rzeczywiste E2E zgodnie z aktywnym planem celu. Nie deklaruj PASS bez wykonania.
 
 Źródła integracji: [iCloud — konfiguracja SMTP](https://support.apple.com/en-us/102525), [lettre — transport i features](https://docs.rs/lettre/latest/lettre/). Limity workera i retencja powyżej są decyzjami projektu, do dostrojenia.
