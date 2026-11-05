@@ -68,6 +68,14 @@ Dowody: notifications13 PASS, storage7 szybkich PASS (18 bazodanowych pominięty
 
 `frontend/src/lib/mock.ts`: **345 linii usuniętych,0 dodanych**. Analiza importów i zależności usunęła wyłącznie nieosiągalne fikcyjne auth/zamówienia/chat/refundy/wycenę. Wszystkie zachowane instrukcje są niezmienione; lokalny koszyk, snapshoty rachunku, opcje i modele pokazowe pozostają. `mock-pruning-smoke.json`:3 PASS38,1s0skip/flaky — rzeczywisty API/slicer/Stripe odbiór, nawigacja/motywy/przykłady, pięć rodzin i koło PLA. Svelte-check0/0, build/Prettier/diff-check PASS. Sol xhigh potwierdził brak aktywnych odwołań do usuniętych eksportów; oceny zakresu9/10, prostota10, współbieżność N/A. Nie jest to ocena całego produktu ani nowy pełny przebieg core.
 
+## Potwierdzenia zakupu bez lokalnej kopii zamówienia
+
+Usunięto zapisywanie prawdziwego zamówienia/kontaktu do makiety w `localStorage`. Gość i konto odczytują własne zamówienie z backendu; płatność nadal wymaga weryfikacji Stripe, test-mode i zgodnej kwoty. Stare `sandboxPayment` wpisy są filtrowane i przepisywane przy dostępnym zapisie; koszyk/opcje/demo pozostają. Szkic kontaktu nadal celowo w przypisanym użytkownikowi `sessionStorage`, minimalny receipt zawiera ID/pozycje/dostawę; bez danych karty/client_secret. Cache ma walidację struktury/limitów; uszkodzony jest ignorowany. Quote fingerprint sprawdzany przed i po utworzeniu płatności; koszyk czyści tylko potwierdzona płatność zgodnej wyceny.
+
+`server-receipt.json`:6 PASS51,5s — realne Stripe odbiór/kurier/punkt, kwoty/idempotencja, własność i fałszywy powrót; przed końcową walidacją cache. `server-receipt-final.json`:3 PASS48,8s po walidacji, w tym trzy uszkodzone cache. Końcowy `server-receipt-recovery.json`:1 PASS22,1s — ten sam realny zakup gościa, reload bez lokalnego receipt, purge starego kontaktu, ID/email z backendu, brak utraconego koszyka. Dodatkowa kontrolowana odpowiedź404 szczegółów dowodzi, że już zweryfikowana płatność nadal jest pokazana; to fault injection, nie test sztucznie postarzonego rekordu. Backend ogranicza szczegóły gościa do24h, podczas gdy potwierdzenie nadal wymaga jego właściciela. Inne błędy nie są ukrywane. Wszystkie przebiegi0skip/flaky; auto fixture wymaga braku pageerror.
+
+Svelte-check0/0, Vite/Prettier/diff-check PASS. Brak zmian szablonów/CSS. Sol xhigh przejrzał usuwanie lokalnego stanu, walidację i przypadek404; brak konkretnego blokera, oceny zakresu8–9/N/A, bez deklaracji10/10 produktu.
+
 ## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.

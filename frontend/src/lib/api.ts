@@ -2,7 +2,6 @@
 export {
   getPrintOptions,
   getDemoModel,
-  getCheckoutOrder,
   getCart,
   updateModel,
   removeModel,
@@ -346,27 +345,22 @@ export async function verifyCheckout(sessionId: string) {
     (sessionId.startsWith('pi_') ? '/api/checkout/intent/' : '/api/checkout/session/') +
       encodeURIComponent(sessionId),
   );
-  mock.applyCheckoutStatus(sessionId, status);
+  if (status.livemode !== false)
+    throw new Error('Potwierdzenie płatności nie pasuje do zamówienia.');
+  mock.applyCheckoutStatus(status);
   return status;
 }
-export async function startOrderCheckout(quote: Quote, contact: Contact, offerId: string) {
+export async function startOrderCheckout(quote: Quote, _contact: Contact, offerId: string) {
   const checkout = quote.checkout;
   const offer = checkout?.offers.find((offer) => offer.id === offerId);
   if (!checkout || !offer || quote.manual) throw new Error('Sprawdź wycenę i dostawę.');
+  mock.assertCurrentQuote(quote);
   const result = await startCheckout(checkout.id, offerId);
   const url = new URL(result.url);
   if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com')
     throw new Error('Nieprawidłowy adres płatności.');
-  const amountGrosze = checkout.print_grosze + checkout.packaging_grosze + offer.price_grosze;
-  const snapshot = { ...quote, delivery: offer.price_grosze / 100, total: amountGrosze / 100 };
-  const order = mock.saveSandboxOrder(snapshot, contact, {
-    sessionId: result.session_id,
-    url: result.url,
-    quoteId: checkout.id,
-    amountGrosze,
-    offer,
-  });
-  return { ...result, order: { ...order, id: result.order_id } };
+  mock.assertCurrentQuote(quote);
+  return { ...result, order: { id: result.order_id } };
 }
 export async function refreshOrderPayment(orderId: string): Promise<Order> {
   await request(`/api/account/orders/${encodeURIComponent(orderId)}/payment-status`, {});
@@ -400,10 +394,11 @@ export function getIntegrationStatus() {
 export function getStripeConfig() {
   return request<{ publishable_key: string | null }>('/api/checkout/config');
 }
-export async function startOrderIntent(quote: Quote, contact: Contact, offerId: string) {
+export async function startOrderIntent(quote: Quote, _contact: Contact, offerId: string) {
   const checkout = quote.checkout;
   const offer = checkout?.offers.find((o) => o.id === offerId);
   if (!checkout || !offer || quote.manual) throw new Error('Sprawdź wycenę i dostawę.');
+  mock.assertCurrentQuote(quote);
   const result = await request<{
     client_secret: string;
     payment_intent_id: string;
@@ -416,15 +411,8 @@ export async function startOrderIntent(quote: Quote, contact: Contact, offerId: 
   });
   const expected = checkout.print_grosze + checkout.packaging_grosze + offer.price_grosze;
   if (result.total_grosze !== expected) throw new Error('Kwota płatności różni się od wyceny.');
-  const snapshot = { ...quote, delivery: offer.price_grosze / 100, total: expected / 100 };
-  const order = mock.saveSandboxOrder(snapshot, contact, {
-    sessionId: result.payment_intent_id,
-    url: '',
-    quoteId: checkout.id,
-    amountGrosze: expected,
-    offer,
-  });
-  return { ...result, order: { ...order, id: result.order_id } };
+  mock.assertCurrentQuote(quote);
+  return { ...result, order: { id: result.order_id } };
 }
 
 export async function analyzeModel(file: File) {

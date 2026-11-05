@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import * as api from '../../lib/api';
+  import { ApiError } from '../../lib/http';
   import LegalNotice from '../../components/LegalNotice.svelte';
   import ParcelPlan from '../../components/ParcelPlan.svelte';
   import PaymentReturn from './PaymentReturn.svelte';
@@ -229,10 +230,50 @@
   onMount(() => {
     load();
   });
-  async function paymentOrder(payment: StripeStatus, reference: string) {
-    if (payment.order_id && (await api.getSession())) return api.getOrder(payment.order_id);
-    const saved = api.getCheckoutOrder(reference);
-    return saved && payment.order_id ? { ...saved, id: payment.order_id, ownerId: null } : saved;
+  async function paymentOrder(payment: StripeStatus) {
+    if (!payment.order_id) return null;
+    try {
+      return await api.getOrder(payment.order_id);
+    } catch (error) {
+      // Guest order details expire before the owned payment confirmation.
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+  function cachedReceipt() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(receiptKey) ?? 'null');
+      if (
+        !saved ||
+        typeof saved !== 'object' ||
+        Array.isArray(saved) ||
+        typeof saved.sessionId !== 'string' ||
+        saved.sessionId.length > 256 ||
+        !/^(pi_|cs_)[a-zA-Z0-9_]+$/.test(saved.sessionId) ||
+        !Array.isArray(saved.items) ||
+        saved.items.length > 10 ||
+        !saved.items.every(
+          (item: unknown) =>
+            item !== null &&
+            typeof item === 'object' &&
+            !Array.isArray(item) &&
+            'name' in item &&
+            typeof item.name === 'string' &&
+            item.name.length <= 1024 &&
+            'quantity' in item &&
+            typeof item.quantity === 'number' &&
+            Number.isSafeInteger(item.quantity) &&
+            item.quantity >= 1 &&
+            item.quantity <= 1000,
+        ) ||
+        typeof saved.delivery !== 'string' ||
+        saved.delivery.length > 1024
+      )
+        return null;
+      return saved;
+    } catch {
+      return null;
+    }
   }
   async function load() {
     busy = true;
@@ -240,8 +281,8 @@
     try {
       if (paymentReference) {
         stripePayment = await api.verifyCheckout(paymentReference);
-        order = await paymentOrder(stripePayment, paymentReference);
-        const saved = JSON.parse(sessionStorage.getItem(receiptKey) ?? 'null');
+        order = await paymentOrder(stripePayment);
+        const saved = cachedReceipt();
         if (saved?.sessionId === paymentReference) receipt = saved;
         return;
       }
@@ -264,9 +305,16 @@
       if (cart.models.length) await refreshQuote();
       if (routeParams.has('stripe_cancelled')) {
         paymentMessage = 'Płatność anulowana. Twoje modele i dane zostały zachowane.';
-        const receipt = JSON.parse(sessionStorage.getItem(receiptKey) ?? 'null');
-        if (receipt?.sessionId && api.getCheckoutOrder(receipt.sessionId))
-          resumeSession = receipt.sessionId;
+        const saved = cachedReceipt();
+        if (saved) {
+          try {
+            const payment = await api.verifyCheckout(saved.sessionId);
+            if (payment.status === 'unpaid' && payment.checkout_status === 'open')
+              resumeSession = saved.sessionId;
+          } catch {
+            // A stale receipt must not prevent using the current cart.
+          }
+        }
       }
     } catch (e) {
       error = (e as Error).message;
@@ -370,7 +418,7 @@
         );
         await stripeForm.confirm(intent.client_secret, contact.email, intent.payment_intent_id);
         stripePayment = await api.verifyCheckout(intent.payment_intent_id);
-        order = await paymentOrder(stripePayment, intent.payment_intent_id);
+        order = await paymentOrder(stripePayment);
         receipt = saved;
         stage = 4;
         return;

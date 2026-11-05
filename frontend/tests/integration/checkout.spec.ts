@@ -58,7 +58,8 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
       { timeout: 30_000 },
     )
     .toBe('paid');
-  expect(await (await page.request.get(`/api/checkout/intent/${intent}`)).json()).toMatchObject({
+  const status = await (await page.request.get(`/api/checkout/intent/${intent}`)).json();
+  expect(status).toMatchObject({
     status: 'paid',
     total_grosze: expected,
     currency: 'pln',
@@ -70,4 +71,82 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
   await expect(
     page.getByRole('link', { name: 'Utwórz konto i śledź zamówienie →', exact: true }),
   ).toBeVisible();
+  const orderId: string = status.order_id;
+  expect(orderId).toBeTruthy();
+  const localReceiptFree = (inject: boolean) =>
+    page.evaluate(
+      ({ inject, orderId }) => {
+        const key = 'rapidmaker.frontend.demo.v1';
+        const saved = localStorage.getItem(key);
+        if (!saved) throw new Error('Expected persisted checkout cart');
+        const state: { cart: { models: unknown[] }; orders: Record<string, unknown>[] } =
+          JSON.parse(saved);
+        const orders = JSON.stringify(state.orders);
+        const clean =
+          !state.cart.models.length &&
+          !state.orders.some((order) => order.sandboxPayment) &&
+          !orders.includes(orderId) &&
+          !/LEGACY-RECEIPT-CONTACT|void@sieciowiec.xyz|Test Rapidmaker|500600700/.test(orders);
+        if (inject) {
+          state.orders.push({
+            sandboxPayment: { sessionId: 'legacy' },
+            contact: { name: 'LEGACY-RECEIPT-CONTACT' },
+          });
+          localStorage.setItem(key, JSON.stringify(state));
+          sessionStorage.removeItem('rapidmaker.last-checkout');
+        }
+        return clean;
+      },
+      { inject, orderId },
+    );
+  expect(await localReceiptFree(true)).toBe(true);
+  const ownedOrder = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/account/orders/${orderId}`) && r.request().method() === 'GET',
+  );
+  await page.reload();
+  expect((await ownedOrder).status()).toBe(200);
+  await expect(
+    page.getByRole('heading', { name: 'Płatność potwierdzona.', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.payment-result')).toContainText(
+    `Zamówienie RM-${orderId.slice(0, 8).toUpperCase()}`,
+  );
+  await expect(
+    page.getByRole('link', { name: 'Utwórz konto i śledź zamówienie →', exact: true }),
+  ).toHaveAttribute('href', '/logowanie?register=1&email=void%40sieciowiec.xyz');
+  for (const cached of [
+    '{',
+    JSON.stringify({ sessionId: intent, items: null, delivery: 'invalid-cache' }),
+    JSON.stringify({
+      sessionId: intent,
+      items: [{ name: 'invalid-cache', quantity: 0 }],
+      delivery: 'invalid-cache',
+    }),
+  ]) {
+    await page.evaluate(
+      (value) => sessionStorage.setItem('rapidmaker.last-checkout', value),
+      cached,
+    );
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: 'Płatność potwierdzona.', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.payment-result')).toContainText(
+      `Zamówienie RM-${orderId.slice(0, 8).toUpperCase()}`,
+    );
+    await expect(page.getByText('invalid-cache', { exact: true })).toHaveCount(0);
+  }
+  // A real verified payment remains paid when private order details are unavailable.
+  await page.route(`**/api/account/orders/${orderId}`, (route) =>
+    route.fulfill({ status: 404, json: { message: 'Nie znaleziono zamówienia.' } }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Płatność potwierdzona.', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Nie udało się sprawdzić płatności', exact: true }),
+  ).toHaveCount(0);
+  await page.unroute(`**/api/account/orders/${orderId}`);
+  expect(await localReceiptFree(false)).toBe(true);
 });

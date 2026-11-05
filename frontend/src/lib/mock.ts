@@ -17,7 +17,6 @@ import type {
   Quote,
   Session,
   SystemSettings,
-  SandboxPayment,
   StripeStatus,
 } from './types';
 
@@ -390,11 +389,18 @@ function load(): State {
         }
         return item;
       };
+      const orders = restored.orders.filter((order) => !order.sandboxPayment);
+      const purgedOrders = orders.length !== restored.orders.length;
+      restored.orders = orders;
       restored.cart.models = restored.cart.models.map(normalize);
       restored.orders.forEach((order) => (order.models = order.models.map(normalize)));
-      if (migrated) {
-        restored.cart.quote = null;
-        localStorage.setItem(KEY, JSON.stringify(restored));
+      if (migrated) restored.cart.quote = null;
+      if (migrated || purgedOrders) {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(restored));
+        } catch {
+          /* Keep the restored cart when browser storage is read-only. */
+        }
       }
       return restored;
     }
@@ -405,6 +411,7 @@ function load(): State {
 }
 let state = load();
 function save() {
+  state.orders = state.orders.filter((order) => !order.sandboxPayment);
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
@@ -430,20 +437,10 @@ function findOrder(orderId: string, guest = false) {
   if (
     state.session?.role === 'admin' ||
     (state.session && order.ownerId === state.session.id) ||
-    (guest &&
-      !order.ownerId &&
-      (state.cart.quote?.id === order.quote.id || hasCheckoutReceipt(order)))
+    (guest && !order.ownerId && state.cart.quote?.id === order.quote.id)
   )
     return order;
   throw new Error('Nie masz dostępu do tego zamówienia w demonstracji.');
-}
-function hasCheckoutReceipt(order: Order) {
-  try {
-    const receipt = JSON.parse(sessionStorage.getItem('rapidmaker.last-checkout') ?? 'null');
-    return !!order.sandboxPayment && receipt?.sessionId === order.sandboxPayment.sessionId;
-  } catch {
-    return false;
-  }
 }
 function history(order: Order, text: string) {
   order.history.push({ at: now(), text });
@@ -566,67 +563,28 @@ function payment(order: Order, scenario: PaymentScenario) {
   }
   history(order, `Symulacja płatności: ${order.payment}`);
 }
-function createOrder(quote: Quote, contact: Contact, requestOnly = false): Order {
-  const order: Order = {
-    id: id(),
-    number: `RM-${String(26046 + state.orders.length)}`,
-    createdAt: now(),
-    ownerId: state.session?.role === 'client' ? state.session.id : null,
-    contact: clone({ ...contact, email: contact.email.trim().toLowerCase() }),
-    models: clone(state.cart.models),
-    quote: clone(quote),
-    delivery: state.cart.delivery,
-    status: quote.manual || requestOnly ? 'review' : 'awaiting_payment',
-    payment: 'unpaid',
-    leadTime: quote.leadTime,
-    tracking: '',
-    label: '',
-    document: '',
-    notes: '',
-    needsAttention: quote.manual || !!requestOnly,
-    messages: [],
-    history: [{ at: now(), text: quote.manual ? 'Prośba o ręczną wycenę' : 'Zamówienie przyjęte' }],
-    offerReason: '',
-  };
-  return order;
-}
-export function saveSandboxOrder(quote: Quote, contact: Contact, payment: SandboxPayment): Order {
-  const existing = state.orders.find(
-    (order) => order.sandboxPayment?.sessionId === payment.sessionId,
-  );
-  if (existing) return visibleOrder(findOrder(existing.id, true));
+export function assertCurrentQuote(quote: Quote) {
   if (state.cart.quote?.id !== quote.id || quote.fingerprint !== fingerprint())
     throw new Error('Koszyk zmienił się. Wróć do wyceny.');
-  const order = createOrder(quote, contact);
-  order.sandboxPayment = clone(payment);
-  order.history = [{ at: now(), text: 'Utworzono zamówienie i płatność Stripe test' }];
-  state.orders.unshift(order);
-  save();
-  return visibleOrder(order);
 }
-export function getCheckoutOrder(sessionId: string): Order | null {
-  const order = state.orders.find((order) => order.sandboxPayment?.sessionId === sessionId);
-  return order ? visibleOrder(findOrder(order.id, true)) : null;
-}
-export function applyCheckoutStatus(sessionId: string, status: StripeStatus): Order | null {
-  const order = state.orders.find((order) => order.sandboxPayment?.sessionId === sessionId);
-  if (!order) return null;
-  findOrder(order.id, true);
+export function applyCheckoutStatus(status: StripeStatus) {
+  const quote = state.cart.quote;
+  const checkout = quote?.checkout;
   if (
-    status.livemode !== false ||
-    status.quote_id !== order.sandboxPayment!.quoteId ||
-    status.total_grosze !== order.sandboxPayment!.amountGrosze
-  )
-    throw new Error('Potwierdzenie płatności nie pasuje do zamówienia.');
-  if (status.status === 'paid' && order.payment !== 'paid') {
-    order.payment = 'paid';
-    if (order.status === 'awaiting_payment') order.status = 'preparing';
-    if (state.cart.quote?.id === order.quote.id && fingerprint() === order.quote.fingerprint) {
-      state.cart = { ...state.cart, models: [], quote: null };
-    }
-    history(order, 'Stripe potwierdził płatność testową');
+    status.status === 'paid' &&
+    status.livemode === false &&
+    checkout &&
+    status.quote_id === checkout.id &&
+    quote.fingerprint === fingerprint() &&
+    checkout.offers.some(
+      (offer) =>
+        status.total_grosze ===
+        checkout.print_grosze + checkout.packaging_grosze + offer.price_grosze,
+    )
+  ) {
+    state.cart = { ...state.cart, models: [], quote: null };
+    save();
   }
-  return visibleOrder(order);
 }
 export async function retryPayment(orderId: string, scenario: PaymentScenario): Promise<Order> {
   await wait();
