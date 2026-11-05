@@ -117,7 +117,7 @@
   }
   const steps = ['Płatność', 'Przygotowanie', 'Druk', 'Wysyłka / odbiór'];
   let step = $derived(
-    !order || order.payment !== 'paid'
+    !order || !['paid', 'refunded'].includes(order.payment)
       ? 0
       : order.status === 'preparing'
         ? 1

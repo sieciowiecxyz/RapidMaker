@@ -99,7 +99,7 @@ impl Storage {
                 .as_secs() as i64,
         )
         .await?;
-        let rows=sqlx::query_scalar("SELECT jsonb_build_object('id',o.id,'status',o.status,'payment_state',p.state,'amount_grosze',o.amount_grosze,'created_at',o.created_at,'paid_at',o.paid_at,'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.user_id=$1 OR (o.user_id IS NULL AND o.owner_hash=$2 AND o.created_at>extract(epoch from now())::bigint-86400) ORDER BY o.created_at DESC LIMIT 100")
+        let rows=sqlx::query_scalar("SELECT jsonb_build_object('id',o.id,'status',o.status,'payment_state',p.state,'amount_grosze',o.amount_grosze,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'created_at',o.created_at,'paid_at',o.paid_at,'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.user_id=$1 OR (o.user_id IS NULL AND o.owner_hash=$2 AND o.created_at>extract(epoch from now())::bigint-86400) ORDER BY o.created_at DESC LIMIT 100")
             .bind(user).bind(owner).fetch_all(&self.pool).await?;
         Ok(rows)
     }
@@ -115,7 +115,7 @@ impl Storage {
                 .as_secs() as i64,
         )
         .await?;
-        Ok(sqlx::query_scalar("SELECT (to_jsonb(o)-'owner_hash'-'user_id')||jsonb_build_object('payment_state',p.state,'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.id=$1 AND (o.user_id=$2 OR (o.user_id IS NULL AND o.owner_hash=$3 AND o.created_at>extract(epoch from now())::bigint-86400))")
+        Ok(sqlx::query_scalar("SELECT (to_jsonb(o)-'owner_hash'-'user_id')||jsonb_build_object('payment_state',p.state,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.id=$1 AND (o.user_id=$2 OR (o.user_id IS NULL AND o.owner_hash=$3 AND o.created_at>extract(epoch from now())::bigint-86400))")
             .bind(id).bind(user).bind(owner).fetch_optional(&self.pool).await?)
     }
     pub async fn admin_orders(&self) -> Result<Vec<Value>, StorageError> {
@@ -126,7 +126,7 @@ impl Storage {
         )
         .await?;
         Ok(sqlx::query_scalar(
-            "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state,'manual_offer',mq.offer,'production',pr.value,'invoice_draft',d.value) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id LEFT JOIN order_production pr ON pr.order_id=o.id LEFT JOIN invoice_drafts d ON d.order_id=o.id ORDER BY o.created_at DESC LIMIT 100",
+            "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'manual_offer',mq.offer,'production',pr.value,'invoice_draft',d.value) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id LEFT JOIN order_production pr ON pr.order_id=o.id LEFT JOIN invoice_drafts d ON d.order_id=o.id ORDER BY o.created_at DESC LIMIT 100",
         )
         .fetch_all(&self.pool)
         .await?)

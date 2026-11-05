@@ -2,6 +2,20 @@
 
 Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
+## Aktualne całe41 — limit96 MiB
+
+`corpus41-96.json` na `23ecfbc` (zmiany testu wizualnego nie dotyczą tego przebiegu): **34 PASS / 7 FAIL**,419,5s,0 skipped/flaky. Bez zmiany asercji201 dla nieobsługiwanych modeli.
+
+| Wynik | Liczba | Przypadki |
+| --- | ---: | --- |
+| Automatyczna cena z rzeczywistego slicera | 19 | 1,3,4,6,7,9,10,11,12,13,17,23,26,27,30,33,34,35,38 |
+| GLB i ręczna wycena | 10 | 2,5,15,16,18,22,25,28,31,36 |
+| Oczekiwane413: upload ponad32 MiB | 5 | 8,21,29,37,41 |
+| FAIL:422 `model_resource_limit` | 6 | 14,19,20,24,39,40 |
+| FAIL:422 nieprawidłowy model | 1 | 32 — błędne metadane, bez obchodzenia walidatora |
+
+W porównaniu z bazą64 MiB dochodzą trzy ceny i jeden podgląd/ręczna wycena, brak innych zmian klasyfikacji.24 i39 mają obecnie kontrolowane422 zasobowe; historyczne exit137 dla24 pochodziło z osobnej diagnostyki, nie obecnego API. Sześciu ograniczeń zasobowych i błędnego pliku nie nazywamy działającą wyceną. Poniższe wcześniejsze przebiegi zachowują własne źródła i zakresy.
+
 ## Rozszerzenie większych modeli — 96 MiB
 
 Decyzja użytkownika: rozszerzyć obsługę większych modeli. Limit rozpakowanego ZIP i pojedynczego wpisu64→96 MiB;512 wpisów,1 mln wierzchołków/trójkątów,2 GiB RAM,25s CPU/30s wall i limity uploadu/GLB pozostają. Dev kompiluje tylko geometry/lib3mf z opt-level2, zachowując debug assertions i kontrolę przepełnień. Granice ZIP96 MiB/+1 i48+48 MiB/+1: geometria29 PASS/1 istniejący opcjonalny ignored, fmt/Clippy/build PASS.
@@ -33,6 +47,14 @@ Rozszerzono istniejący scenariusz porzuconego zamówienia: cztery równoległe 
 Rozszerzono istniejący scenariusz paneli: po zwrocie500 z zapłaconych2500 groszy dwa równoległe żądania1500+1500 z różnymi kluczami → dokładnie202/409 `refund_amount`. Odpowiedź jest związana z przesłanym kluczem, retry zwraca ten sam rekord; ledger ma dokładnie dwa oczekiwane ID. Po potwierdzeniu Stripe suma zwrotów2000, UI pokazuje pozostałe5 zł; końcowy zwrot przez UI daje trzy `succeeded`, dokładnie2500. Nadal sprawdzane klient403, obcy404, overrefund409 i stan zamówienia. Jedna sesja admina wysyła równoległe żądania; nie deklarujemy testu dwóch osobnych adminów ani niezależnego odczytu księgi Stripe.
 
 `concurrent-refund-final.json`: **1 PASS/25,7s**,0 FAIL/skipped/flaky, rzeczywiste Stripe test/API/DB. Wcześniejszy przebieg1 PASS26,1s poprzedzał dodatkową kontrolę klucza. Sol xhigh: brak blokującego problemu, drobny brak kontroli klucza poprawiono i przejrzano. Oceny zakresu8–9/10 w dziesięciu kategoriach; brak twierdzenia10/10 dla produktu. Prettier/diff-check PASS; bez zmian backendu, wyglądu i nowych zamówień poza istniejącą fixture.
+
+## Opłacone i zwrócone zamówienie — naprawiony status klienta
+
+Nowa kontrola prawdziwego zamówienia ujawniła błąd: po pełnym zwrocie klient nadal widział „Opłacone”, bo tylko admin pobiera ledger. Trzy autoryzowane odczyty zamówień zwracają teraz wyłącznie `refunded_grosze`: sumę potwierdzonych `succeeded` w tej samej migawce SQL. Bez nowych uprawnień, identyfikatorów ani szczegółów admina. Adapter sprawdza bezpieczną liczbę groszy ≤ kwoty; pełny zwrot wymaga potwierdzonej płatności i dokładnej równości. Zachowano fallback dla starszej odpowiedzi i odrębny stan realizacji. Review wykrył powiązane cofanie osi realizacji dla `refunded`; poprawiono jeden warunek bez zmiany stylu.
+
+Regresja: po częściowym zwrocie klient API500, po pełnym detal/lista2500, badge „Zwrócono płatność”, zakończona oś ma cztery aktywne etapy; ledger admina dokładnie trzy potwierdzone kwoty, zero pozostałe. `paid-refunded-visual-final.json`: **1 PASS/37,6s**,0 FAIL/skipped/flaky.16 nowych zrzutów (paid/refunded × klient/admin ×1440/390 ×jasny/ciemny), fonty/obrazy/overflow, plus3 wcześniejsze zrzuty scenariusza. Wszystkie16 obejrzano w zestawieniu i reprezentatywne mobilne ujęcie osobno; prywatne `paid-refunded-overview/sources.json`/`all16.png`. To kontrola wskazanych sekcji i kompozycji, nie wszystkich stron/pikseli. Admin crop obejmuje sam ledger.
+
+Rust build PASS; frontend build/svelte-check0 errors/0 warnings, Prettier/diff-check PASS. Sol xhigh: korekty zakresu screenshotu/ścisłych kwot oraz osi realizacji wdrożone i ponownie przejrzane; brak dalszego konkretnego blokera. Oceny produktu w zmienionym zakresie przed końcową regresją7–10/10, bez deklaracji10/10 całego celu. Starszy `paid-refunded-visual` FAIL to dowód błędu; `...-fixed`1 PASS37,2s poprzedza kontrolę osi, końcowy wynik powyżej obejmuje obie poprawki.
 
 ## Rzeczywisty korpus — baza64 MiB
 

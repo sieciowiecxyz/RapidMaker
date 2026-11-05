@@ -32,6 +32,8 @@ Pojedynczy snapshot nie otwiera płatności. Checkout przyjmuje jego ID, sprawdz
 
 Szkic, dane odbiorcy, oferta i próba płatności są trwałe w PostgreSQL. Jedna aktywna próba na szkic; stan i dokładne parametry dostawcy zapisane przed HTTP. Wybrana dostawa i paczki zamrożone w zamówieniu. Cookie właściciela/CSRF, kontrola wersji, blokady i ograniczone lease/retry chronią przed ponowieniami; brak mutexa/sesji checkoutu w RAM. Webhook poza ochroną browserową wymaga podpisu i trwałego przyjęcia. Worker weryfikuje obiekt Stripe i zapisuje `paid` razem z outboxem; duplikaty nie dodają skutków. Nierozstrzygnięta próba chroni pliki; zamknięta pozwala je zwolnić. `completed` nadal ustawia 90 dni. Szczegóły, limity i CLI operatora: [checkout](checkout.md). To Stripe test na localhost; wdrożenie publiczne/live pozostaje osobnym etapem.
 
+Odczyty listy/szczegółów zamówień zwracają `refunded_grosze` wyłącznie jako sumę potwierdzonych zwrotów. Klient widzi poprawny stan płatności bez dostępu do administracyjnego ledgera; zwrot nie cofa stanu realizacji.
+
 ## Frontend i dane
 
 `frontend/`: Svelte 5/TypeScript/Vite, Tailwind 4, GSAP, Manrope/Oxanium i limonkowe akcenty. `App.svelte` ładuje `storefront/Storefront.svelte` dla `/` i `/wycena`; `Workspace.svelte` dla checkoutu, konta, admina i wyceny zaawansowanej. STL: natywny WebGL i parser w workerze przeglądarki. STL/STEP/3MF mają backendowy GLB przez chroniony `/api/models/{id}/preview.glb`; podgląd wszystkich formatów korzysta z natywnego WebGL i ograniczonego parsera naszego prywatnego GLB w workerze; wybór koloru nie jest wymagany, storefront domyślnie pokazuje czarny zgodnie z wzorcem Piotra. Nie jest to ogólny loader glTF. GLB nie zastępuje oryginału ani siatki dla produkcji.

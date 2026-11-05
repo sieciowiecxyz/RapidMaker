@@ -9,6 +9,7 @@ type RawOrder = {
   status: string;
   payment_state?: string | null;
   amount_grosze: number | null;
+  refunded_grosze?: number;
   manual_offer?: ManualOffer;
   provider_id?: string | null;
   created_at: number;
@@ -169,9 +170,14 @@ function convert(
   );
   if (amount !== null && shipping > amount)
     throw new Error('Koszt dostawy przekracza kwotę zamówienia.');
-  const succeeded = refunds
-    .filter((r) => r.state === 'succeeded')
-    .reduce((sum, r) => sum + checkedAmount(r.amount_grosze), 0);
+  const succeeded = checkedAmount(
+    raw.refunded_grosze === undefined
+      ? refunds
+          .filter((r) => r.state === 'succeeded')
+          .reduce((sum, r) => sum + checkedAmount(r.amount_grosze), 0)
+      : raw.refunded_grosze,
+  );
+  if (succeeded > (amount ?? 0)) throw new Error('Kwota zwrotów przekracza kwotę zamówienia.');
   const reserved = refunds
     .filter((r) => !['failed', 'canceled'].includes(r.state))
     .reduce((sum, r) => sum + checkedAmount(r.amount_grosze), 0);
@@ -218,7 +224,7 @@ function convert(
     delivery,
     status,
     payment:
-      amount !== null && succeeded >= amount && amount > 0
+      confirmed && amount !== null && succeeded === amount && amount > 0
         ? 'refunded'
         : confirmed
           ? 'paid'

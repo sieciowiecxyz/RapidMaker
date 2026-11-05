@@ -144,6 +144,82 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     await login(operator, admin);
     await login(outsider, other);
 
+    const captureOrder = async (id: string, state: 'paid' | 'fully-refunded') => {
+      for (const target of [page, operator]) {
+        for (const width of [1440, 390])
+          for (const theme of ['light', 'dark']) {
+            await target.setViewportSize({ width, height: 1000 });
+            await target.goto('/');
+            if ((await target.locator('html').getAttribute('data-theme')) !== theme)
+              await target
+                .getByRole('button', {
+                  name: `Zmień na ${theme === 'light' ? 'jasny' : 'ciemny'} motyw`,
+                  exact: true,
+                })
+                .click();
+            const adminView = target === operator;
+            await target.goto(adminView ? '/admin.html' : `/konto/zamowienia/${id}`);
+            const region = adminView
+              ? target.getByRole('complementary', { name: `Szczegóły ${id}`, exact: true })
+              : target.locator('#platnosc');
+            const captureRegion = adminView
+              ? region.getByRole('region', { name: 'Zwroty płatności' })
+              : region;
+            if (adminView) {
+              await target.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
+              await region.getByRole('button', { name: 'Rozliczenie', exact: true }).click();
+              const ledger = captureRegion;
+              await expect(ledger.locator('dd').first()).toHaveText(
+                state === 'paid' ? /^\s*0,00\s+zł\s*$/ : /^\s*25,00\s+zł\s*$/,
+              );
+              await expect(ledger.locator('li')).toHaveCount(state === 'paid' ? 0 : 3);
+              if (state === 'fully-refunded')
+                await expect(ledger.locator('li span')).toHaveText([
+                  'Zwrócono',
+                  'Zwrócono',
+                  'Zwrócono',
+                ]);
+              await ledger.scrollIntoViewIfNeeded();
+            } else {
+              if (state === 'fully-refunded')
+                await expect(
+                  target.getByRole('list', { name: 'Postęp realizacji' }).locator('li.active'),
+                ).toHaveCount(4);
+              await expect(region.locator('p.badge')).toHaveText(
+                state === 'paid' ? 'Opłacone' : 'Zwrócono płatność',
+              );
+              await expect(region.locator('.total dd')).toHaveText(/^\s*25,00\s+zł\s*$/);
+            }
+            await expect(region).toBeVisible();
+            await expect(region.getByRole('alert')).toHaveCount(0);
+            await target.evaluate(() => document.fonts.ready);
+            for (const image of await target.locator('img:visible').all())
+              await expect
+                .poll(() =>
+                  image.evaluate(
+                    (node) =>
+                      (node as HTMLImageElement).complete &&
+                      (node as HTMLImageElement).naturalWidth > 0,
+                  ),
+                )
+                .toBe(true);
+            expect(
+              await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            const bounds = (await captureRegion.boundingBox())!;
+            expect(bounds.x).toBeGreaterThanOrEqual(0);
+            expect(bounds.x + bounds.width).toBeLessThanOrEqual(width + 1);
+            await expect(target.locator('html')).toHaveAttribute('data-theme', theme);
+            await captureRegion.screenshot({
+              path: info.outputPath(
+                `${state}-${adminView ? 'admin-order-ledger' : 'client-order-payment'}-${width}-${theme}.png`,
+              ),
+            });
+          }
+        await target.setViewportSize({ width: 1440, height: 1000 });
+      }
+    };
+
     // A genuine upload and durable manual request avoid slicing the same geometry repeatedly.
     await page.goto('/wycena', { waitUntil: 'domcontentloaded' });
     const uploaded = page.waitForResponse(
@@ -223,6 +299,11 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
       )
       .toBe('paid');
 
+    expect(await (await page.request.get(`/api/account/orders/${id}`)).json()).toMatchObject({
+      status: 'paid',
+      amount_grosze: 2500,
+    });
+    await captureOrder(id, 'paid');
     await workspaceAdminViews(operator, page, id);
 
     // Client list, detail, persisted preferences and two-way browser chat.
@@ -466,6 +547,9 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
         { timeout: 70_000, intervals: [1000, 3000] },
       )
       .toBe(true);
+    expect(
+      (await (await page.request.get(`/api/account/orders/${id}`)).json()).refunded_grosze,
+    ).toBe(500);
     const firstRefund = (
       await (await operator.request.get(`/api/admin/orders/${id}/refunds`)).json()
     )[0];
@@ -546,6 +630,15 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     expect((await (await page.request.get(`/api/account/orders/${id}`)).json()).status).toBe(
       'completed',
     );
+    expect(
+      (await (await page.request.get(`/api/account/orders/${id}`)).json()).refunded_grosze,
+    ).toBe(2500);
+    const customerOrders = await (await page.request.get('/api/account/orders')).json();
+    expect(
+      customerOrders.orders.find((order: { id: string }) => order.id === id).refunded_grosze,
+    ).toBe(2500);
+    // Full refund is a payment state; fulfillment remains completed.
+    await captureOrder(id, 'fully-refunded');
 
     const forbidden = await page.request.post(`/api/admin/orders/${id}/refunds`, {
       headers: await headers(page),
