@@ -86,3 +86,5 @@ Po buildzie frontendu: `python frontend/tests/run-integration.py --local-account
 SIGTERM wymaga czasu na sprzątanie: przeglądarka/API do30s każde, operacja psql do15s, rodzic czeka80s. Kontrolowano ponowiony sygnał, CREATE z wstrzymanym potwierdzeniem i błąd kopii logu. To ręczne próby infrastruktury, nie kolejne testy Playwright. Raport i ograniczenia: [checkpoint](corpus-report.md#zatrzymywanie-testów).
 
 `python frontend/tests/run-integration.py --local-accounts manual-publication.spec.ts`: zerwanie połączenia przed/po rzeczywistym zapisie oferty, identyczny retry, wersje i deduplikacja outbox oraz ukrycie danych po logout. Bez Stripe/SMTP; należy do core.
+
+`public-visual.spec.ts` sprawdza też inline SVG: minimalną widoczną liczbę, geometrię i dla rozmiaru≤600 px wkład pikseli na diagnostycznym tle. Duże SVG: tylko geometria. Kontrole negatywne wykrywają grafikę pustą/ukrytą/brakującą; to nie jest porównanie pełnej zgodności wizualnej ani pomiar kontrastu. Liczniki są w adnotacjach `svg-rendering` raportu JSON.

@@ -26,6 +26,7 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 | `contracts.json` — HEAD97c10dd | 21 PASS/5,7s; kontrolowane kontrakty UI/narzędzi, nie dowód dostawców |
 | `core.json` — HEAD97c10dd | 31 PASS/237,4s; realne API/DB/slicer/MFA/konfigurator/panele/zasoby; dostawcy osobno |
 | `corpus41-trimmed.json` — HEAD8bd6fcc | 36 PASS/5 FAIL/424,3s:20 cen,11 ręcznych,5 oczekiwanych413,4 limity422,1 błędny model422 |
+| `svg-public-presence-final.json` | 6 PASS/55,2s;56 kombinacji tras/motywów/szerokości,246 kontroli SVG i4 duże geometria-only; kontrole negatywne |
 | `manual-publication-concurrent.json` | 1 PASS/29,5s; dwie niezależne sesje MFA, różne ceny z jednej wersji→200/409, wspólna cena/outbox |
 | `manual-publication-final.json` | 2 PASS/29,3s; zerwanie przed/po zapisie, identyczny retry, wersje/outbox/logout i wspólna regresja wizualna |
 | `manual-offer-visual-final.json` | 1 PASS/25,5s;72 ujęcia,28 nowych kart: kwota/dostawa błędna, oferta opublikowana/wygasła; oba motywy/rozmiary/role |

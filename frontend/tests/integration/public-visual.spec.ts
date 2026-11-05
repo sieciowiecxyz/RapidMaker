@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { accounts, login } from './helpers';
+import { checkSvgGraphics } from './svg-graphics';
 
 const routes = [
   ['/', /Twój pomysł/i],
@@ -56,7 +57,57 @@ async function assetsAndLayout(page: Page, path: string, width: number) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     width,
   );
+  // Approved UI: 20 visible storefront icons; admin has one additional desktop control.
+  const minimumPainted = ['/', '/wycena'].includes(path)
+    ? 20
+    : path === '/admin.html'
+      ? width === 390
+        ? 10
+        : 11
+      : 1;
+  const svgCounts = await checkSvgGraphics(page, path, minimumPainted);
+  test.info().annotations.push({
+    type: 'svg-rendering',
+    description: JSON.stringify({
+      path,
+      width,
+      theme: await page.locator('html').getAttribute('data-theme'),
+      ...svgCounts,
+    }),
+  });
 }
+
+test('SVG paint proof rejects blank graphics and accepts a stroked minus', async ({ page }) => {
+  await page.setContent(`
+    <svg width="24" height="24" viewBox="0 0 24 24">
+      <rect width="24" height="24" fill="none" />
+    </svg>
+  `);
+  await expect(checkSvgGraphics(page, 'blank negative control')).rejects.toThrow(
+    'SVG descendants must paint visible pixels',
+  );
+  await expect(page.locator('[data-e2e-svg]')).toHaveCount(0);
+  await page.setContent(`
+    <svg width="24" height="24" viewBox="0 0 24 24">
+      <path d="M4 12H20" fill="none" stroke="black" stroke-width="2" />
+    </svg>
+  `);
+  expect(await checkSvgGraphics(page, 'minus positive control')).toEqual({
+    total: 1,
+    hidden: 0,
+    geometry: 1,
+    painted: 1,
+    largeGeometryOnly: 0,
+  });
+  await page.addStyleTag({ content: 'svg { display: none; }' });
+  await expect(checkSvgGraphics(page, 'hidden negative control')).rejects.toThrow(
+    'expected visible painted SVGs',
+  );
+  await page.setContent('<p>No graphics</p>');
+  await expect(checkSvgGraphics(page, 'missing negative control')).rejects.toThrow(
+    'expected visible painted SVGs',
+  );
+});
 
 for (const width of [1440, 390]) {
   test(`public routes preserve theme, load assets and fit ${width}px`, async ({ page }, info) => {

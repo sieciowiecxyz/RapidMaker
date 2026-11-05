@@ -1,5 +1,13 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## SVG — geometria, rysowanie i brakujące grafiki
+
+`svg-public-presence-final.json`: **6 PASS/55,2s**,0 skip/flaky.56 kombinacji trasy/motywu/szerokości,246 powtarzanych kontroli rysowania małych SVG (nie246 unikalnych ikon),4 kontrole samej geometrii dużego tła. Testy publicznych i zalogowanych tras zachowują dotychczasowe sprawdzanie obrazów/fontów/układu. Puste SVG, wszystkie SVG ukryte i brak SVG są celowo odrzucane; minus z poprawną kreską przechodzi mimo zerowej wysokości bbox samej linii. Minimum widocznych rysowanych SVG: storefront20, admin11 desktop/10 mobile, pozostałe trasy1.
+
+Helper porównuje ten sam SVG przed/po ukryciu jego potomków na nieprzezroczystym diagnostycznym tle, co wyklucza ruch innej grafiki pod przezroczystym elementem. Przywraca tymczasowy atrybut i styl. To dowód wkładu pikseli w tych warunkach, nie kontrastu na rzeczywistym tle, dokładnej tożsamości każdej ikony ani poprawności wszystkich ścieżek wewnątrz SVG. Powyżej600 px w którejkolwiek osi sprawdza tylko geometrię. Limity160 korzeni/2000 kształtów na korzeń. Bez zmian produktu/wyglądu/zależności.
+
+Pierwsze dwa przebiegi6 PASS47,1/47,4s poprzedzały finalne minimum obecności; Sol wskazał możliwy fałszywy PASS po ukryciu wszystkich SVG. Poprawiono minimum i dodano negatywne kontrole przed końcowym przebiegiem. Stricttsc/Prettier/diff-check PASS. Sol xhigh finalnie bez blokera, oceny8–9/N/A; nie jest to zamknięcie całego celu.
+
 ## Dwie sesje panelu i konflikt ceny
 
 `manual-publication-concurrent.json`: **1 PASS/29,5s**,0 skip/flaky. Rozszerzenie istniejącego scenariusza loguje ten sam admin-account w dwóch niezależnych kontekstach przez prawdziwe MFA. Oba panele mają wersję3; równoległe kliknięcia wysyłają35/40 zł. HTTP200/409, klient widzi wersję4 ze zwycięską ceną, oba panele ją odczytują, przegrany pokazuje konflikt; outbox: stare wersje skipped, jedna aktualna pending. Bez zmiany produktu, płatności i SMTP. Czas obejmuje oczekiwanie na następny krok TOTP, bez obchodzenia ochrony replay.
