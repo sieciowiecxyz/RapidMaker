@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { accounts, login } from './helpers';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -16,7 +16,7 @@ test('populated unpaid order, private previews and chat fit both themes and view
     !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
     'Requires --local-accounts with providers disabled',
   );
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const client = accounts().find((account) => account.email === 'browser-other@example.invalid')!;
   const admin = accounts().find((account) => account.role === 'admin')!;
   const adminContext = await browser.newContext();
@@ -28,8 +28,8 @@ test('populated unpaid order, private previews and chat fit both themes and view
     expect(session.stage).toBe('authenticated');
     return { Origin: 'http://localhost:18437', 'X-CSRF-Token': session.csrf_token };
   };
-  const capture = async (target: Page, label: string) => {
-    await expect(target.getByRole('alert')).toHaveCount(0);
+  const capture = async (target: Page, label: string, alerts = 0) => {
+    await expect(target.getByRole('alert')).toHaveCount(alerts);
     await target.evaluate(() => document.fonts.ready);
     for (const image of await target.locator('img').all())
       await expect
@@ -366,7 +366,7 @@ test('populated unpaid order, private previews and chat fit both themes and view
         await expect(operator.locator('html')).toHaveAttribute('data-theme', theme);
       }
     }
-    // This order stays a genuine unpaid request: no payment/provider result was fabricated.
+    // Preserve the awaiting-quote evidence before publishing a real, still-unpaid offer.
     const order = await (await page.request.get(`/api/account/orders/${id}`)).json();
     expect(order.manual_offer.state).toBe('awaiting_quote');
     expect(order.amount_grosze).toBeNull();
@@ -375,6 +375,215 @@ test('populated unpaid order, private previews and chat fit both themes and view
       paid_at: null,
       payment_attempt_id: null,
     });
+    const scope =
+      'Wydruk trzech części PLA według załączonego modelu; trzy ściany i wypełnienie 20%. ' +
+      'Usunięcie podpór i kontrola wymiarów przed odbiorem osobistym. Termin do 14 dni roboczych ' +
+      'od potwierdzenia zamówienia. Cena obejmuje cały opisany zakres, bez dodatkowych usług.';
+    const publish = operator.getByRole('button', {
+      name: 'Opublikuj ofertę i powiadom klienta',
+      exact: true,
+    });
+    const matrix: { width: number; theme: string; state: string; role: string; image: string }[] =
+      [];
+    const offerCard = (target: Page) =>
+      target.getByRole('region', { name: 'Wycena indywidualna', exact: true });
+    const offerSnapshot = async (
+      target: Page,
+      width: number,
+      theme: string,
+      state: string,
+      role: string,
+      alerts = 0,
+    ) => {
+      const label = `${width}-${theme}-${state}-${role}-offer`;
+      await expect(target.getByRole('alert')).toHaveCount(alerts);
+      await target.evaluate(() => document.fonts.ready);
+      const card = offerCard(target);
+      await card.scrollIntoViewIfNeeded();
+      // Every control must be usable without horizontal scrolling, including narrow layouts.
+      for (const control of await card.locator('header, input, textarea, button, a').all()) {
+        await control.scrollIntoViewIfNeeded();
+        const bounds = (await control.boundingBox())!;
+        expect(bounds.x, label).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width, label).toBeLessThanOrEqual(width + 1);
+        expect(bounds.y, label).toBeGreaterThanOrEqual(0);
+        expect(bounds.y + bounds.height, label).toBeLessThanOrEqual(901);
+      }
+      await card.screenshot({ path: info.outputPath(`${label}-card.png`) });
+      expect(await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      matrix.push({ width, theme, state, role, image: `${label}-card.png` });
+      writeFileSync(info.outputPath('manual-offer-matrix.json'), JSON.stringify(matrix, null, 2));
+    };
+    const offerCells = async (state: 'invalid' | 'published' | 'expired') => {
+      for (const width of [1440, 390]) {
+        for (const theme of ['light', 'dark']) {
+          for (const [target, role, route] of [
+            [page, 'client', `/konto/zamowienia/${id}`],
+            [operator, 'admin', `/admin/zamowienia/${id}`],
+          ] as const) {
+            await target.setViewportSize({ width, height: 900 });
+            await target.goto('/');
+            if ((await target.locator('html').getAttribute('data-theme')) !== theme)
+              await target
+                .getByRole('button', {
+                  name: theme === 'light' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw',
+                  exact: true,
+                })
+                .click();
+            await target.goto(route);
+            const card = offerCard(target);
+            await expect(card).toBeVisible();
+            if (state === 'invalid') {
+              if (role === 'admin') {
+                // Both zero total and shipping above the total must fail inline, before publication.
+                for (const [total, shipping] of [
+                  ['0,00', '0,00'],
+                  ['25,00', '25,01'],
+                ]) {
+                  await target.getByLabel('Zakres wykonania i dostawy').fill(scope);
+                  await target.getByLabel('Całość brutto (zł)').fill(total);
+                  await target.getByLabel('W tym dostawa (zł)').fill(shipping);
+                  await publish.click();
+                  await expect(card.getByRole('alert')).toHaveText(
+                    'Podaj dodatnią cenę całkowitą, dostawę nie większą od ceny i opis zakresu.',
+                  );
+                  await expect(target.getByLabel('Całość brutto (zł)')).toHaveValue(total);
+                  await expect(target.getByLabel('W tym dostawa (zł)')).toHaveValue(shipping);
+                  await expect(target.getByLabel('Zakres wykonania i dostawy')).toHaveValue(scope);
+                  const unchanged = await (
+                    await page.request.get(`/api/account/orders/${id}`)
+                  ).json();
+                  expect(unchanged.manual_offer).toMatchObject({
+                    state: 'awaiting_quote',
+                    version: order.manual_offer.version,
+                    amount_grosze: null,
+                  });
+                  expect(unchanged.payment_attempt_id).toBeNull();
+                  await offerSnapshot(
+                    target,
+                    width,
+                    theme,
+                    total === '0,00' ? 'invalid-amount' : 'invalid-delivery',
+                    role,
+                    1,
+                  );
+                }
+                continue;
+              } else {
+                await expect(
+                  card.getByRole('heading', { name: 'Oczekuje na wycenę' }),
+                ).toBeVisible();
+                await expect(
+                  card.getByRole('button', { name: 'Przygotuj płatność za ofertę' }),
+                ).toHaveCount(0);
+              }
+            } else {
+              await expect(card.locator('.offer-amount')).toContainText('25,00');
+              await expect(card.locator('.offer-amount small')).toContainText('0,00');
+              await expect(card.getByText(scope, { exact: true })).toBeVisible();
+              const pay = card.getByRole('button', {
+                name: 'Przygotuj płatność za ofertę',
+                exact: true,
+              });
+              if (state === 'published') {
+                if (role === 'client') await expect(pay).toBeEnabled();
+                else {
+                  await expect(target.getByLabel('Całość brutto (zł)')).toHaveValue('25,00');
+                  await expect(target.getByLabel('W tym dostawa (zł)')).toHaveValue('0,00');
+                  await expect(publish).toBeEnabled();
+                }
+              } else {
+                await expect(pay).toHaveCount(0);
+                await expect(card.getByRole('textbox')).toHaveCount(0);
+                await expect(
+                  card.getByRole('button', { name: 'Opublikuj ofertę i powiadom klienta' }),
+                ).toHaveCount(0);
+                await expect(
+                  card.getByText(
+                    role === 'admin'
+                      ? /Oferta wygasła\. Potrzebne/
+                      : /Ta oferta lub próba płatności wygasła/,
+                  ),
+                ).toBeVisible();
+              }
+            }
+            await expect(target.locator('html')).toHaveAttribute('data-theme', theme);
+            await offerSnapshot(target, width, theme, state, role);
+          }
+        }
+      }
+    };
+    await offerCells('invalid');
+    await operator.goto(`/admin/zamowienia/${id}`);
+    await operator.getByLabel('Całość brutto (zł)').fill('25,00');
+    await operator.getByLabel('W tym dostawa (zł)').fill('0,00');
+    await operator.getByLabel('Zakres wykonania i dostawy').fill(scope);
+    operator.once('dialog', async (dialog) => {
+      expect(dialog.type()).toBe('confirm');
+      await dialog.accept();
+    });
+    const publication = operator.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/admin/orders/${id}/quote`) &&
+        response.request().method() === 'POST',
+    );
+    await publish.click();
+    expect((await publication).status()).toBe(200);
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/account/orders/${id}`)).json()).manual_offer.state,
+      )
+      .toBe('offered');
+    const offered = await (await page.request.get(`/api/account/orders/${id}`)).json();
+    expect(offered.manual_offer).toMatchObject({
+      state: 'offered',
+      amount_grosze: 2500,
+      shipping_grosze: 0,
+      scope,
+      payment_started: false,
+    });
+    expect(offered).toMatchObject({ amount_grosze: 2500, paid_at: null, payment_attempt_id: null });
+    await offerCells('published');
+
+    // Expire only this synthetic order in the explicitly validated disposable database.
+    expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+    expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
+    sql(
+      `UPDATE manual_quotes SET expires_at=extract(epoch from now())::bigint-60 WHERE order_id='${id}'`,
+    );
+    for (const [target, prefix] of [
+      [page, 'account'],
+      [operator, 'admin'],
+    ] as const) {
+      const response = await target.request.get(
+        prefix === 'admin' ? '/api/admin/orders' : `/api/account/orders/${id}`,
+      );
+      expect(response.status()).toBe(200);
+      const data = await response.json();
+      const expired =
+        prefix === 'admin' ? data.orders.find((order: { id: string }) => order.id === id) : data;
+      expect(expired).toBeDefined();
+      expect(expired.manual_offer).toMatchObject({
+        state: 'expired',
+        amount_grosze: 2500,
+        shipping_grosze: 0,
+        scope,
+        payment_started: false,
+      });
+      expect(expired).toMatchObject({ paid_at: null, payment_attempt_id: null });
+    }
+    await offerCells('expired');
+    // The HTTP payment endpoint checks Stripe configuration before expiry. Providers stay disabled;
+    // this test proves server-read expiry and unavailable UI actions, not expired-payment HTTP rejection.
+    info.annotations.push({
+      type: 'limitation',
+      description:
+        'Expired-payment HTTP rejection is not exercised with providers disabled; no payment was initiated.',
+    });
+    expect(matrix).toHaveLength(28);
     expect(operatorErrors).toEqual([]);
   } finally {
     await adminContext.close();

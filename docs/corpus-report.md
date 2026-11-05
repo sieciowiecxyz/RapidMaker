@@ -1,5 +1,15 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## Oferta indywidualna — błędy i stany wizualne
+
+Nowa regresja ujawniła znikający komunikat błędnej ceny w `/admin/zamowienia/{id}`: lokalna walidacja odświeżała zamówienie i odmontowywała formularz. Jedna zmiana warunku w `ManualOffer.svelte` zachowuje komunikat i wpisane pola przed publikacją; po próbie API odświeżenie pozostaje. Bez zmian CSS/wyglądu.
+
+`manual-offer-visual-final.json`: **1 PASS/25,5s**,0 skip/flaky;72 PNG, w tym28 nowych kart i manifest `manual-offer-matrix.json`. Macierz1440/390 × light/dark: klient oczekujący i admin z ceną0/dostawą większą od ceny (12 kart); rzeczywiście opublikowana oferta25 zł/dostawa0 (8); wygasła oferta (8). Sprawdza zachowanie pól, stan API, kwoty/zakres, przyciski i granice kontrolek. Wygaśnięcie wymuszone tylko dla własnego UUID w walidowanej bazie `rapidmaker_test_browser_*`. Nie inicjuje płatności, nie dowodzi HTTP odmowy płatności po wygaśnięciu ani odbioru emaila. Dostawcy wyłączeni; SMTP/Stripe mają osobne dowody.
+
+Pierwszy przebieg FAIL30,9s potwierdził błąd produktu. Kolejny FAIL21,3s wykazał błędne założenie testu o endpointcie GET admin/orders/{id}; poprawiono na istniejącą listę z kontrolą200/UUID. Po usunięciu zbędnych ujęć skorygowano licznik32→28 przed końcowym przebiegiem. Nie zmieniano API dla testu. Wszystkie28 kart obejrzano w4 zestawieniach, trzy mobilne także w rozmiarze natywnym: tekst/kwoty/przyciski czytelne, brak zaobserwowanego obcięcia poziomego. Pole tekstowe ma własne przewijanie. Zestawienia w prywatnym podkatalogu `overview/`.
+
+Svelte-check0 błędów/ostrzeżeń, Vite build, Prettier i diff-check PASS. Sol xhigh po poprawkach: bez konkretnego problemu; oceny6–9/10, nie jest to10/10 całego celu ani test współbieżnej publikacji.
+
 ## Tożsamość pakietu slicera i aktualność ceny
 
 Hash obejmuje teraz całe stałe drzewo `/opt/bambustudio-bin`, w tym zasoby, względne ścieżki, typy, uprawnienia i zawartość. Zmiana zasobu przy tym samym launcherze/ELF zmienia tożsamość po restarcie; wykryta zmiana w działającym procesie blokuje kolejne użycia do restartu. Wymagane pliki muszą mieć bit wykonywania. Systemowe zależności poza pakietem nadal nie są hashowane; to nie jest atestacja ani ochrona przed celową podmianą w trakcie wykonania. Limity i złożoność: [slicer-queue.md](slicer-queue.md).

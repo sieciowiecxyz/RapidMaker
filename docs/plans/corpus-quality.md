@@ -26,6 +26,7 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 | `contracts.json` — HEAD97c10dd | 21 PASS/5,7s; kontrolowane kontrakty UI/narzędzi, nie dowód dostawców |
 | `core.json` — HEAD97c10dd | 31 PASS/237,4s; realne API/DB/slicer/MFA/konfigurator/panele/zasoby; dostawcy osobno |
 | `corpus41-trimmed.json` — HEAD8bd6fcc | 36 PASS/5 FAIL/424,3s:20 cen,11 ręcznych,5 oczekiwanych413,4 limity422,1 błędny model422 |
+| `manual-offer-visual-final.json` | 1 PASS/25,5s;72 ujęcia,28 nowych kart: kwota/dostawa błędna, oferta opublikowana/wygasła; oba motywy/rozmiary/role |
 | `bundle-runtime-pricing.json` | 4 PASS/24,5s; pełny hash pakietu Bambu, realne ceny1/10/1000, checkout odrzuca brak/inny hash |
 | `database-with-api-final.json` | 20 PASS/0 skipped:18 storage, katalog API i granice dostępu HTTP; osobna tymczasowa baza na test |
 | Rust workspace | 139 PASS/25 ignored;20 ignored wykonano osobno przez runner DB, pozostałe5 nadal nie |

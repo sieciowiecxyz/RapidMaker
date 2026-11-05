@@ -133,7 +133,7 @@
     } catch (cause) {
       if (active) {
         error = cause instanceof Error ? cause.message : 'Nie udało się zapisać oferty.';
-        await onchange();
+        if (publication) await onchange();
       }
     } finally {
       if (active) busy = false;
