@@ -27,7 +27,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
     "vite": "7.3.7",
-    "@types/earcut": "^3.0.0"
+    "@types/earcut": "^3.0.0",
+    "@types/node": "^24.19.2"
   },
   "dependencies": {
     "@stripe/stripe-js": "^10.1.0",

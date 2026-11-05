@@ -849,17 +849,21 @@ fn scene_from_gltf(
     builder.finish()
 }
 
+const BAMBU_TRIANGLE_SETTINGS: &[&str] = &[
+    "paint_supports",
+    "paint_seam",
+    "paint_color",
+    "mmu_segmentation",
+    "paint_fuzzy_skin",
+    "face_property",
+];
+
 // Bambu painting is slicer metadata, not geometry. Ignore only these known triangle
 // attributes; leave vertices, transforms and unknown attributes to the strict parser.
 fn geometry_xml(xml: &str) -> Result<Option<String>, PreviewError> {
-    if ![
-        "paint_supports",
-        "paint_seam",
-        "paint_color",
-        "mmu_segmentation",
-    ]
-    .iter()
-    .any(|attr| xml.contains(attr))
+    if !BAMBU_TRIANGLE_SETTINGS
+        .iter()
+        .any(|attr| xml.contains(attr))
     {
         return Ok(None);
     }
@@ -881,10 +885,7 @@ fn geometry_xml(xml: &str) -> Result<Option<String>, PreviewError> {
                 cleaned.clear_attributes();
                 for attr in element.attributes() {
                     let attr = attr.map_err(|_| PreviewError::MalformedInput)?;
-                    if !matches!(
-                        attr.key.as_ref(),
-                        "paint_supports" | "paint_seam" | "paint_color" | "mmu_segmentation"
-                    ) {
+                    if !BAMBU_TRIANGLE_SETTINGS.contains(&attr.key.as_ref()) {
                         cleaned.push_attribute(attr);
                     } else {
                         changed = true;
@@ -1818,6 +1819,8 @@ mod tests {
                 "paint_seam",
                 "paint_color",
                 "mmu_segmentation",
+                "paint_fuzzy_skin",
+                "face_property",
                 "unknown_geometry",
             ] {
                 let mut source = zip::ZipArchive::new(Cursor::new(input)).unwrap();

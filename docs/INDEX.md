@@ -82,3 +82,7 @@ Nadawanie: S0–S4 wdrożone i sprawdzone w sandboxie, łącznie z PDF, tracking
 - [Testy rzeczywistych modeli i całej strony](plans/corpus-quality.md)
   - przeczytaj gdy: kontynuujesz korpus i testy E2E.
   - opis: aktywny cel, dowody i brakujące kroki.
+
+- [Wyniki korpusu i E2E](corpus-report.md)
+  - przeczytaj gdy: sprawdzasz aktualne dowody działania i ograniczenia.
+  - opis: rzeczywiste wyniki, poprawki i otwarte braki.

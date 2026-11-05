@@ -11,9 +11,7 @@ const limit = Number(process.env.E2E_CORPUS_LIMIT ?? 100);
 if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid corpus limit');
 
 for (const item of cases.slice(0, limit)) {
-  test(`corpus ${item.case}: real upload, private GLB and measured PLA price`, async ({
-    request,
-  }) => {
+  test(`corpus ${item.case}: real model pipeline`, async ({ request }) => {
     test.setTimeout(240_000);
     const root = realpathSync(dirname(resolve(manifest!)));
     const path = realpathSync(resolve(root, item.file));
@@ -33,8 +31,16 @@ for (const item of cases.slice(0, limit)) {
     });
     if (bytes.length > 32 * 1024 * 1024) {
       expect(upload.status()).toBe(413);
+      test
+        .info()
+        .annotations.push({ type: 'upload-limit', description: 'Expected HTTP 413 above 32 MiB' });
       return;
     }
+    if (upload.status() === 422 && (await upload.json()).code === 'model_resource_limit')
+      test.info().annotations.push({
+        type: 'resource-limit',
+        description: 'Upload rejected by geometry resource budget; not an automatic quote',
+      });
     expect(upload.status(), `Upload response: ${await upload.text()}`).toBe(201);
     const model = await upload.json();
     expect(model.dimensions_mm).toHaveLength(3);
@@ -92,5 +98,9 @@ for (const item of cases.slice(0, limit)) {
     );
     expect(price.net_grosze).toBeGreaterThanOrEqual(price.cost_net_grosze);
     expect(price.gross_grosze).toBe(price.net_grosze + price.vat_grosze);
+    test.info().annotations.push({
+      type: 'measured-price',
+      description: 'Real slicer and price assertions completed',
+    });
   });
 }
