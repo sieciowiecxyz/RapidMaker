@@ -46,6 +46,8 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 
 - Rozwinięcie scen potwierdziło, że14/19/20/40 wymagają74–193 MB STL, nie ma nieużywanych trójkątów.32 pozostaje nieprawidłowy; mały preflight skrócił obserwowany scenariusz odrzucenia z22,8s do633ms (1 PASS1,3s). Geometry33 PASS/1 optionalignored; pełna walidacja/limity pozostają, Sol review bez blokera.
 
+- Uproszczenie geometrii:494 linii mniej,16 pakietów usuniętych bez zmiany wersji; pozostają wejścioweSTL/STEP/3MF, GLB wyjściowy. Naprawiony gateUnsupported; geometry31 PASS/1 optionalignored, realAPI5 PASS4,2s, workspace/build/ClippyPASS, Sol8–9/N/A.
+
 ## Review i następne kroki
 
 Po kroku: GPT-6-Sol xhigh,10 kategorii: poprawność, uprawnienia/bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody testowe, prostota, utrzymanie, zgodność wizualna/kontrakt. Naprawiać konkretne uwagi; nie wymuszać oceny10 ani utożsamiać oceny małej zmiany z oceną całego produktu.

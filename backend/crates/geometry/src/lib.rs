@@ -5,10 +5,6 @@ use std::{
 };
 
 use lib3mf::{Model as ThreeMfModel, ParserConfig, SpecConformance};
-use ply_rs_bw::{
-    parser::Parser as PlyParser,
-    ply::{DefaultElement, Property},
-};
 mod step;
 mod three_mf_mirrors;
 
@@ -18,10 +14,6 @@ const MAX_CANONICAL_STL_BYTES: usize = 50 * 1024 * 1024;
 pub enum SourceFormat {
     StlBinary,
     StlAscii,
-    Obj,
-    Ply,
-    Glb,
-    Gltf,
     ThreeMf,
     Step,
 }
@@ -159,6 +151,9 @@ pub fn source_to_preview_glb(
         return Err(PreviewError::InputTooLarge);
     }
     let gate = gate_source_format(source_filename, input, three_mf_limits)?;
+    if gate.status == FormatSupportStatus::Unsupported {
+        return Err(PreviewError::UnsupportedFormat);
+    }
     let (scene, source_format) = scene_from_source(gate.source_format, input, limits, started)?;
     build_preview_output(scene, source_format, limits)
 }
@@ -211,16 +206,11 @@ pub fn source_to_production(
         if input.len() > limits.max_input_bytes {
             return Err(PreviewError::InputTooLarge);
         }
-        let format = gate_source_format(filename, input, three_mf_limits)?.source_format;
-        if !matches!(
-            format,
-            SourceFormat::StlBinary
-                | SourceFormat::StlAscii
-                | SourceFormat::Step
-                | SourceFormat::ThreeMf
-        ) {
+        let gate = gate_source_format(filename, input, three_mf_limits)?;
+        if gate.status == FormatSupportStatus::Unsupported {
             return Err(PreviewError::UnsupportedFormat);
         }
+        let format = gate.source_format;
         let (scene, format) = scene_from_source(format, input, limits, started)?;
         let analysis = analyze_scene(&scene, format, limits)?;
         if analysis
@@ -328,15 +318,6 @@ fn scene_from_source(
 ) -> Result<(MeshScene, SourceFormat), PreviewError> {
     match source_format {
         SourceFormat::StlBinary | SourceFormat::StlAscii => parse_stl(input, limits, started),
-        SourceFormat::Obj => {
-            scene_from_obj(input, limits, started).map(|scene| (scene, source_format))
-        }
-        SourceFormat::Ply => {
-            scene_from_ply(input, limits, started).map(|scene| (scene, source_format))
-        }
-        SourceFormat::Glb | SourceFormat::Gltf => {
-            scene_from_gltf(input, limits, started).map(|scene| (scene, source_format))
-        }
         SourceFormat::ThreeMf => {
             scene_from_3mf(input, limits, started).map(|scene| (scene, source_format))
         }
@@ -358,23 +339,6 @@ pub fn gate_source_format(
             status: FormatSupportStatus::PreviewSupported,
             reason_code: "STL_PREVIEW_SUPPORTED",
         });
-    }
-    if lower.ends_with(".obj") {
-        return gate_obj(input);
-    }
-    if lower.ends_with(".ply") {
-        return gate_ply(input);
-    }
-    if lower.ends_with(".glb") {
-        validate_glb(input)?;
-        return Ok(FormatGateResult {
-            source_format: SourceFormat::Glb,
-            status: FormatSupportStatus::PreviewSupported,
-            reason_code: "GLB_PREVIEW_SUPPORTED",
-        });
-    }
-    if lower.ends_with(".gltf") {
-        return gate_gltf(input);
     }
     if lower.ends_with(".3mf") {
         validate_3mf_container(input, limits)?;
@@ -422,109 +386,6 @@ fn validate_step_part21(input: &[u8]) -> Result<(), PreviewError> {
         return Err(PreviewError::ExternalReferenceDisabled);
     }
     Ok(())
-}
-
-fn gate_obj(input: &[u8]) -> Result<FormatGateResult, PreviewError> {
-    let text = std::str::from_utf8(input).map_err(|_| PreviewError::MalformedInput)?;
-    if text.lines().any(|line| {
-        let trimmed = line.trim_start();
-        trimmed.starts_with("mtllib ") || trimmed.starts_with("usemtl ")
-    }) {
-        return Ok(FormatGateResult {
-            source_format: SourceFormat::Obj,
-            status: FormatSupportStatus::ManualReviewRequired,
-            reason_code: "OBJ_MATERIALS_DISABLED",
-        });
-    }
-    let has_vertex = text.lines().any(|line| line.trim_start().starts_with("v "));
-    let has_face = text.lines().any(|line| line.trim_start().starts_with("f "));
-    if has_vertex && has_face {
-        Ok(FormatGateResult {
-            source_format: SourceFormat::Obj,
-            status: FormatSupportStatus::PreviewSupported,
-            reason_code: "OBJ_SINGLE_FILE_PREVIEW_SUPPORTED",
-        })
-    } else {
-        Err(PreviewError::MalformedInput)
-    }
-}
-
-fn gate_ply(input: &[u8]) -> Result<FormatGateResult, PreviewError> {
-    let header_end = input
-        .windows("end_header".len())
-        .position(|window| window == b"end_header")
-        .ok_or(PreviewError::MalformedInput)?;
-    let header =
-        std::str::from_utf8(&input[..header_end]).map_err(|_| PreviewError::MalformedInput)?;
-    let supported_format =
-        header.contains("format ascii 1.0") || header.contains("format binary_little_endian 1.0");
-    if header.starts_with("ply")
-        && supported_format
-        && header.contains("element vertex ")
-        && header.contains("element face ")
-    {
-        Ok(FormatGateResult {
-            source_format: SourceFormat::Ply,
-            status: FormatSupportStatus::PreviewSupported,
-            reason_code: "PLY_SIMPLE_MESH_PREVIEW_SUPPORTED",
-        })
-    } else {
-        Err(PreviewError::MalformedInput)
-    }
-}
-
-fn validate_glb(input: &[u8]) -> Result<(), PreviewError> {
-    if input.len() < 20 || !input.starts_with(b"glTF") {
-        return Err(PreviewError::MalformedInput);
-    }
-    let version = u32::from_le_bytes(input[4..8].try_into().expect("slice length"));
-    let declared_len = u32::from_le_bytes(input[8..12].try_into().expect("slice length")) as usize;
-    if version != 2 || declared_len != input.len() {
-        return Err(PreviewError::MalformedInput);
-    }
-    let glb = gltf::binary::Glb::from_slice(input).map_err(|_| PreviewError::MalformedInput)?;
-    let value: serde_json::Value =
-        serde_json::from_slice(&glb.json).map_err(|_| PreviewError::MalformedInput)?;
-    if gltf_has_external_uri(&value) {
-        return Err(PreviewError::ExternalReferenceDisabled);
-    }
-    Ok(())
-}
-
-fn gate_gltf(input: &[u8]) -> Result<FormatGateResult, PreviewError> {
-    let text = std::str::from_utf8(input).map_err(|_| PreviewError::MalformedInput)?;
-    let value: serde_json::Value =
-        serde_json::from_str(text).map_err(|_| PreviewError::MalformedInput)?;
-    if gltf_has_external_uri(&value) {
-        return Err(PreviewError::ExternalReferenceDisabled);
-    }
-    if value
-        .get("asset")
-        .and_then(|asset| asset.get("version"))
-        .is_some()
-    {
-        Ok(FormatGateResult {
-            source_format: SourceFormat::Gltf,
-            status: FormatSupportStatus::PreviewSupported,
-            reason_code: "GLTF_EMBEDDED_PREVIEW_SUPPORTED",
-        })
-    } else {
-        Err(PreviewError::MalformedInput)
-    }
-}
-
-fn gltf_has_external_uri(value: &serde_json::Value) -> bool {
-    match value {
-        serde_json::Value::Object(map) => map.iter().any(|(key, value)| {
-            if key == "uri" {
-                value.as_str().is_none_or(|uri| !uri.starts_with("data:"))
-            } else {
-                gltf_has_external_uri(value)
-            }
-        }),
-        serde_json::Value::Array(values) => values.iter().any(gltf_has_external_uri),
-        _ => false,
-    }
 }
 
 fn validate_3mf_container(input: &[u8], limits: &ThreeMfLimits) -> Result<(), PreviewError> {
@@ -716,125 +577,6 @@ fn parse_ascii_stl(
     }
     if !saw_facet || builder.indices.is_empty() || pending != 0 {
         return Err(PreviewError::MalformedInput);
-    }
-    builder.finish()
-}
-
-fn scene_from_obj(
-    input: &[u8],
-    limits: &ConversionLimits,
-    started: Instant,
-) -> Result<MeshScene, PreviewError> {
-    let options = tobj::LoadOptions {
-        triangulate: true,
-        ignore_points: true,
-        ignore_lines: true,
-        ..Default::default()
-    };
-    // Materials are irrelevant to the canonical mesh; never read referenced files.
-    let (models, _) = tobj::load_obj_buf(&mut Cursor::new(input), &options, |_| {
-        Ok((Vec::new(), Default::default()))
-    })
-    .map_err(|_| PreviewError::MalformedInput)?;
-    let mut builder = MeshSceneBuilder::default();
-    for model in models {
-        for triangle in model.mesh.indices.chunks_exact(3) {
-            let mut points = [[0.0; 3]; 3];
-            for (point, index) in points.iter_mut().zip(triangle) {
-                let offset = (*index as usize)
-                    .checked_mul(3)
-                    .ok_or(PreviewError::MalformedInput)?;
-                point.copy_from_slice(
-                    model
-                        .mesh
-                        .positions
-                        .get(offset..offset + 3)
-                        .ok_or(PreviewError::MalformedInput)?,
-                );
-            }
-            builder.push_polygon(&points, limits, started)?;
-        }
-    }
-    builder.finish()
-}
-
-fn scene_from_ply(
-    input: &[u8],
-    limits: &ConversionLimits,
-    started: Instant,
-) -> Result<MeshScene, PreviewError> {
-    let parser = PlyParser::<DefaultElement>::new();
-    let mut reader = Cursor::new(input);
-    let ply = parser
-        .read_ply(&mut reader)
-        .map_err(|_| PreviewError::MalformedInput)?;
-
-    let vertices = ply
-        .payload
-        .get("vertex")
-        .ok_or(PreviewError::MalformedInput)?;
-    let mut positions = Vec::with_capacity(vertices.len());
-    for vertex in vertices {
-        check_timeout(started, limits)?;
-        positions.push([
-            ply_scalar_as_f32(vertex.get("x"))?,
-            ply_scalar_as_f32(vertex.get("y"))?,
-            ply_scalar_as_f32(vertex.get("z"))?,
-        ]);
-    }
-
-    let faces = ply
-        .payload
-        .get("face")
-        .ok_or(PreviewError::MalformedInput)?;
-    let mut builder = MeshSceneBuilder::default();
-    for face in faces {
-        check_timeout(started, limits)?;
-        let indices = ply_face_indices(face)?;
-        if indices.len() < 3 {
-            continue;
-        }
-        if indices.iter().any(|index| *index >= positions.len()) {
-            return Err(PreviewError::MalformedInput);
-        }
-        let first = positions[indices[0]];
-        for i in 1..indices.len() - 1 {
-            let b = positions[indices[i]];
-            let c = positions[indices[i + 1]];
-            builder.push_triangle(first, b, c, limits, started)?;
-        }
-    }
-    builder.finish()
-}
-
-fn scene_from_gltf(
-    input: &[u8],
-    limits: &ConversionLimits,
-    started: Instant,
-) -> Result<MeshScene, PreviewError> {
-    let (document, buffers, _) =
-        gltf::import_slice(input).map_err(|_| PreviewError::MalformedInput)?;
-    let mut builder = MeshSceneBuilder::default();
-    if let Some(scene) = document.default_scene() {
-        emit_gltf_scene(
-            &scene,
-            &buffers,
-            &mut builder,
-            limits,
-            started,
-            mat4_identity(),
-        )?;
-    } else {
-        for scene in document.scenes() {
-            emit_gltf_scene(
-                &scene,
-                &buffers,
-                &mut builder,
-                limits,
-                started,
-                mat4_identity(),
-            )?;
-        }
     }
     builder.finish()
 }
@@ -1106,146 +848,6 @@ fn scene_from_step(
     builder.finish()
 }
 
-fn emit_gltf_scene(
-    scene: &gltf::Scene<'_>,
-    buffers: &[gltf::buffer::Data],
-    builder: &mut MeshSceneBuilder,
-    limits: &ConversionLimits,
-    started: Instant,
-    transform: [[f32; 4]; 4],
-) -> Result<(), PreviewError> {
-    for node in scene.nodes() {
-        emit_gltf_node(&node, buffers, builder, limits, started, transform)?;
-    }
-    Ok(())
-}
-
-fn emit_gltf_node(
-    node: &gltf::Node<'_>,
-    buffers: &[gltf::buffer::Data],
-    builder: &mut MeshSceneBuilder,
-    limits: &ConversionLimits,
-    started: Instant,
-    parent_transform: [[f32; 4]; 4],
-) -> Result<(), PreviewError> {
-    check_timeout(started, limits)?;
-    let transform = mat4_mul(parent_transform, node.transform().matrix());
-    if let Some(mesh) = node.mesh() {
-        for primitive in mesh.primitives() {
-            emit_gltf_primitive(&primitive, buffers, builder, limits, started, transform)?;
-        }
-    }
-    for child in node.children() {
-        emit_gltf_node(&child, buffers, builder, limits, started, transform)?;
-    }
-    Ok(())
-}
-
-fn emit_gltf_primitive(
-    primitive: &gltf::Primitive<'_>,
-    buffers: &[gltf::buffer::Data],
-    builder: &mut MeshSceneBuilder,
-    limits: &ConversionLimits,
-    started: Instant,
-    transform: [[f32; 4]; 4],
-) -> Result<(), PreviewError> {
-    use gltf::mesh::Mode;
-
-    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-    let positions: Vec<[f32; 3]> = reader
-        .read_positions()
-        .ok_or(PreviewError::MalformedInput)?
-        .collect();
-    if positions.len() < 3 {
-        return Ok(());
-    }
-    let indices: Vec<u32> = match reader.read_indices() {
-        Some(indices) => collect_gltf_indices(indices)?,
-        None => (0..u32::try_from(positions.len()).map_err(|_| PreviewError::TooManyVertices)?)
-            .collect(),
-    };
-    match primitive.mode() {
-        Mode::Triangles => {
-            for triangle in indices.chunks(3) {
-                if triangle.len() != 3 {
-                    return Err(PreviewError::MalformedInput);
-                }
-                let a = positions
-                    .get(triangle[0] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let b = positions
-                    .get(triangle[1] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let c = positions
-                    .get(triangle[2] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
-            }
-        }
-        Mode::TriangleStrip => {
-            for index in 0..indices.len().saturating_sub(2) {
-                let (a, b, c) = if index % 2 == 0 {
-                    (indices[index], indices[index + 1], indices[index + 2])
-                } else {
-                    (indices[index + 1], indices[index], indices[index + 2])
-                };
-                let a = positions
-                    .get(a as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let b = positions
-                    .get(b as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let c = positions
-                    .get(c as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
-            }
-        }
-        Mode::TriangleFan => {
-            for index in 1..indices.len().saturating_sub(1) {
-                let a = positions
-                    .get(indices[0] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let b = positions
-                    .get(indices[index] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                let c = positions
-                    .get(indices[index + 1] as usize)
-                    .ok_or(PreviewError::MalformedInput)?;
-                emit_triangle_points(*a, *b, *c, transform, builder, limits, started)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn collect_gltf_indices(
-    indices: gltf::mesh::util::ReadIndices<'_>,
-) -> Result<Vec<u32>, PreviewError> {
-    use gltf::mesh::util::ReadIndices;
-
-    let mut out = Vec::new();
-    match indices {
-        ReadIndices::U8(iter) => {
-            for value in iter {
-                out.push(u32::from(value));
-            }
-        }
-        ReadIndices::U16(iter) => {
-            for value in iter {
-                out.push(u32::from(value));
-            }
-        }
-        ReadIndices::U32(iter) => {
-            for value in iter {
-                out.push(value);
-            }
-        }
-    }
-    Ok(out)
-}
-
 fn three_mf_part_path<'a>(
     path: Option<&'a str>,
     current: &'a str,
@@ -1372,62 +974,6 @@ fn emit_triangle_points(
         limits,
         started,
     )
-}
-
-fn ply_scalar_as_f32(value: Option<&Property>) -> Result<f32, PreviewError> {
-    match value.ok_or(PreviewError::MalformedInput)? {
-        Property::Float(v) => Ok(*v),
-        Property::Double(v) => Ok(*v as f32),
-        Property::Int(v) => Ok(*v as f32),
-        Property::UInt(v) => Ok(*v as f32),
-        Property::Short(v) => Ok(*v as f32),
-        Property::UShort(v) => Ok(*v as f32),
-        Property::Char(v) => Ok(*v as f32),
-        Property::UChar(v) => Ok(*v as f32),
-        _ => Err(PreviewError::MalformedInput),
-    }
-}
-
-fn ply_face_indices(element: &DefaultElement) -> Result<Vec<usize>, PreviewError> {
-    let property = element
-        .get("vertex_indices")
-        .or_else(|| element.get("vertex_index"))
-        .ok_or(PreviewError::MalformedInput)?;
-    let indices = match property {
-        Property::ListChar(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        Property::ListUChar(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        Property::ListShort(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        Property::ListUShort(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        Property::ListInt(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        Property::ListUInt(values) => values
-            .iter()
-            .map(|value| *value as isize)
-            .collect::<Vec<_>>(),
-        _ => return Err(PreviewError::MalformedInput),
-    };
-    let mut out = Vec::with_capacity(indices.len());
-    for value in indices {
-        if value < 0 {
-            return Err(PreviewError::MalformedInput);
-        }
-        out.push(value as usize);
-    }
-    Ok(out)
 }
 
 fn three_mf_unit_scale_mm(unit: &str) -> Result<f32, PreviewError> {
@@ -1779,7 +1325,6 @@ mod tests {
         include_bytes!("../tests/fixtures/zip_external_relationship.3mf");
     const THREEMF_BOMB: &[u8] = include_bytes!("../tests/fixtures/zip_bomb_limit.3mf");
     const GLTF_EXTERNAL: &[u8] = include_bytes!("../tests/fixtures/gltf_external_ref.gltf");
-    const GLTF_EMBEDDED: &[u8] = include_bytes!("../tests/fixtures/gltf_embedded_minimal.gltf");
     const GLTF_EMBEDDED_TRIANGLE: &[u8] =
         include_bytes!("../tests/fixtures/gltf_embedded_triangle.gltf");
     const STEP_BLOCK: &[u8] = include_bytes!("../tests/fixtures/step_block.step");
@@ -2338,7 +1883,7 @@ mod tests {
             ("cube.stl", CUBE_BINARY),
             ("cube.stl", CUBE_ASCII),
             ("part.step", STEP_BLOCK),
-            ("part.stp", STEP_CYLINDER),
+            ("part.STP", STEP_CYLINDER),
             ("part.3mf", THREEMF_SIMPLE),
             (
                 "transformed.3mf",
@@ -2461,14 +2006,6 @@ mod tests {
             .unwrap_err(),
             PreviewError::UnsupportedFormat
         );
-    }
-
-    #[test]
-    fn obj_external_materials_are_not_loaded() {
-        let mut source = b"mtllib /etc/shadow\nusemtl private\n".to_vec();
-        source.extend_from_slice(OBJ_SINGLE_CUBE);
-        let mesh = scene_from_obj(&source, &ConversionLimits::default(), Instant::now()).unwrap();
-        assert_eq!(mesh.indices.len() / 3, 12);
     }
 
     #[test]
@@ -2698,63 +2235,6 @@ mod tests {
     }
 
     #[test]
-    fn format_gates_cover_obj_ply_glb_gltf_and_3mf_smoke_fixtures() {
-        let limits = ThreeMfLimits::default();
-
-        let obj = gate_source_format("single_cube.obj", OBJ_SINGLE_CUBE, &limits).unwrap();
-        assert_eq!(obj.source_format, SourceFormat::Obj);
-        assert_eq!(obj.status, FormatSupportStatus::ManualReviewRequired);
-        assert_eq!(obj.reason_code, "OBJ_MATERIALS_DISABLED");
-
-        let obj_simple = gate_source_format(
-            "plain.obj",
-            b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
-            &limits,
-        )
-        .unwrap();
-        assert_eq!(obj_simple.status, FormatSupportStatus::PreviewSupported);
-
-        let ply = gate_source_format("simple.ply", PLY_SIMPLE, &limits).unwrap();
-        assert_eq!(ply.status, FormatSupportStatus::PreviewSupported);
-
-        let glb = gate_source_format("simple.glb", GLB_SIMPLE, &limits).unwrap();
-        assert_eq!(glb.status, FormatSupportStatus::PreviewSupported);
-
-        let gltf = gate_source_format("embedded.gltf", GLTF_EMBEDDED, &limits).unwrap();
-        assert_eq!(gltf.status, FormatSupportStatus::PreviewSupported);
-        assert_eq!(
-            gate_source_format("external.gltf", GLTF_EXTERNAL, &limits).unwrap_err(),
-            PreviewError::ExternalReferenceDisabled
-        );
-
-        let three_mf = gate_source_format("simple_model.3mf", THREEMF_SIMPLE, &limits).unwrap();
-        assert_eq!(three_mf.source_format, SourceFormat::ThreeMf);
-        assert_eq!(three_mf.status, FormatSupportStatus::ManualReviewRequired);
-    }
-
-    #[test]
-    fn glb_gate_rejects_external_uri_in_json_chunk() {
-        let json = serde_json::json!({
-            "asset": {"version": "2.0"},
-            "buffers": [{"uri": "model.bin", "byteLength": 4}],
-        });
-        let glb = gltf::binary::Glb {
-            header: gltf::binary::Header {
-                magic: *b"glTF",
-                version: 2,
-                length: 0,
-            },
-            json: serde_json::to_vec(&json).unwrap().into(),
-            bin: None,
-        };
-        let bytes = glb.to_vec().unwrap();
-        assert_eq!(
-            validate_glb(&bytes).unwrap_err(),
-            PreviewError::ExternalReferenceDisabled
-        );
-    }
-
-    #[test]
     fn compressed_3mf_relationship_entries_are_scanned_for_external_targets() {
         let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default()
@@ -2771,18 +2251,44 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_inputs_are_rejected_by_preview_and_production() {
+        let limits = ConversionLimits::default();
+        let three_mf_limits = ThreeMfLimits::default();
+        for (filename, input) in [
+            ("single_cube.obj", OBJ_SINGLE_CUBE),
+            ("simple.ply", PLY_SIMPLE),
+            ("simple.glb", GLB_SIMPLE),
+            ("embedded_triangle.gltf", GLTF_EMBEDDED_TRIANGLE),
+            ("external.gltf", GLTF_EXTERNAL),
+            ("unknown.exe", CUBE_ASCII),
+            ("unknown", CUBE_BINARY),
+        ] {
+            let gate = gate_source_format(filename, input, &three_mf_limits).unwrap();
+            assert_eq!(gate.status, FormatSupportStatus::Unsupported, "{filename}");
+            assert_eq!(gate.reason_code, "UNSUPPORTED_FORMAT", "{filename}");
+            assert_eq!(
+                source_to_preview_glb(filename, input, &limits, &three_mf_limits).unwrap_err(),
+                PreviewError::UnsupportedFormat,
+                "{filename}"
+            );
+            assert_eq!(
+                source_to_production(filename, input, &limits, &three_mf_limits)
+                    .err()
+                    .unwrap(),
+                PreviewError::UnsupportedFormat,
+                "{filename}"
+            );
+        }
+    }
+
+    #[test]
     fn preview_conversion_covers_supported_smoke_formats_through_unified_glb_output() {
         let limits = ConversionLimits::default();
         let three_mf_limits = ThreeMfLimits::default();
         for (filename, bytes, expected_format) in [
-            ("single_cube.obj", OBJ_SINGLE_CUBE, SourceFormat::Obj),
-            ("simple.ply", PLY_SIMPLE, SourceFormat::Ply),
-            ("simple.glb", GLB_SIMPLE, SourceFormat::Glb),
-            (
-                "embedded_triangle.gltf",
-                GLTF_EMBEDDED_TRIANGLE,
-                SourceFormat::Gltf,
-            ),
+            ("cube.STL", CUBE_BINARY, SourceFormat::StlBinary),
+            ("cube_ascii.stl", CUBE_ASCII, SourceFormat::StlAscii),
+            ("step_block.STP", STEP_BLOCK, SourceFormat::Step),
             ("simple_model.3mf", THREEMF_SIMPLE, SourceFormat::ThreeMf),
             ("step_block.step", STEP_BLOCK, SourceFormat::Step),
         ] {

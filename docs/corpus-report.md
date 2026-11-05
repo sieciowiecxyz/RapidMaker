@@ -8,6 +8,14 @@ Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**.
 
 Uaktualniono checkpoint i sprzeczne historyczne opisy w email/chat/checkout: interfejsy i odpowiedzi email nie są już makietami, sandbox obejmuje zwroty i logistykę. Sol xhigh zweryfikował źródła liczb i wskazał te rozbieżności; zachowano pełny zakres obrazów/przykładów i klikalnych przepływów. Roboczy audyt całego celu nadal8–9/10 (zasoby7), nie żądane10/10; siedem nieobsłużonych modeli pozostaje jawne.
 
+## Mniejsza powierzchnia parserów
+
+Usunięto nieudostępniane przez stronę wejściowe OBJ/PLY/glTF/GLB: **494 linie netto** w geometrii, w tym435 produkcyjnych. Pozostają STL/STEP/STP/3MF i wyjściowy GLB. Lockfile odchudzono o16 pakietów (m.in. kodeki obrazów/PLY/OBJ), bez dodanych pakietów i zmian wersji. Bezpośredni `gltf` jest testowy i nadal niezależnie sprawdza writer; pozostaje też zależnością produkcyjną lib3mf, więc nie twierdzimy, że zniknął całkowicie. Usunięto niepotrzebne features import/image.
+
+Naprawiono ignorowanie statusu `Unsupported` w obu wejściach biblioteki: `.exe` z poprawnym STL i plik bez rozszerzenia nie są już parsowane jako STL. HTTP wcześniej miało własną prawidłową kontrolę trzech formatów; nie była to luka w publicznym uploadzie. Nowe negatywne regresje zastępują wyłącznie testy usuniętych formatów; STEP/3MF manual gate nie blokuje konwersji, uppercaseSTP zachowane.
+
+Geometry31 PASS/1 opcjonalny ignored; workspace check i build `--offline --locked`, Clippy all-target `-D warnings`, fmt/diff-check PASS. `geometry-formats-trim.json`: **5 PASS/4,2s**,0 FAIL/skipped/flaky — rzeczywiste3 formaty→prywatnyGLB, odrzucenia/ścieżki zewnętrzne, retencja, własność/równoległość i limity. Sol xhigh bez blokera; oceny zakresu8–9/N/A. Nie zmieniano frontendu/stylem ani limitów. Pełny korpus i dostawcy nie były powtarzane w tej regresji.
+
 ## Pozostałe sceny i szybkie odrzucenie błędnego manifestu
 
 Izolowana diagnostyka SHA-zweryfikowanych plików rozwinęła build/komponenty/instancje i ścieżki Production (CPU10s/AS512 MiB/wall15s, bez sieci/sekretów, bez zapisu modeli). Nie ma nieużywanych trójkątów, których usunięcie zmieści te cztery sceny w obecnym STL50 MiB:
