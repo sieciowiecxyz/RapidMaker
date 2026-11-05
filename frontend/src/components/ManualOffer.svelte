@@ -65,6 +65,7 @@
     if (offer.version !== editVersion) {
       editVersion = offer.version;
       if (publication && offer.version > publication.version) {
+        error = '';
         notice =
           offer.amount_grosze === publication.amount_grosze &&
           offer.shipping_grosze === publication.shipping_grosze &&

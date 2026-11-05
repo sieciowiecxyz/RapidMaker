@@ -41,10 +41,12 @@
     leadTime = value.leadTime;
     notes = value.notes;
   }
-  async function load() {
+  async function load(refresh = false) {
     const generation = ++loadGeneration;
-    order = null;
-    loading = true;
+    if (!refresh) {
+      order = null;
+      loading = true;
+    }
     error = '';
     try {
       const value = await getOrder(id);
@@ -52,6 +54,7 @@
       assign(value);
     } catch (e) {
       if (generation !== loadGeneration) return;
+      if (e instanceof ApiError && [401, 403, 404].includes(e.status)) order = null;
       error = (e as Error).message;
     } finally {
       if (generation === loadGeneration) loading = false;
@@ -143,7 +146,7 @@
     >
       <h1>Nie można otworzyć zamówienia</h1>
       <p class="alert error" role="alert">{error}</p>
-      <Button onclick={load}>Spróbuj ponownie</Button>
+      <Button onclick={() => load()}>Spróbuj ponownie</Button>
     </div>{:else}
     <div class="page-heading">
       <div>
@@ -230,7 +233,7 @@
               if (!adminMode && order?.serverStatus === 'awaiting_payment') {
                 await refreshOrderPayment(id);
               }
-              await load();
+              await load(true);
             }}
           />{/if}
         <dl>

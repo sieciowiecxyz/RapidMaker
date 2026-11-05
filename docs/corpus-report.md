@@ -1,5 +1,13 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## Publikacja oferty po zerwaniu połączenia
+
+Nowy rzeczywisty test odtworzył utratę komunikatu i zatwierdzonej próby po błędzie sieci. `OrderDetail` odświeża teraz tę samą ofertę bez odmontowania formularza; inicjalne ładowanie nadal czyści dane, a401/403/404 usuwa prywatny widok. Nowsza wersja oferty rozstrzyga wynik publikacji i usuwa nieaktualny komunikat błędu. Bez zmian CSS.
+
+`manual-publication-final.json`: **2 PASS/29,3s**,0 skip/flaky —nowa regresja publikacji i istniejąca macierz wizualna w jednej bazie. Przed zapisem test przerywa POST bez wysłania go do API: wersja1/bez emaila, zachowane pola i komunikat; retry wysyła identyczną zatwierdzoną treść bez nowego dialogu→wersja2/25 zł/jeden wpis outbox. Następnie API rzeczywiście zapisuje30 zł, ale test gubi samą odpowiedź: odczyt rozpoznaje wersję3 bez kolejnego POST; stara wiadomość skipped, nowa pending, bez duplikatu. Prawdziwy logout admina i refresh usuwają ofertę/zakres z UI; API zwraca401. SQL tylko odczytuje własną walidowaną bazę/UUID; SMTP i płatności wyłączone. To dowód kolejki, nie doręczenia emaila ani równoległej publikacji przez dwóch adminów. Test należy do core.
+
+Początkowy FAIL21,3s potwierdził błąd produktu. Po poprawce nowa regresja przeszła, ale wspólny przebieg znalazł zbyt szeroki selektor starego testu przy dwóch zamówieniach z tym samym plikiem; zawężono go do właściwego numeru zamówienia. Końcowe dwa testy przeszły razem. Svelte-check0/0, Vite build, Prettier i diff-check PASS. Sol xhigh: brak blokera, oceny8–10 w zakresie zmiany; bez deklaracji10/10 całego celu.
+
 ## Oferta indywidualna — błędy i stany wizualne
 
 Nowa regresja ujawniła znikający komunikat błędnej ceny w `/admin/zamowienia/{id}`: lokalna walidacja odświeżała zamówienie i odmontowywała formularz. Jedna zmiana warunku w `ManualOffer.svelte` zachowuje komunikat i wpisane pola przed publikacją; po próbie API odświeżenie pozostaje. Bez zmian CSS/wyglądu.

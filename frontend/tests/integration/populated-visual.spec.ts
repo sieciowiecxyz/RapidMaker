@@ -253,7 +253,11 @@ test('populated unpaid order, private previews and chat fit both themes and view
         await expect(
           page.getByRole('link', { name: `Szczegóły zamówienia ${number}`, exact: true }),
         ).toHaveAttribute('href', `/konto/zamowienia/${id}`);
-        await expect(page.getByText('cube_20mm.stl', { exact: true })).toBeVisible();
+        await expect(
+          page
+            .getByRole('listitem', { name: number, exact: true })
+            .getByText('cube_20mm.stl', { exact: true }),
+        ).toBeVisible();
         await expect(
           page.getByRole('listitem', { name: number, exact: true }).locator('.price'),
         ).toHaveText('Do wyceny');
