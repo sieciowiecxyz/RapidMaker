@@ -1,5 +1,11 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## Dwie sesje panelu i konflikt ceny
+
+`manual-publication-concurrent.json`: **1 PASS/29,5s**,0 skip/flaky. Rozszerzenie istniejącego scenariusza loguje ten sam admin-account w dwóch niezależnych kontekstach przez prawdziwe MFA. Oba panele mają wersję3; równoległe kliknięcia wysyłają35/40 zł. HTTP200/409, klient widzi wersję4 ze zwycięską ceną, oba panele ją odczytują, przegrany pokazuje konflikt; outbox: stare wersje skipped, jedna aktualna pending. Bez zmiany produktu, płatności i SMTP. Czas obejmuje oczekiwanie na następny krok TOTP, bez obchodzenia ochrony replay.
+
+To dowód konfliktu nieaktualnej wersji przez dwie sesje jednego konta, nie dwóch różnych użytkowników ani wymuszonego nałożenia transakcji PostgreSQL. Sol xhigh: brak blokera, oceny8–9 w większości kategorii; wykonanie potwierdzone przez głównego agenta po review. Prettier/diff-check PASS.
+
 ## Publikacja oferty po zerwaniu połączenia
 
 Nowy rzeczywisty test odtworzył utratę komunikatu i zatwierdzonej próby po błędzie sieci. `OrderDetail` odświeża teraz tę samą ofertę bez odmontowania formularza; inicjalne ładowanie nadal czyści dane, a401/403/404 usuwa prywatny widok. Nowsza wersja oferty rozstrzyga wynik publikacji i usuwa nieaktualny komunikat błędu. Bez zmian CSS.

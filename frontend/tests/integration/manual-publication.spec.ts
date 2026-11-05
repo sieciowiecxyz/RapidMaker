@@ -207,6 +207,54 @@ test('manual publication recovers before and after commit without duplicate offe
       { event_key: `order:${id}:manual-offer:2`, status: 'skipped', attempts: 0 },
       { event_key: `order:${id}:manual-offer:3`, status: 'pending', attempts: 0 },
     ]);
+    // Two independently authenticated panel sessions publish different prices from version 3.
+    const rivalContext = await browser.newContext();
+    try {
+      const rival = await rivalContext.newPage();
+      rival.on('pageerror', (error) => errors.push(error.name));
+      await login(rival, admin);
+      await rival.goto(`/admin/zamowienia/${id}`);
+      const rivalOffer = rival.getByRole('region', { name: 'Wycena indywidualna' });
+      await expect(rivalOffer.getByLabel('Całość brutto (zł)')).toHaveValue('30,00');
+      await operator.unroute(quoteUrl);
+      await total.fill('35,00');
+      await rivalOffer.getByLabel('Całość brutto (zł)').fill('40,00');
+      for (const target of [operator, rival]) target.once('dialog', (dialog) => dialog.accept());
+      const responses = [operator, rival].map((target) =>
+        target.waitForResponse(
+          (response) => response.url() === quoteUrl && response.request().method() === 'POST',
+        ),
+      );
+      await Promise.all(
+        [offer, rivalOffer].map((card) =>
+          card.getByRole('button', { name: 'Opublikuj ofertę i powiadom klienta' }).click(),
+        ),
+      );
+      const results = await Promise.all(responses);
+      expect(results.map((response) => response.status()).sort()).toEqual([200, 409]);
+      const winner = results[0].status() === 200 ? 3500 : 4000;
+      await expect
+        .poll(readOffer)
+        .toMatchObject({ version: 4, amount_grosze: winner, scope: scopeText });
+      for (const card of [offer, rivalOffer]) {
+        await expect(card.getByLabel('Całość brutto (zł)')).toHaveValue(
+          (winner / 100).toFixed(2).replace('.', ','),
+        );
+        await expect(card.getByLabel('Całość brutto (zł)')).toBeEnabled();
+        await expect(card.getByRole('alert')).toHaveCount(0);
+      }
+      const loser = results[0].status() === 409 ? offer : rivalOffer;
+      await expect(loser.getByRole('status')).toHaveText(
+        'Oferta zmieniła się na innym urządzeniu. Sprawdź aktualne dane.',
+      );
+      expect(offerEmails(id)).toEqual([
+        { event_key: `order:${id}:manual-offer:2`, status: 'skipped', attempts: 0 },
+        { event_key: `order:${id}:manual-offer:3`, status: 'skipped', attempts: 0 },
+        { event_key: `order:${id}:manual-offer:4`, status: 'pending', attempts: 0 },
+      ]);
+    } finally {
+      await rivalContext.close();
+    }
     const logout = await operator.request.post('/api/auth/logout', {
       headers: await headers(operator),
       data: {},
