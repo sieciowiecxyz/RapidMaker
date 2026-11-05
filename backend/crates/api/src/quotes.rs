@@ -469,14 +469,17 @@ mod tests {
         assert_eq!(families.len(), CUSTOMER_MATERIALS.len());
         for family in families {
             let profile = operator.iter().find(|m| family["id"] == m.id).unwrap();
+            let colors = if profile.id == "GFN03" && profile.colors.is_empty() {
+                assert!(known_color(profile, "black"));
+                json!([{"code":"black","name":"Black","rgba":["#000000FF"],"in_stock":false}])
+            } else {
+                json!(profile.colors)
+            };
             assert_eq!(
                 family["available"],
-                approved_cost(profile).is_some() && !profile.colors.is_empty()
+                approved_cost(profile).is_some() && !colors.as_array().unwrap().is_empty()
             );
-            assert_eq!(
-                family["colors"].as_array().unwrap().len(),
-                profile.colors.len()
-            );
+            assert_eq!(family["colors"], colors);
             assert!(
                 profile
                     .colors

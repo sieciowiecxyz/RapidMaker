@@ -1,5 +1,11 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## Dodatkowe rzeczywiste testy DB/API
+
+`database-with-api-final.json`: **20 PASS/0 FAIL/0 skipped/0 flaky** —18 testów storage, katalog API oraz HTTP: klient/gość/admin nie mogą przekraczać granic cudzych modeli, zamówień i operacji. Każdy test ma osobną tymczasową bazę, access także własny katalog modeli; sprzątanie jest częścią wyniku. Runner jest w grupie `storage` i `test:all`, bez kluczy dostawców. Z25 pomijanych testów workspace wykonano osobno20; pozostałe5 nie są zaliczone jako wykonane.
+
+Pierwszy przebieg19 PASS/1 FAIL ujawnił nieaktualną asercję katalogu: PA-CF ma jawny czarny kolor mimo pustej listy upstream. Test teraz sprawdza dokładny obiekt tego fallbacku i pełne listy pozostałych kolorów, nadal kontrolując cenę/dopuszczenie operatora i niezależność od magazynu. Kod produktu nie zmieniony. Sol xhigh: brak konkretnego problemu, oceny8–9/N/A; fmt/diff-check PASS. Nie powtarzano korpusu, UI ani dostawców po zmianie wyłącznie testów/runnera.
+
 Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
 ## Aktualny korpus i testy bazodanowe — HEAD8bd6fcc

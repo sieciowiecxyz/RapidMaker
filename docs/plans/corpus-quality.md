@@ -26,8 +26,8 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 | `contracts.json` — HEAD97c10dd | 21 PASS/5,7s; kontrolowane kontrakty UI/narzędzi, nie dowód dostawców |
 | `core.json` — HEAD97c10dd | 31 PASS/237,4s; realne API/DB/slicer/MFA/konfigurator/panele/zasoby; dostawcy osobno |
 | `corpus41-trimmed.json` — HEAD8bd6fcc | 36 PASS/5 FAIL/424,3s:20 cen,11 ręcznych,5 oczekiwanych413,4 limity422,1 błędny model422 |
-| `storage.json` | 18 PASS/0 skipped, osobna tymczasowa baza na test; runner w test:all |
-| Rust workspace | 139 PASS/25 ignored;18 ignored wykonano osobno przez storage, pozostałe7 nadal nie |
+| `database-with-api-final.json` | 20 PASS/0 skipped:18 storage, katalog API i granice dostępu HTTP; osobna tymczasowa baza na test |
+| Rust workspace | 139 PASS/25 ignored;20 ignored wykonano osobno przez runner DB, pozostałe5 nadal nie |
 | `expanded96-ui.json` | 7 PASS/194,8s:4 nowe podglądy i3 poprawnie pokazane odrzucenia; nie7 cen |
 | `sandbox.json` — baza f60b381 | 9 PASS/168,0s bez provider-blocked; późniejsze poprawki mają osobne regresje |
 | `selected-carrier-payment.json` | 2 PASS/35,3s; wybrany przewoźnik/kwota/intent/trwałe zamówienie |

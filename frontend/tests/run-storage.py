@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Ignored storage tests, each on its own disposable local PostgreSQL database."""
+"""Ignored storage/API database tests, each on its own disposable local PostgreSQL."""
 import json
 import os
 from pathlib import Path
 import re
 import secrets
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 
 os.umask(0o077)
@@ -28,8 +30,14 @@ env = {k: v for k, v in os.environ.items() if k in (
     'LD_LIBRARY_PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS',
 )}
 container = os.environ.get('TEST_PG_CONTAINER', 'rapidmaker-catalog-postgres')
-cargo = ['cargo', 'test', '--locked', '--manifest-path', 'backend/Cargo.toml',
-         '-p', 'rapidmaker-storage', '--lib', '--']
+cargo = ['cargo', 'test', '--locked', '--manifest-path', 'backend/Cargo.toml']
+targets = [
+    ('rapidmaker-storage', ['--lib'], 'storage', None),
+    ('rapidmaker-api', ['--lib'], 'catalog',
+     'quotes::tests::postgres_customer_catalog_ignores_stock_and_keeps_operator_profiles'),
+    ('rapidmaker-api', ['--test', 'access'], 'access',
+     'clients_guests_and_admins_cannot_cross_resource_boundaries'),
+]
 cases, results, failure = [], [], None
 
 
@@ -87,23 +95,36 @@ try:
         'localhost', '127.0.0.1'
     ) or parsed.port != 18434 or parsed.query or parsed.fragment:
         raise ValueError('dedicated local PostgreSQL on port 18434 required')
-    discovery = logs / 'discovery.log'
-    if run([*cargo, '--list', '--ignored'], env, discovery, 300):
-        raise RuntimeError('test discovery failed')
-    cases = re.findall(r'^([\w:]+): test$', discovery.read_text(), re.MULTILINE)
-    if not cases:
-        raise RuntimeError('no ignored storage tests discovered')
-    for index, case in enumerate(cases):
-        name = 'rapidmaker_test_storage_' + secrets.token_hex(16)
+    for package, target, profile, selected in targets:
+        command = [*cargo, '-p', package, *target, '--']
+        discovery = logs / f'discovery-{profile}.log'
+        if run([*command, '--list', '--ignored'], env, discovery, 300):
+            raise RuntimeError('test discovery failed')
+        found = re.findall(r'^([\w:]+): test$', discovery.read_text(), re.MULTILINE)
+        if not found or (selected and selected not in found):
+            raise RuntimeError('required ignored database tests not discovered')
+        cases.extend((package, target, profile, command, case)
+                     for case in ([selected] if selected else found))
+    for index, (package, target, profile, command, case) in enumerate(cases):
+        name = 'rapidmaker_test_' + profile + '_' + secrets.token_hex(16)
         log = logs / f'{index + 1:02d}.log'
         created_attempted, passed = False, False
-        case_result = {'name': case}
+        case_result = {'name': case, 'package': package, 'target': target}
+        model_root = None
         try:
             created_attempted = True
             sql('CREATE DATABASE ' + name, log)
-            child_env = dict(env, TEST_DATABASE_URL=parsed._replace(path='/' + name).geturl(),
-                             AUTH_TEST_DATABASE_URL=parsed._replace(path='/' + name).geturl())
-            code = run([*cargo, case, '--exact', '--ignored', '--test-threads=1'],
+            owned_url = parsed._replace(path='/' + name).geturl()
+            child_env = dict(env, TEST_DATABASE_URL=owned_url, AUTH_TEST_DATABASE_URL=owned_url)
+            if profile == 'catalog':
+                child_env['F1_TEST_DATABASE_URL'] = owned_url
+            elif profile == 'access':
+                model_root = tempfile.mkdtemp(prefix='rapidmaker-access-', dir='/tmp')
+                child_env.update(ACCESS_TEST_DATABASE_URL=owned_url, DATABASE_URL=owned_url,
+                                 MODEL_STORAGE_DIR=model_root, AUTH_MODE='localhost',
+                                 AUTH_ORIGIN='http://localhost:18430', AUTH_CODE_KEY=secrets.token_hex(32),
+                                 MAIL_MODE='disabled', SLICER_WORKER_MODE='external')
+            code = run([*command, case, '--exact', '--ignored', '--test-threads=1'],
                        child_env, log, 180)
             passed = code == 0 and bool(re.search(
                 r'test result: ok\. 1 passed; 0 failed; 0 ignored;', log.read_text()))
@@ -119,6 +140,12 @@ try:
                 passed, failure = False, type(error).__name__
                 case_result['cleanup_database'] = name
             finally:
+                try:
+                    if model_root:
+                        shutil.rmtree(model_root)
+                except Exception as error:
+                    passed, failure = False, type(error).__name__
+                    case_result['cleanup_path'] = model_root
                 for sig, handler in previous.items():
                     signal.signal(sig, handler)
                 case_result['status'] = 'passed' if passed else 'failed'
