@@ -50,7 +50,7 @@ impl Default for ThreeMfLimits {
     fn default() -> Self {
         Self {
             max_entry_count: 512,
-            max_uncompressed_bytes: 50 * 1024 * 1024,
+            max_uncompressed_bytes: 64 * 1024 * 1024,
             max_entry_bytes: 32 * 1024 * 1024,
         }
     }
@@ -1944,8 +1944,8 @@ mod tests {
         for (sizes, accepted) in [
             (vec![32 * mib], true),
             (vec![32 * mib + 1], false),
-            (vec![32 * mib, 18 * mib], true),
-            (vec![32 * mib, 18 * mib + 1], false),
+            (vec![32 * mib, 32 * mib], true),
+            (vec![32 * mib, 32 * mib, 1], false),
         ] {
             let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
             let options = zip::write::SimpleFileOptions::default()
@@ -1953,9 +1953,9 @@ mod tests {
                 .compression_level(Some(1));
             for (index, &size) in sizes.iter().enumerate() {
                 let name = if index == 0 {
-                    "3D/3dmodel.model"
+                    "3D/3dmodel.model".to_owned()
                 } else {
-                    "padding.bin"
+                    format!("padding_{index}.bin")
                 };
                 archive.start_file(name, options).unwrap();
                 std::io::copy(&mut std::io::repeat(0).take(size), &mut archive).unwrap();
