@@ -1,4 +1,4 @@
-import { meshFromPositions, type StlMesh } from './stlParser';
+import { MAX_PREVIEW_TRIANGLES, meshFromPositions, type StlMesh } from './stlParser';
 
 /** Only the self-contained, single-mesh GLB emitted by rapidmaker-geometry is accepted.
  * This is deliberately not a general glTF loader; no URL, texture or external buffer is fetched.
@@ -83,7 +83,7 @@ export function parsePreviewGlb(buffer: ArrayBuffer): StlMesh {
     !integer(indices.count) ||
     !indices.count ||
     indices.count % 3 ||
-    indices.count > 3_000_000 ||
+    indices.count > 3 * MAX_PREVIEW_TRIANGLES ||
     positions.count > 1_000_000 ||
     positions.sparse ||
     indices.sparse ||

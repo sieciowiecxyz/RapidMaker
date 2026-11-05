@@ -1,6 +1,7 @@
 import type { PartMesh } from './partMesh';
 export type StlMesh = PartMesh & { triangleCount: number; dimensions: [number, number, number] };
 const MAX_TRIANGLES = 1_000_000;
+export const MAX_PREVIEW_TRIANGLES = Math.floor((50 * 1024 * 1024 - 84) / 50);
 export function parseStl(buffer: ArrayBuffer): StlMesh {
   if (!buffer.byteLength || buffer.byteLength > 25 * 1024 * 1024)
     throw new Error('Wybierz niepusty STL do 25 MB.');
@@ -43,8 +44,8 @@ export function parseStl(buffer: ArrayBuffer): StlMesh {
 
 /** Flattened triangles in source millimetres; normalise once for the existing WebGL viewer. */
 export function meshFromPositions(positions: Float32Array): StlMesh {
-  if (!positions.length || positions.length % 9 || positions.length / 9 > MAX_TRIANGLES)
-    throw new Error('Podgląd wymaga poprawnej siatki do 1 mln trójkątów.');
+  if (!positions.length || positions.length % 9 || positions.length / 9 > MAX_PREVIEW_TRIANGLES)
+    throw new Error('Siatka podglądu jest nieprawidłowa lub zbyt szczegółowa.');
   const min = [Infinity, Infinity, Infinity],
     max = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < positions.length; i++) {

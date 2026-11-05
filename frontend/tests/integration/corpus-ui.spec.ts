@@ -256,6 +256,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       if (isUpload(request)) posts++;
     });
     const oversized = item.size_bytes > 25 * 1024 * 1024;
+    if ([24, 39].includes(item.case)) expect(oversized).toBe(false);
     const uploaded = oversized
       ? undefined
       : page.waitForResponse((response) => isUpload(response.request()), { timeout: 90_000 });
@@ -272,6 +273,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       return;
     }
     const upload = await uploaded!;
+    if ([24, 39].includes(item.case)) expect(upload.status()).toBe(201);
     if (item.case === 32) expect(upload.status()).toBe(422);
     if (upload.status() === 422) {
       // Chromium can evict large upload response bodies from its inspector cache.
@@ -357,13 +359,40 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       { timeout: 90_000 },
     );
     await expect(scene.locator('.scene-caption')).toContainText('trójkątów');
-    expect(
-      Number(
-        (await scene.locator('.scene-caption').innerText())
-          .split('trójkątów')[0]
-          .replace(/\D/g, ''),
-      ),
-    ).toBeGreaterThanOrEqual(1);
+    const renderedTriangles = Number(
+      (await scene.locator('.scene-caption').innerText()).split('trójkątów')[0].replace(/\D/g, ''),
+    );
+    expect(renderedTriangles).toBeGreaterThanOrEqual(1);
+    if ([24, 39].includes(item.case)) {
+      const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
+      const sourceTriangles = gltf.accessors[1].count / 3;
+      const binary = 28 + glb.readUInt32LE(12);
+      const indexStart = binary + gltf.bufferViews[1].byteOffset;
+      let zeroArea = 0;
+      for (let i = 0; i < sourceTriangles; i++) {
+        const points = [0, 1, 2].map((corner) => {
+          const offset = binary + glb.readUInt32LE(indexStart + (i * 3 + corner) * 4) * 12;
+          return [0, 4, 8].map((axis) => glb.readFloatLE(offset + axis));
+        });
+        const [a, b, c] = points;
+        const u = b.map((value, axis) => value - a[axis]);
+        const v = c.map((value, axis) => value - a[axis]);
+        if (
+          u[1] * v[2] === u[2] * v[1] &&
+          u[2] * v[0] === u[0] * v[2] &&
+          u[0] * v[1] === u[1] * v[0]
+        )
+          zeroArea++;
+      }
+      // The canonical GLB retains zero-area faces; the viewer omits them.
+      expect(renderedTriangles).toBe(sourceTriangles - zeroArea);
+      info.annotations.push({
+        type: 'near-byte-budget',
+        description: JSON.stringify({ sourceTriangles, renderedTriangles, zeroArea }),
+      });
+      expect(renderedTriangles).toBeGreaterThan(1_000_000);
+      expect(renderedTriangles).toBeLessThanOrEqual(1_048_574);
+    }
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       for (const theme of ['light', 'dark']) {

@@ -8,7 +8,22 @@ Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**.
 
 Uaktualniono checkpoint i sprzeczne historyczne opisy w email/chat/checkout: interfejsy i odpowiedzi email nie są już makietami, sandbox obejmuje zwroty i logistykę. Sol xhigh zweryfikował źródła liczb i wskazał te rozbieżności; zachowano pełny zakres obrazów/przykładów i klikalnych przepływów. Roboczy audyt całego celu nadal8–9/10 (zasoby7), nie żądane10/10; siedem nieobsłużonych modeli pozostaje jawne.
 
-## Aktualne całe41 — limit96 MiB
+## Dwa kolejne modele w istniejącym budżecie STL
+
+Limit trójkątów1000000 był niższy niż rzeczywista pojemność zachowanego STL50 MiB. Backend i prywatny viewer GLB używają teraz `(52428800−84)/50 = 1048574` (następny trójkąt przekracza plik o34 B). Nadal1 mln unikalnych punktów,96 MiB ZIP,25 MiB GLB,2 GiB RAM/25s CPU/30s wall i pozostałe walidacje; bez zmniejszania dokładności lub pomijania geometrii produkcyjnej. Frontowy parser lokalnego STL nadal25 MiB/1M; wspólny builder renderera dopuszcza pojemność STL. Zmiana produktu kilkanaście linii.
+
+`triangle-budget-api.json`: **2 PASS/60,5s**,24 podgląd+ręczna `printer_fit`,39 podgląd+rzeczywisty slicer/cena. `triangle-budget-ui-verified.json`: **2 PASS/58,6s**,0 skip/flaky; oba wymagają201 przed jakimkolwiek fallbackiem, podgląd/piksele/zoom w1440/390 i obu motywach. Zapisano8 scen; obejrzane jako zestawienie, prywatne `triangle-budget-overview/sources.json`/`all8.png`.24 ma rozproszone części w globalnych współrzędnych; nie przestawiano ich dla wyglądu.
+
+| Przypadek | Trójkąty kanonicznego GLB | Wyświetlone | Zerowe pola policzone niezależnie z GLB |
+| --- | ---: | ---: | ---: |
+| 24 | 1033695 | 1033689 | 6 |
+| 39 | 1046124 | 1046109 | 15 |
+
+Pierwszy strict UI2 FAIL wymagał błędnie równej liczby wszystkich trójkątów GLB i renderera, który od dawna pomija zerowe pola. Skorygowany oracle liczy je niezależnie i nadal wymaga ponad1M wyświetlonych; bez zmiany produktu dla testu. Geometry30 PASS/1 istniejący opcjonalny ignored, backend/frontend build0/0, Clippy/diff-check PASS. Sol xhigh sprawdził granice, dodatkową alokację typed arrays(~5,25 MB ponad stary limit) i ścieżki parserów; brak konkretnego blokera po poprawkach testu, oceny zakresu7–9/N/A. Limit procesu jest nadal egzekwowany.
+
+Odrębna diagnostyka siedmiu plików (bwrap bez sieci/sekretów, CPU10s/AS512 MiB/wall15s) potwierdziła SHA i policzyła surowe zasoby XML.14/19/20/40 mają surowe wyjście STL~71–93 MiB i ZIP ponad96 MiB, lecz nie sprawdzono osiągalności/instancji, więc to nie dowód minimalnego rozmiaru rzeczywistego builda.32 pozostaje błędnym pakietem. Pełny przebieg41 niżej pochodzi sprzed zmiany trójkątów; nie deklarujemy nowego pełnego36/5 na podstawie dwóch regresji.
+
+## Pełne41 — ZIP96 MiB, poprzedni limit1M trójkątów
 
 `corpus41-96.json` na `23ecfbc` (zmiany testu wizualnego nie dotyczą tego przebiegu): **34 PASS / 7 FAIL**,419,5s,0 skipped/flaky. Bez zmiany asercji201 dla nieobsługiwanych modeli.
 

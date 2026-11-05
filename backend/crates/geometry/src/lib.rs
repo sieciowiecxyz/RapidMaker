@@ -12,6 +12,8 @@ use ply_rs_bw::{
 mod step;
 mod three_mf_mirrors;
 
+const MAX_CANONICAL_STL_BYTES: usize = 50 * 1024 * 1024;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceFormat {
     StlBinary,
@@ -72,7 +74,7 @@ impl Default for ConversionLimits {
             max_input_bytes: 50 * 1024 * 1024,
             max_output_glb_bytes: 25 * 1024 * 1024,
             max_vertices: 1_000_000,
-            max_triangles: 1_000_000,
+            max_triangles: (MAX_CANONICAL_STL_BYTES - 84) / 50,
             max_coordinate_abs_mm: 1_000_000.0,
             max_parse_seconds: 30,
         }
@@ -232,7 +234,7 @@ pub fn source_to_production(
             .triangle_count
             .checked_mul(50)
             .and_then(|n| n.checked_add(84))
-            .filter(|n| *n <= 50 * 1024 * 1024)
+            .filter(|n| *n <= MAX_CANONICAL_STL_BYTES)
             .ok_or(PreviewError::OutputTooLarge)?;
         let count =
             u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
@@ -1693,6 +1695,14 @@ fn gltf_number(value: f32) -> String {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn default_triangle_limit_fills_canonical_stl_byte_budget() {
+        let triangles = ConversionLimits::default().max_triangles;
+        assert_eq!(triangles, 1_048_574);
+        assert!(84 + triangles * 50 <= MAX_CANONICAL_STL_BYTES);
+        assert!(84 + (triangles + 1) * 50 > MAX_CANONICAL_STL_BYTES);
+    }
 
     const CUBE_BINARY: &[u8] = include_bytes!("../tests/fixtures/cube_20mm.stl");
     const CUBE_ASCII: &[u8] = include_bytes!("../tests/fixtures/cube_20mm_ascii.stl");
