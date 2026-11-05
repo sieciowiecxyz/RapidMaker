@@ -30,6 +30,7 @@ Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 
 
 | Raport prywatny w `frontend/tests/artifacts/` | Wynik i zakres |
 | --- | --- |
+| `email.json` (źródło `8dbdb07`) | **2 PASS/213,2s**, bez pominięć/flaky: prawdziwe iCloud MFA(hasło/email, wirtualny passkey/email), admin TOTP/uprawnienia oraz oferta ręczna→email→Stripe test→warunki→jedna odpowiedź email widoczna w chacie |
 | `security-current.json` | 2 PASS: błędne dane, zmiana hasła, passkey/TOTP, sesje |
 | `auth-email-current.json` | 1 PASS: prawdziwy iCloud do void, hasło/email, wirtualny passkey/email, admin TOTP i klient → admin 403 |
 | `commerce-current.json` | 5 PASS: Stripe test, dostawa sandbox, panele/chat/pliki, częściowy/pełny/nadmierny zwrot, cennik |
@@ -119,7 +120,7 @@ Test zarejestrowany w `core`; po jego dodaniu cały aktualny zestaw przeszedł30
 
 ## Wspólne sprawdzenie aktualnego kodu
 
-Źródło `564977f`, `core.json` / `summary.json`: **30 PASS/0 FAIL/0 skipped/0 flaky,241,3s**. Rzeczywiste lokalne API/DB/slicer, wyceny1/10/1000, równoległość i własność, STL/STEP/3MF/prywatne GLB/retencja, konfigurator, publiczne i wypełnione panele,20 widoków pokazowych, logowanie/zmiana hasła/passkey/TOTP/sesje oraz dokumenty prawne. Uwzględnia poprawki nazw, odbić3MF i nowe testy pokazowe. Nie uruchamia zewnętrznych Stripe/Furgonetki/iCloud; ich odrębne dowody i ograniczenia pozostają powyżej. Nie obejmuje opt-in korpusu41, którego ostatni wynik nadal27 PASS/14 FAIL.
+Źródło `564977f`, `core.json`: **30 PASS/0 FAIL/0 skipped/0 flaky,241,3s**. Rzeczywiste lokalne API/DB/slicer, wyceny1/10/1000, równoległość i własność, STL/STEP/3MF/prywatne GLB/retencja, konfigurator, publiczne i wypełnione panele,20 widoków pokazowych, logowanie/zmiana hasła/passkey/TOTP/sesje oraz dokumenty prawne. Uwzględnia poprawki nazw, odbić3MF i nowe testy pokazowe. Nie uruchamia zewnętrznych Stripe/Furgonetki/iCloud; ich odrębne dowody i ograniczenia pozostają powyżej. Nie obejmuje opt-in korpusu41, którego ostatni wynik nadal27 PASS/14 FAIL.
 
 ## Aktualny sandbox i logistyka
 
