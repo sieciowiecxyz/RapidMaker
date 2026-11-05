@@ -10,6 +10,7 @@ use ply_rs_bw::{
     ply::{DefaultElement, Property},
 };
 mod step;
+mod three_mf_mirrors;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceFormat {
@@ -48,7 +49,7 @@ pub struct ThreeMfLimits {
 impl Default for ThreeMfLimits {
     fn default() -> Self {
         Self {
-            max_entry_count: 256,
+            max_entry_count: 512,
             max_uncompressed_bytes: 50 * 1024 * 1024,
             max_entry_bytes: 25 * 1024 * 1024,
         }
@@ -845,71 +846,23 @@ const BAMBU_TRIANGLE_SETTINGS: &[&str] = &[
     "face_property",
 ];
 
-// Bambu painting is slicer metadata, not geometry. Ignore only these known triangle
-// attributes; leave vertices, transforms and unknown attributes to the strict parser.
-fn geometry_xml(xml: &str) -> Result<Option<String>, PreviewError> {
-    if !BAMBU_TRIANGLE_SETTINGS
-        .iter()
-        .any(|attr| xml.contains(attr))
-    {
-        return Ok(None);
-    }
-    let mut changed = false;
-    use quick_xml::{Reader, Writer, events::Event};
-    let mut reader = Reader::from_str(xml);
-    let mut writer = Writer::new(Vec::with_capacity(xml.len()));
-    loop {
-        let event = reader
-            .read_event()
-            .map_err(|_| PreviewError::MalformedInput)?;
-        let empty = matches!(event, Event::Empty(_));
-        match event {
-            Event::Eof => break,
-            Event::Start(ref element) | Event::Empty(ref element)
-                if element.local_name().as_ref() == "triangle" =>
-            {
-                let mut cleaned = element.to_owned();
-                cleaned.clear_attributes();
-                for attr in element.attributes() {
-                    let attr = attr.map_err(|_| PreviewError::MalformedInput)?;
-                    if !BAMBU_TRIANGLE_SETTINGS.contains(&attr.key.as_ref()) {
-                        cleaned.push_attribute(attr);
-                    } else {
-                        changed = true;
-                    }
-                }
-                writer
-                    .write_event(if empty {
-                        Event::Empty(cleaned)
-                    } else {
-                        Event::Start(cleaned)
-                    })
-                    .map_err(|_| PreviewError::MalformedInput)?;
-            }
-            other => writer
-                .write_event(other)
-                .map_err(|_| PreviewError::MalformedInput)?,
-        }
-    }
-    if !changed {
-        return Ok(None);
-    }
-    String::from_utf8(writer.into_inner())
-        .map(Some)
-        .map_err(|_| PreviewError::MalformedInput)
-}
-
-// Preserve lib3mf's complete package validation after removing painting metadata.
+// Preserve complete package validation, normalizing only painting and mirror metadata.
 // Paths and expanded ZIP sizes have already passed validate_3mf_container.
+type GeometryPackage<'a> = (
+    std::borrow::Cow<'a, [u8]>,
+    HashMap<String, three_mf_mirrors::Mirrors>,
+);
+
 fn geometry_package<'a>(
     input: &'a [u8],
     limits: &ConversionLimits,
     started: Instant,
-) -> Result<std::borrow::Cow<'a, [u8]>, PreviewError> {
+) -> Result<GeometryPackage<'a>, PreviewError> {
     use std::{borrow::Cow, io::Write};
     let mut source =
         zip::ZipArchive::new(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
     let mut replacements = HashMap::new();
+    let mut mirrors = HashMap::new();
     for index in 0..source.len() {
         check_timeout(started, limits)?;
         let mut entry = source
@@ -924,14 +877,22 @@ fn geometry_package<'a>(
             entry
                 .read_to_string(&mut xml)
                 .map_err(|_| PreviewError::MalformedInput)?;
-            if let Some(xml) = geometry_xml(&xml)? {
+            let (normalized, saved) = three_mf_mirrors::normalize(&xml, limits, started)?;
+            mirrors.insert(
+                entry
+                    .name()
+                    .map_err(|_| PreviewError::UnsafeContainer)?
+                    .into_owned(),
+                saved,
+            );
+            if let Some(xml) = normalized {
                 replacements.insert(index, xml);
             }
             check_timeout(started, limits)?;
         }
     }
     if replacements.is_empty() {
-        return Ok(Cow::Borrowed(input));
+        return Ok((Cow::Borrowed(input), mirrors));
     }
     let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
     for index in 0..source.len() {
@@ -961,7 +922,7 @@ fn geometry_package<'a>(
     check_timeout(started, limits)?;
     output
         .finish()
-        .map(|file| Cow::Owned(file.into_inner()))
+        .map(|file| (Cow::Owned(file.into_inner()), mirrors))
         .map_err(|_| PreviewError::MalformedInput)
 }
 
@@ -970,12 +931,16 @@ fn scene_from_3mf(
     limits: &ConversionLimits,
     started: Instant,
 ) -> Result<MeshScene, PreviewError> {
-    let normalized = geometry_package(input, limits, started)?;
+    let (normalized, mut mirrors) = geometry_package(input, limits, started)?;
     let input = normalized.as_ref();
     let config =
         ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient);
-    let model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
+    let mut model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
         .map_err(|_| PreviewError::MalformedInput)?;
+    mirrors
+        .remove("3D/3dmodel.model")
+        .ok_or(PreviewError::MalformedInput)?
+        .restore(&mut model)?;
     // Production-extension parts live inside the same already-validated ZIP.
     // IDs are local to each .model file, not global across the package.
     let mut package = lib3mf::opc::Package::open_lenient(Cursor::new(input), true)
@@ -987,13 +952,20 @@ fn scene_from_3mf(
             let xml = package
                 .get_file(&path)
                 .map_err(|_| PreviewError::MalformedInput)?;
-            let part = lib3mf::parser::parse_model_xml_with_config(
+            let mut part = lib3mf::parser::parse_model_xml_with_config(
                 &xml,
                 ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
             )
             .map_err(|_| PreviewError::MalformedInput)?;
+            mirrors
+                .remove(&path)
+                .ok_or(PreviewError::MalformedInput)?
+                .restore(&mut part)?;
             models.insert(path, part);
         }
+    }
+    if !mirrors.is_empty() {
+        return Err(PreviewError::MalformedInput);
     }
     let model = &models["3D/3dmodel.model"];
     let scale = three_mf_unit_scale_mm(&model.unit)?;
@@ -1265,6 +1237,7 @@ impl<'a> ThreeMfObjectWalker<'a> {
             .ok_or(PreviewError::MalformedInput)?;
         self.stack.push((path.to_owned(), object_id));
         if let Some(mesh) = &object.mesh {
+            let mirrored = transform_determinant(transform)? < 0.0;
             for triangle in &mesh.triangles {
                 check_timeout(self.started, self.limits)?;
                 let a = mesh
@@ -1279,6 +1252,7 @@ impl<'a> ThreeMfObjectWalker<'a> {
                     .vertices
                     .get(triangle.v3)
                     .ok_or(PreviewError::MalformedInput)?;
+                let [b, c] = if mirrored { [c, b] } else { [b, c] };
                 emit_triangle_points(
                     point3_from_mm(a.x, a.y, a.z),
                     point3_from_mm(b.x, b.y, b.z),
@@ -1426,6 +1400,18 @@ fn mat4_scale(scale: f32) -> [[f32; 4]; 4] {
         [0.0, 0.0, scale, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ]
+}
+
+fn transform_determinant(matrix: [[f32; 4]; 4]) -> Result<f64, PreviewError> {
+    if matrix.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(PreviewError::NonFiniteCoordinate);
+    }
+    let [[a, d, g, _], [b, e, h, _], [c, f, i, _], _] = matrix.map(|row| row.map(f64::from));
+    let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if !det.is_finite() || det == 0.0 {
+        return Err(PreviewError::MalformedInput);
+    }
+    Ok(det)
 }
 
 fn mat4_from_3mf_transform(transform: [f64; 12]) -> [[f32; 4]; 4] {
@@ -1735,6 +1721,222 @@ mod tests {
     const STEP_UNSUPPORTED_NURBS: &[u8] =
         include_bytes!("../tests/fixtures/step_unsupported_nurbs.step");
 
+    fn mirror_package(build: &str, component: Option<&str>, extra: usize) -> Vec<u8> {
+        let mesh = r#"<object id="1" type="model"><mesh><vertices>
+          <vertex x="0" y="0" z="0"/><vertex x="2" y="0" z="0"/>
+          <vertex x="0" y="2" z="0"/><vertex x="0" y="0" z="2"/>
+          </vertices><triangles><triangle v1="0" v2="2" v3="1"/>
+          <triangle v1="0" v2="1" v3="3"/><triangle v1="0" v2="3" v3="2"/>
+          <triangle v1="1" v2="2" v3="3"/></triangles></mesh></object>"#;
+        let (assembly, id) = match component {
+            Some(transform) => (
+                format!(
+                    r#"<object id="2" type="model"><components><component objectid="1" transform="{transform}"/></components></object>"#
+                ),
+                2,
+            ),
+            None => (String::new(), 1),
+        };
+        let xml = format!(
+            r#"<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>{mesh}{assembly}</resources><build><item objectid="{id}" transform="{build}"/></build></model>"#
+        );
+        let mut source = zip::ZipArchive::new(Cursor::new(THREEMF_SIMPLE)).unwrap();
+        let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..source.len() {
+            let entry = source.by_index(index).unwrap();
+            if entry.name().unwrap() == "3D/3dmodel.model" {
+                output
+                    .start_file("3D/3dmodel.model", zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                output.write_all(xml.as_bytes()).unwrap();
+            } else {
+                output.raw_copy_file(entry).unwrap();
+            }
+        }
+        for index in 0..extra {
+            output
+                .start_file(
+                    format!("Metadata/extra-{index}"),
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .unwrap();
+        }
+        output.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn three_mf_mirrors_preserve_coordinates_bounds_and_positive_volume() {
+        const IDENTITY: &str = "1 0 0 0 1 0 0 0 1 0 0 0";
+        const MIRROR: &str = "-1 0 0 0 1 0 0 0 1 10 20 30";
+        for (build, component, min, max) in [
+            (MIRROR, None, [8., 20., 30.], [10., 22., 32.]),
+            (IDENTITY, Some(MIRROR), [8., 20., 30.], [10., 22., 32.]),
+            (MIRROR, Some(MIRROR), [0., 40., 60.], [2., 42., 62.]),
+            // Actual case22 build matrix, applied to a small synthetic tetrahedron.
+            (
+                "-1 0 0 0 1 0 0 0 1 128.20001 -179.19999 17.5",
+                None,
+                [126.20001, -179.2, 17.5],
+                [128.20001, -177.2, 19.5],
+            ),
+        ] {
+            let input = mirror_package(build, component, 0);
+            let output = source_to_production(
+                "mirror.3mf",
+                &input,
+                &ConversionLimits::default(),
+                &ThreeMfLimits::default(),
+            )
+            .unwrap();
+            let (scene, _) =
+                parse_stl(&output.stl, &ConversionLimits::default(), Instant::now()).unwrap();
+            let analysis =
+                analyze_scene(&scene, SourceFormat::ThreeMf, &ConversionLimits::default()).unwrap();
+            assert_eq!(analysis.bounds_min_mm, min);
+            assert_eq!(analysis.bounds_max_mm, max);
+            assert_eq!(analysis.triangle_count, 4);
+            assert!((signed_volume(&scene) - 8.0 / 6.0).abs() < 0.001);
+            let mut expected = [[0., 0., 0.], [2., 0., 0.], [0., 2., 0.], [0., 0., 2.]];
+            for transform in component.into_iter().chain([build]) {
+                let matrix = transform
+                    .split_whitespace()
+                    .map(|v| v.parse().unwrap())
+                    .collect::<Vec<f64>>();
+                let matrix = mat4_from_3mf_transform(matrix.try_into().unwrap());
+                expected = expected.map(|point| transform_point(matrix, point));
+            }
+            for point in expected {
+                assert!(scene.positions_mm.contains(&point), "missing {point:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn three_mf_mirror_normalization_keeps_invalid_models_rejected() {
+        const IDENTITY: &str = "1 0 0 0 1 0 0 0 1 0 0 0";
+        for invalid in [
+            "NaN 0 0 0 1 0 0 0 1 0 0 0",
+            "-1 0 0 0 inf 0 0 0 1 0 0 0",
+            "0 0 0 0 1 0 0 0 1 0 0 0",
+            "-1 0 0 0 1 0 0 0 1 0 0",
+        ] {
+            for (build, component) in [(invalid, None), (IDENTITY, Some(invalid))] {
+                assert!(
+                    source_to_production(
+                        "bad.3mf",
+                        &mirror_package(build, component, 0),
+                        &ConversionLimits::default(),
+                        &ThreeMfLimits::default()
+                    )
+                    .is_err()
+                );
+            }
+        }
+        // Restoring must fail closed if the parser changes a count, ID or matrix.
+        let xml = r#"<model><resources><object id="1"><components><component objectid="2"/></components></object></resources><build><item objectid="1" transform="-1 0 0 0 1 0 0 0 1 0 0 0"/></build></model>"#;
+        for tamper in 0..3 {
+            let (normalized, saved) =
+                three_mf_mirrors::normalize(xml, &ConversionLimits::default(), Instant::now())
+                    .unwrap();
+            let mut model = lib3mf::parser::parse_model_xml_with_config(
+                normalized.as_deref().unwrap(),
+                ParserConfig::with_all_extensions(),
+            )
+            .unwrap();
+            match tamper {
+                0 => model.build.items.clear(),
+                1 => model.resources.objects[0].id = 9,
+                _ => model.build.items[0].transform = None,
+            }
+            assert!(saved.restore(&mut model).is_err());
+        }
+    }
+
+    #[test]
+    fn three_mf_small_component_scale_keeps_preexisting_valid_geometry() {
+        let input = mirror_package(
+            "1 0 0 0 1 0 0 0 1 0 0 0",
+            Some("0.0001 0 0 0 0.0001 0 0 0 0.0001 0 0 0"),
+            0,
+        );
+        let mut source = zip::ZipArchive::new(Cursor::new(input)).unwrap();
+        let mut package = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..source.len() {
+            let mut entry = source.by_index(index).unwrap();
+            if entry.name().unwrap() == "3D/3dmodel.model" {
+                let mut xml = String::new();
+                entry.read_to_string(&mut xml).unwrap();
+                for axis in ["x", "y", "z"] {
+                    xml = xml.replace(&format!("{axis}=\"2\""), &format!("{axis}=\"100000\""));
+                }
+                package
+                    .start_file("3D/3dmodel.model", zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                package.write_all(xml.as_bytes()).unwrap();
+            } else {
+                package.raw_copy_file(entry).unwrap();
+            }
+        }
+        let output = source_to_production(
+            "small-scale.3mf",
+            &package.finish().unwrap().into_inner(),
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(output.dimensions_mm, [10.; 3]);
+    }
+
+    #[test]
+    fn three_mf_normalization_is_lazy_preserves_surrounding_xml_and_checks_deadline() {
+        let prefix = "<?xml version=\"1.0\"?>\n<!--preserve me--> <model>\n<resources/> <build>";
+        let suffix = "</build>  <!--also preserve me-->\n</model>";
+        let xml = format!(
+            "{prefix}<item objectid=\"1\" transform=\"-1 0 0 0 1 0 0 0 1 0 0 0\"/>{suffix}"
+        );
+        let (normalized, _) =
+            three_mf_mirrors::normalize(&xml, &ConversionLimits::default(), Instant::now())
+                .unwrap();
+        let normalized = normalized.unwrap();
+        assert!(normalized.starts_with(prefix));
+        assert!(normalized.ends_with(suffix));
+        assert!(
+            three_mf_mirrors::normalize(&normalized, &ConversionLimits::default(), Instant::now())
+                .unwrap()
+                .0
+                .is_none()
+        );
+        let expired = Instant::now() - Duration::from_secs(2);
+        for xml in [xml.as_str(), "<model/>"] {
+            assert!(matches!(
+                three_mf_mirrors::normalize(
+                    xml,
+                    &ConversionLimits {
+                        max_parse_seconds: 1,
+                        ..Default::default()
+                    },
+                    expired
+                ),
+                Err(PreviewError::ParseTimeout)
+            ));
+        }
+    }
+
+    #[test]
+    fn three_mf_entry_cap_accepts_512_rejects_513() {
+        let base = mirror_package("1 0 0 0 1 0 0 0 1 0 0 0", None, 0);
+        let count = zip::ZipArchive::new(Cursor::new(base)).unwrap().len();
+        for total in [512, 513] {
+            let input = mirror_package("1 0 0 0 1 0 0 0 1 0 0 0", None, total - count);
+            let result = validate_3mf_container(&input, &ThreeMfLimits::default());
+            if total == 512 {
+                result.unwrap();
+            } else {
+                assert_eq!(result.unwrap_err(), PreviewError::TooManyContainerEntries);
+            }
+        }
+    }
+
     #[test]
     fn zip64_small_export_preserves_geometry_and_container_limits() {
         let input = include_bytes!("../tests/fixtures/zip64_model.3mf");
@@ -1804,7 +2006,9 @@ mod tests {
             include_bytes!("../tests/fixtures/production_parts.3mf").as_slice(),
         ] {
             assert!(matches!(
-                geometry_package(input, &ConversionLimits::default(), Instant::now()).unwrap(),
+                geometry_package(input, &ConversionLimits::default(), Instant::now())
+                    .unwrap()
+                    .0,
                 std::borrow::Cow::Borrowed(_)
             ));
             let baseline = source_to_production(

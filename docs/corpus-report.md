@@ -4,21 +4,22 @@ Cel nadal aktywny. Pobrano **41/100** różnych projektów MakerWorld: 34 × 3MF
 
 ## Rzeczywisty korpus
 
-`corpus41-indexed`: 41 przypadków, 195,2 s, bez pominięć.
+`corpus41-mirrors`: 41 przypadków, 203,2 s, bez pominięć i flaky. Porównanie z `corpus41-indexed`: poprawiony przypadek22, brak innych zmian wyników/klasyfikacji.
 
 | Wynik | Liczba | Co potwierdza |
 | --- | ---: | --- |
 | Automatyczna cena | 15 | Upload, GLB, prawdziwy slicer, dodatnie pomiary i całkowitoliczbowe koszty |
-| Ręczna wycena | 6 | Podgląd działa; gabaryt przekracza politykę automatycznej wyceny/P1P |
+| Ręczna wycena | 7 | Podgląd działa; gabaryt przekracza politykę automatycznej wyceny/P1P |
 | Za duży upload | 5 | Prawidłowe HTTP 413 powyżej 32 MiB |
-| Limit geometrii | 15 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
+| Limit geometrii | 14 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
 
-Runner zwrócił **26 PASS / 15 FAIL**, nie „41 działa”. Piętnaście testów nadal oczekuje automatycznej obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 50 MiB łącznie / 25 MiB wpis / 256 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
+Runner zwrócił **27 PASS / 14 FAIL**, nie „41 działa”. Czternaście testów nadal oczekuje obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 50 MiB łącznie / 25 MiB wpis / 512 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
 
 Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 17 limitów, 3 błędy proxy oraz 2 niewyjaśnione odrzucenia parsera. Model 2 otrzymuje **wycenę ręczną**, nie automatyczną cenę.
 
 ## Poprawki i dowody
 
+- Odbicia w 3MF: przypadek22 ma434 wpisy i lustrzaną transformację odrzucaną przez lib3mf. Prywatna kopia normalizuje jej wyznacznik do walidacji, sprawdza dopasowanie i przywraca dokładną macierz; wynikowe odbicie odwraca orientację trójkątów. Oryginał niezmieniony. Limit wpisów256→512; bajty, siatka, RAM i czas bez zmian. Root przechodzi dotychczasową walidację pakietu; części podrzędne zachowują wcześniejszy parser XML. Normalizacja ma kontrole czasu i tworzy kopię XML tylko przy zmianie. Geometria**28 PASS/1 opcjonalny ignored**, Clippy/build PASS; testy pojedynczego/podwójnego odbicia, orientacji/objętości/współrzędnych, małej skali, błędnych macierzy, dopasowania i granicy512/513. Rzeczywisty upload/GLB/ręczna wycena**1 PASS10,1s**; pełne41 jak wyżej. Model obejmuje cały projekt około801×559×35mm, więc nie uzyskał automatycznej ceny. Sol xhigh: dwie uwagi poprawione, brak dalszej ustalonej regresji; oceny7–8/10, część kategorii N/A. Nie oznacza10/10 ani kompletnej walidacji wszystkich części 3MF.
 - Bambu `paint_*`/`face_property`: pomijane tylko jako ustawienia trójkątów w kopii geometrycznej. Wierzchołki, transformacje, oryginał i pełna walidacja pakietu pozostają. 21 testów geometrii PASS; model 28 przechodzi do ręcznej wyceny, model 36 po indeksowaniu uzyskuje podgląd i ręczną wycenę. Znaczenie pól sprawdzono w [źródle Bambu v02.08.02.61](https://github.com/bambulab/BambuStudio/blob/v02.08.02.61/src/libslic3r/Format/bbs_3mf.cpp).
 - Dokładne indeksowanie wierzchołków STL/3MF: zachowane bity współrzędnych, kolejność i orientacja każdego trójkąta, bez uproszczenia siatki. ASCII kontroluje limity podczas czytania. Geometria23 PASS, Clippy PASS; realne modele3/6 dostają cenę,36 podgląd/ręczną wycenę. Budżety czasu/RAM, trójkątów, ZIP i GLB nie zostały zwiększone. Porównanie całego41: trzy poprawione przypadki, zero nowych FAIL ani zmian klasyfikacji wcześniejszych sukcesów. `indexed-models-ui.json`1 PASS2,7s: pięć wariantów STL/STEP/3MF, prywatne GLB i UI; obejrzany desktop zachowuje styl autora. HashMap ma koszt pamięci/CPU; nie jest to dowód działania każdego dużego modelu. Sol xhigh: bez blokera w tym zakresie, oceny8–9/10.
 - Model 4 wcześniej przekraczał 60 s CPU w 6,45 s czasu rzeczywistego. Slicer ograniczony do dwóch dozwolonych CPU przeszedł dla PLA/PETG i przez API. Nie podniesiono limitów; polityka `cpu2` unieważnia stare snapshoty.
