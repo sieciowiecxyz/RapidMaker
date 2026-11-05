@@ -26,6 +26,7 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 - **Appearance:**public/account routes56 captures, populated panels44, showcases20. Both themes/desktop/mobile, fonts/images/static errors/overflow and real canvas interaction checked within those scenarios. Manual screenshots inspected; no claim of every SVG or pixel-perfect future visual baselines. Piotr style preserved.
 - **Accounts/commerce:**real local MFA/ownership plus separate iCloud auth, registration(password/virtual passkey), manual offer/email→chat, Stripe sandbox payment/refunds and shipping runs recorded in report. Physical passkey and all possible provider/failure combinations are not proved.
 - **Combined core:**source `564977f`, `core.json`:30 PASS/0 FAIL/0 skipped/0 flaky,241.3s. Includes current label/mirror/showcase changes, real local API/slicer/MFA and populated panels; external providers run separately.
+- **Latest sandbox:**`sandbox.json`7 PASS/2 FAIL136.9s; both logistics radio-scroll failures fixed in test only. Focused `logistics-current.json`2 PASS73.5s, no provider-blocked annotation: DHL sandbox booking/PDF/pickup/cancel and tracking/handover confirmed. Full9 after fix NOT RUN; do not describe split runs as one9/9. No product/style change.
 - **Reviews:**GPT-6-Sol xhigh after each implementation; actionable findings fixed, scores honest and still below10/10 for full scope. No review score replaces tests.
 
 ## Next

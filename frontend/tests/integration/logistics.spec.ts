@@ -21,7 +21,10 @@ for (const finish of ['cancel', 'handover'])
     await fillStripeAddress(page);
     const carrier = page.getByRole('radio', { name: /^DHL/ });
     await expect(carrier).toBeVisible({ timeout: 45_000 });
+    // Finish the authored smooth scroll before clicking the actual radio.
+    await carrier.evaluate((node) => node.scrollIntoView({ behavior: 'instant', block: 'center' }));
     await carrier.check();
+    await expect(carrier).toBeChecked();
     await page.getByRole('button', { name: 'Podsumowanie →', exact: true }).click();
     await page.getByRole('button', { name: 'Przejdź do płatności →', exact: true }).click();
     await fillStripeCard(page);

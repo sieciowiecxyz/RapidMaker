@@ -120,3 +120,9 @@ Test zarejestrowany w `core`; po jego dodaniu cały aktualny zestaw przeszedł30
 ## Wspólne sprawdzenie aktualnego kodu
 
 Źródło `564977f`, `core.json` / `summary.json`: **30 PASS/0 FAIL/0 skipped/0 flaky,241,3s**. Rzeczywiste lokalne API/DB/slicer, wyceny1/10/1000, równoległość i własność, STL/STEP/3MF/prywatne GLB/retencja, konfigurator, publiczne i wypełnione panele,20 widoków pokazowych, logowanie/zmiana hasła/passkey/TOTP/sesje oraz dokumenty prawne. Uwzględnia poprawki nazw, odbić3MF i nowe testy pokazowe. Nie uruchamia zewnętrznych Stripe/Furgonetki/iCloud; ich odrębne dowody i ograniczenia pozostają powyżej. Nie obejmuje opt-in korpusu41, którego ostatni wynik nadal27 PASS/14 FAIL.
+
+## Aktualny sandbox i logistyka
+
+Źródło pierwotnego przebiegu `70c3bae`: `sandbox.json` **7 PASS/2 FAIL/136,9s**, bez pominięć/flaky. Przeszły: zamknięcie nieopłaconej płatności przed usunięciem uploadu, opłacony odbiór/paczkomat/kurier, oferta Furgonetki i jej ponowne użycie, panele/pliki/chat/produkcja/zwroty częściowe i pełne/odmowa nadmiernego zwrotu oraz edycje katalogu/cennika. Oba FAIL zatrzymały się na kliknięciu DHL podczas płynnego przewijania.
+
+Test logistyczny kończy teraz przewijanie przez `scrollIntoView(instant)`, potem wykonuje zwykłe `.check()` i sprawdza zaznaczenie; bez force/retry/ręcznego ustawiania checked i zmian kodu produktu. Późniejszy przebieg po tej poprawce testu, `logistics-current.json`: **2 PASS/73,5s**, bez pominięć/flaky i adnotacji blokady dostawcy. DHL/Furgonetka sandbox: opłacone zamówienia, produkcja/QC, potwierdzenie paczek/kosztu, nadanie, PDF, udany podjazd i anulowanie; osobne zamówienie ma tracking i status shipped po przekazaniu. Nie dowodzi rzeczywistego odbioru/doręczenia ani działania podjazdów DPD. To wcześniejsze7 PASS + późniejsze2 PASS; **pełnych9 po poprawce NOT RUN**. Sol xhigh: brak ustalonych uwag, prostota10, pozostałe właściwe kategorie9/N/A.
