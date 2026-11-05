@@ -17,6 +17,8 @@ os.umask(0o077)
 artifacts = root / 'frontend/tests/artifacts'
 artifacts.mkdir(parents=True, exist_ok=True)
 artifacts.chmod(0o700)
+summary = artifacts / 'summary.json'
+summary.unlink(missing_ok=True)
 if not args.no_build:
     for command in (['cargo', 'build', '--locked', '--manifest-path', 'backend/Cargo.toml'], ['npm', '--prefix', 'frontend', 'run', 'build']):
         subprocess.run(command, cwd=root, check=True)
@@ -25,7 +27,7 @@ if not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') and not Path('/usr/bin/c
     subprocess.run(['npx', 'playwright', 'install', 'chromium'], cwd=root / 'frontend', check=True)
 
 suites = {
-    'core': ['--local-accounts', 'models.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'public-visual.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
+    'core': ['--local-accounts', 'models.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
     'sandbox': ['--sandbox', '--client-totp', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],
@@ -51,17 +53,24 @@ for name in selected:
     print(f'\nSuite: {name}', flush=True)
     child = subprocess.Popen(command, cwd=cwd, env=env)
     def stop(_signal, _frame):
-        child.terminate()
-        child.wait(timeout=40)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         raise SystemExit(143)
     previous = signal.signal(signal.SIGTERM, stop)
     try:
         returncode = child.wait()
     finally:
-        signal.signal(signal.SIGTERM, previous)
-        if child.poll() is None:
-            child.terminate()
-            child.wait(timeout=40)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        try:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    # Integration cleanup can close browser (30s), API (30s), then DB (15s).
+                    child.wait(timeout=80)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+        finally:
+            signal.signal(signal.SIGTERM, previous)
     if not report.exists():
         print(f'{name}: report missing; cannot confirm any test', file=sys.stderr)
         returncode = returncode or 1
@@ -77,7 +86,7 @@ for name in selected:
     external = limits(json.loads(report.read_text()).get('suites', [])) if report.exists() else []
     results.append({'group': name, 'exit_code': returncode, 'stats': stats, 'external_limits': external})
 
-(artifacts / 'summary.json').write_text(json.dumps(results, indent=2))
+summary.write_text(json.dumps(results, indent=2))
 for result in results:
     print(result['group'], 'FAIL' if result['exit_code'] else 'BLOCKED' if result['external_limits'] else 'NOT RUN' if result['stats'].get('skipped', 0) else 'PASS', result['stats'], result['external_limits'])
 print('Private reports:', artifacts)

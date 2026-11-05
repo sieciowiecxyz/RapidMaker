@@ -78,3 +78,9 @@ Po buildzie frontendu: `python frontend/tests/run-integration.py --local-account
 ## Równoległe wyceny
 
 `python frontend/tests/run-integration.py concurrency.spec.ts`:4 sesje/8 żądań, realny slicer, deduplikacja i cache, dostęp do cudzych danych, gotowy checkout i kwoty. Bez dostawców. Należy też do `run-all.py --group core`. Jest to krótka próba asynchronicznego API, nie test maksymalnego obciążenia; progi czasu mogą być wrażliwe na zajęty komputer.
+
+## Wypełnione panele
+
+`python frontend/tests/run-integration.py --local-accounts populated-visual.spec.ts`: rzeczywiste nieopłacone zapytanie/chat i prywatne GLB, oba motywy/szerokości,44 prywatne zrzuty; kontrola etykiety kwoty i kontrastu. Należy do core. Rejestrację z prawdziwym iCloud uruchamia osobno `python frontend/tests/run-all.py --group registration --no-build` (dwie własne bazy; hasło/wirtualny passkey).
+
+SIGTERM wymaga czasu na sprzątanie: przeglądarka/API do30s każde, operacja psql do15s, rodzic czeka80s. Kontrolowano ponowiony sygnał, CREATE z wstrzymanym potwierdzeniem i błąd kopii logu. To ręczne próby infrastruktury, nie kolejne testy Playwright. Raport i ograniczenia: [checkpoint](corpus-report.md#zatrzymywanie-testów).

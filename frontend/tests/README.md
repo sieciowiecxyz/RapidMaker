@@ -25,3 +25,7 @@ E2E_CORPUS_LIMIT=5 E2E_REPORT_NAME=corpus-first5 \
 python frontend/tests/run-integration.py corpus.spec.ts
 ```
 Uruchamiaj z root projektu po buildzie. Limit 1–100; pominięcie zmiennej manifestu nie uruchamia korpusu w zwykłych zestawach. Test weryfikuje SHA/rozmiar, upload, prywatny GLB i cenę zmierzoną przez slicer (PLA, 1 sztuka). Cennik to jawny fixture nowej bazy, nie walidacja rentowności produkcji. Odrzucenie pliku ponad 32 MiB jest oczekiwane; limit 25 MiB dotyczy wygenerowanego GLB. Ręczna wycena z powodu gabarytu jest oznaczana `manual-quote`, nie stanowi dowodu automatycznej wyceny. Inne błędy powodują FAIL. Corpus pozostaje lokalny i ignorowany przez Git.
+
+`populated-visual.spec.ts` należy do core: prawdziwe nieopłacone zapytanie, chat, prywatny GLB, listy/szczegóły i zakładki w obu motywach i szerokościach. Nie zastępuje testów płatności; zdjęcia zawierają wyłącznie dane syntetyczne.
+
+Po SIGTERM runner sprząta własne procesy, bazę i katalog; powtórny sygnał nie przerywa sprzątania. Nowy `run-all.py` usuwa stare summary przed uruchomieniem grupy. Brak raportu/przerwany scenariusz nie oznacza PASS. Kontrolowane próby i granice: docs/corpus-report.md.

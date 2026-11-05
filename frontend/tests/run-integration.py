@@ -50,10 +50,10 @@ browser_check = subprocess.run([
 ], cwd=root / "frontend", capture_output=True)
 if browser_check.returncode:
     raise SystemExit("Browser preflight failed; run `cd frontend && npx playwright install chromium` or set a valid PLAYWRIGHT_CHROMIUM_EXECUTABLE. No test database was created.")
-name = "rapidmaker_test_browser_" + secrets.token_hex(6)
+name = "rapidmaker_test_browser_" + secrets.token_hex(16)
 
 def sql(query, database="postgres"):
-    subprocess.run(["podman", "exec", container, "psql", "-U", "rapidmaker", "-d", database, "-v", "ON_ERROR_STOP=1", "-c", query], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["podman", "exec", container, "psql", "-U", "rapidmaker", "-d", database, "-v", "ON_ERROR_STOP=1", "-c", query], check=True, timeout=15, stdout=subprocess.DEVNULL)
 
 binary = root / "backend/target/debug/rapidmaker-api"
 if not binary.exists():
@@ -61,15 +61,17 @@ if not binary.exists():
 folder = Path(tempfile.mkdtemp(prefix="rapidmaker-browser-"))
 api = None
 browser = None
-created = False
+creation_attempted = False
 failed = True
 # SIGTERM must also run cleanup; otherwise a stopped test leaves its private DB/server behind.
 def interrupted(_signal, _frame):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
     raise SystemExit(143)
 signal.signal(signal.SIGTERM, interrupted)
 try:
+    # The private random name also belongs to this run when CREATE's outcome is unknown.
+    creation_attempted = True
     sql("CREATE DATABASE " + name)
-    created = True
     env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME", "LD_LIBRARY_PATH")}
     env.update(DATABASE_URL=parsed._replace(path="/" + name).geturl(), MODEL_STORAGE_DIR=str(folder / "models"), API_PORT="18436", AUTH_MODE="localhost", AUTH_ORIGIN="http://localhost:18437", AUTH_CODE_KEY=secrets.token_hex(32), MAIL_MODE="disabled", MAIL_INBOUND_MODE="disabled", LOG_LEVEL="warn")
     rates = dict(version="browser-test-only", setup_grosze=1000, handling_per_plate_grosze=500, machine_per_hour_grosze=200, energy_per_kwh_grosze=120, printer_watts=150, loss_bps=500, margin_bps=3000, vat_bps=2300, minimum_net_grosze=2000)
@@ -121,27 +123,32 @@ try:
     failed = result != 0
     sys.exit(result)
 finally:
-    if browser and browser.poll() is None:
-        os.killpg(browser.pid, signal.SIGINT)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    for process, stop_signal in ((browser, signal.SIGINT), (api, signal.SIGTERM)):
+        if process and process.poll() is None:
+            try:
+                os.killpg(process.pid, stop_signal)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+    try:
+        if creation_attempted:
+            sql("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)")
+    finally:
         try:
-            browser.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            os.killpg(browser.pid, signal.SIGKILL)
-            browser.wait()
-    if api and api.poll() is None:
-        os.killpg(api.pid, signal.SIGTERM)
-        try:
-            api.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            os.killpg(api.pid, signal.SIGKILL)
-            api.wait()
-    if created:
-        sql("DROP DATABASE " + name + " WITH (FORCE)")
-    if failed and (folder / "api.jsonl").exists():
-        report = root / "frontend/tests/artifacts/integration-api.jsonl"
-        report.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(folder / "api.jsonl", report)
-        report.chmod(0o600)
-        print("Private API failure report:", report)
-    # This directory belongs exclusively to this run. Never touches developer uploads.
-    shutil.rmtree(folder)
+            if failed and (folder / "api.jsonl").exists():
+                report = root / "frontend/tests/artifacts/integration-api.jsonl"
+                report.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(folder / "api.jsonl", report)
+                report.chmod(0o600)
+                print("Private API failure report:", report)
+        finally:
+            # This directory belongs exclusively to this run. Never touches developer uploads.
+            shutil.rmtree(folder)

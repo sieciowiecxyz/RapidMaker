@@ -33,6 +33,7 @@ Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 
 | `auth-email-current.json` | 1 PASS: prawdziwy iCloud do void, hasło/email, wirtualny passkey/email, admin TOTP i klient → admin 403 |
 | `commerce-current.json` | 5 PASS: Stripe test, dostawa sandbox, panele/chat/pliki, częściowy/pełny/nadmierny zwrot, cennik |
 | `checkout-final-current.json` | 3 PASS: dokładna kwota oferty/przycisku/płatności, odbiór/paczkomat/kurier; obejrzane podsumowania desktop/mobile |
+| `registration-password.json` / `registration-passkey.json` | po1 PASS32,8s/28,7s: nowe konto, rzeczywisty email iCloud i kopia warunków, pierwsze hasło lub wirtualny passkey |
 | `manual-email-chat-current.json` | 1 PASS: ręczna wycena w UI, publikacja admina, prywatny podgląd, email iCloud, Stripe test, warunki zakupu i odpowiedź email → chat |
 | `public-account-visual-current.json` | 5 PASS38,2s: 14 wariantów tras, jasny/ciemny,1440/390px,56 zrzutów; fonty, `<img>`, błędy zasobów, szerokość i motyw; prawdziwe lokalne MFA, puste panele |
 | Test `assets.spec.ts` | 2 PASS: obrazki `<img>` strony głównej i oba motywy; głównie logo, nie wszystkie grafiki serwisu |
@@ -61,7 +62,7 @@ Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 
 
 Cudze metadane/GLB/status zadania/próba wyceny dają404. Po ukończeniu wszystkich zadań checkout z **pasującym cudzym modelem, ilością i wyceną** daje409; własny200 z dokładną kwotą snapshotu. Liczniki SQL obejmują tylko modele tego testu; UUID sprawdzany przed użyciem w zapytaniu. `concurrent-quotes-current.json`:1 PASS3,4s.
 
-Nowe testy współbieżności i wyglądu należą do grupy `core`. Pierwszy wspólny przebieg26 PASS/1 FAIL ujawnił współdzielenie konta TOTP przez testy wyglądu i negatywny test logowania. Osobne konto fixture usuwa tę zależność; ochrona przed ponownym użyciem kodu pozostaje. Ponowiony `core.json`:**27 PASS /0 FAIL /0 skipped /0 flaky**,195,9s. Następnie doprecyzowano zakres SQL/atak checkoutu w samym teście współbieżności i potwierdzono go osobno; całego zestawu po tej zmianie asercji nie powtarzano.
+Nowe testy współbieżności i wyglądu należą do grupy `core`. Pierwszy wspólny przebieg26 PASS/1 FAIL ujawnił współdzielenie konta TOTP przez testy wyglądu i negatywny test logowania. Osobne konto fixture usuwa tę zależność; ochrona przed ponownym użyciem kodu pozostaje. Pełny `core.json` po dołączeniu wypełnionych paneli: **28 PASS /0 FAIL /0 skipped /0 flaky**,245,1s. Obejmuje też końcowe asercje SQL i dopasowanego cudzego checkoutu.
 
 Regresja limitu używa teraz1 000 002 rzeczywiście różnych wierzchołków, zamiast powtarzanych zer. HTTP422 i objaśnienie w UI:1 PASS2,8s, także PASS w core. Brak zmian w produkcyjnym auth, limitach czy stylu. Sol xhigh: bez blokera, oceny8–9/10. Ten etap nie sprawdza restartu workera, wyczerpania kolejki ani dostawców.
 
@@ -71,7 +72,19 @@ Odtworzono błąd: jasny motyw wybrany na stronie głównej znikał po bezpośre
 
 `public-visual.spec.ts`:5 PASS38,2s (56 zrzutów). Trasy publiczne: strona główna, wycena, logowanie/rejestracja, dokumenty/regulamin/prywatność. Konta: lista/ustawienia klienta oraz admin.html, starsza lista, produkcja, materiały i cennik. W obu motywach1440/390px: właściwy nagłówek, fonty i obrazy, brak błędów zasobów/poziomego overflow; admin przełącza motyw i zachowuje go po reloadzie. Obejrzano4 reprezentatywne zrzuty (login/materiały mobile, admin/konto desktop). Build frontend0 błędów/ostrzeżeń. Przegląd Sol xhigh: bez blokera; oceny8–9/10, kwoty nie dotyczą zmiany.
 
-To puste panele fixture i kontrola `<img>`/fontów/HTTP zasobów; nie obejmuje wszystkich wypełnionych zamówień, dialogów, SVG ani klatek Stripe. Nie mierzono błysku motywu przed załadowaniem JS.
+Ten wcześniejszy zestaw obejmuje puste panele fixture i kontrolę `<img>`/fontów/HTTP zasobów; nie obejmuje wszystkich wypełnionych zamówień, dialogów, SVG ani klatek Stripe. Nie mierzono błysku motywu przed załadowaniem JS.
+
+## Wypełnione panele i kontrast
+
+`populated-visual-current.json`:1 PASS10s,44 zrzuty (32 widoki,12 płócien GLB). Prawdziwe nieopłacone zapytanie, trzy sztuki, chat klient↔admin; listy, szczegóły, pliki i historia w obu motywach/1440 i390px. Obrót zmienia piksele podglądu. Kwota pozostaje null i listy pokazują „Do wyceny”; test nie udaje zapłaty ani operacji dostawcy. Klawiatura dociera do ostatniej zakładki admina, pasek przewija ją do widoku. Dodatkowo obejrzano4 reprezentatywne zrzuty, także chat poniżej pierwszego ekranu.
+
+Naprawiono słaby kontrast etykiety „Ręczna wycena”: przed zmianą1,32:1, po zmianie6,66:1 w jasnym i13,38:1 w ciemnym motywie. Jeden token ostrzeżenia w istniejącym motywie; bez zmiany układu. Build frontend0 błędów/ostrzeżeń. Sol xhigh: bez blokera w zakresie poprawki; oceny7–9/10. Kontrola kontrastu dotyczy tej etykiety, nie całej strony. Rejestracja passkey używa wirtualnego uwierzytelniacza Chromium; fizyczny klucz pozostaje niesprawdzony.
+
+## Zatrzymywanie testów
+
+Przerwany SIGTERM przebieg28 nie został zaliczony jako sukces. Naprawiono zbyt krótki budżet nadrzędnego sprzątania, ponowne przerwanie cleanupu i pozostawianie starego summary. Tworzenie bazy ma128-bitową nazwę; cleanup obsługuje nieznany wynik CREATE i błąd kopiowania logu.
+
+Kontrolowane ręczne próby na własnych zasobach: `cancel-check.json` — dwukrotny SIGTERM, exit143, API/baza/pliki usunięte, porty wolne; `cancel-create-check.json` — CREATE wykonany, potwierdzenie wstrzymane, przerwanie bez pozostawienia bazy/katalogu; `cancel-copy-check.json` — wstrzyknięty błąd kopii, oczekiwany exit1, API/baza/pliki usunięte. `runner-normal-current.json`:1 PASS1,3s po ostatniej korekcie cleanupu. Pełne28 testów wykonano przed tą ostatnią korektą obsługi błędów runnera; kod produktu i scenariusze nie zmieniły się. Sol xhigh: wcześniejsze usterki zamknięte, brak nowego blokera; oceny8–9/10. Zewnętrzna przyczyna pierwszego SIGTERM nieustalona. Nie gwarantujemy cleanupu po awarii systemu ani dowolnie opóźnionym CREATE kończącym się już po DROP.
 
 ## Odtwarzanie korpusu
 
@@ -87,6 +100,6 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 
 - Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA wymagającą ręcznego rozwiązania. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów.
-- Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
+- Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, opłacone zamówienia/dialogi we wszystkich stanach, wszystkie grafiki/SVG i większe obciążenie. Widoki zamówień nadal pokazują techniczne identyfikatory materiału/koloru; warto nadać im czytelne etykiety. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.

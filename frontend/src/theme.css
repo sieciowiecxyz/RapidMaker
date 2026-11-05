@@ -8,6 +8,7 @@
   --color-heading: var(--ink, #edf4e9);
   --color-muted: var(--muted, #a7b5a2);
   --color-danger: var(--danger, #ffc2b8);
+  --color-attention: var(--warning);
   --color-primary: var(--accent, #b5ee4b);
   --color-primary-hover: var(--accent-hover, #d0ff78);
   --color-primary-active: #a0d83a;

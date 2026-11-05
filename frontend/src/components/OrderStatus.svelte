@@ -15,6 +15,6 @@
     color: var(--color-accent);
   }
   .attention {
-    color: #f1d49b;
+    color: var(--color-attention);
   }
 </style>
