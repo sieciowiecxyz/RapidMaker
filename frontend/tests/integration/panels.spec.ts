@@ -478,10 +478,52 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
     expect(
       (await (await operator.request.get(`/api/admin/orders/${id}/refunds`)).json()).length,
     ).toBe(1);
+    const concurrentHeaders = await headers(operator);
+    const requestIds = [randomUUID(), randomUUID()];
+    const concurrent = await Promise.all(
+      requestIds.map((request_id) =>
+        operator.request.post(`/api/admin/orders/${id}/refunds`, {
+          headers: concurrentHeaders,
+          data: { request_id, amount_grosze: 1500 },
+        }),
+      ),
+    );
+    expect(concurrent.map((response) => response.status()).sort()).toEqual([202, 409]);
+    expect(await concurrent.find((response) => response.status() === 409)!.json()).toMatchObject({
+      code: 'refund_amount',
+    });
+    const acceptedIndex = concurrent.findIndex((response) => response.status() === 202);
+    const accepted = await concurrent[acceptedIndex].json();
+    expect(accepted.request_id).toBe(requestIds[acceptedIndex]);
+    const acceptedRetry = await operator.request.post(`/api/admin/orders/${id}/refunds`, {
+      headers: concurrentHeaders,
+      data: { request_id: accepted.request_id, amount_grosze: 1500 },
+    });
+    expect(acceptedRetry.status()).toBe(202);
+    expect((await acceptedRetry.json()).id).toBe(accepted.id);
+    const ledger = await (await operator.request.get(`/api/admin/orders/${id}/refunds`)).json();
+    expect(ledger.map((refund: { id: string }) => refund.id).sort()).toEqual(
+      [firstRefund.id, accepted.id].sort(),
+    );
+    await expect
+      .poll(
+        async () => {
+          const result: { state: string; amount_grosze: number }[] = await (
+            await operator.request.get(`/api/admin/orders/${id}/refunds`)
+          ).json();
+          return (
+            result.length === 2 &&
+            result.every((r) => r.state === 'succeeded') &&
+            result.reduce((sum, r) => sum + r.amount_grosze, 0) === 2000
+          );
+        },
+        { timeout: 70_000, intervals: [1000, 3000] },
+      )
+      .toBe(true);
     await refunds.getByRole('button', { name: 'Odśwież', exact: true }).click();
     await expect(refunds.getByLabel('Kwota zwrotu (zł)')).toBeEnabled();
     await refunds.getByRole('button', { name: 'Cała pozostała kwota' }).click();
-    await expect(refunds.getByLabel('Kwota zwrotu (zł)')).toHaveValue('20,00');
+    await expect(refunds.getByLabel('Kwota zwrotu (zł)')).toHaveValue('5,00');
     operator.once('dialog', (dialog) => dialog.accept());
     await refunds.getByRole('button', { name: 'Zleć zwrot', exact: true }).click();
     await expect
@@ -491,7 +533,7 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
             await operator.request.get(`/api/admin/orders/${id}/refunds`)
           ).json();
           return (
-            result.length === 2 &&
+            result.length === 3 &&
             result.every((r) => r.state === 'succeeded') &&
             result.reduce((sum, r) => sum + r.amount_grosze, 0) === 2500
           );

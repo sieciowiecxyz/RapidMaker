@@ -28,6 +28,12 @@ Rozszerzono istniejący scenariusz porzuconego zamówienia: cztery równoległe 
 
 `concurrent-unpaid-payment.json`: **1 PASS/5,9s**,0 FAIL/skipped/flaky. Po tym przebiegu zmieniono wyłącznie tytuł testu, aby nie sugerował niezależnego odczytu zamknięcia sesji w Stripe. Sol xhigh bez blokującego problemu; oceny zakresu: poprawność8, bezpieczeństwo7, kwoty7, zasoby8, błędy7, współbieżność8, dowody8, prostota8, utrzymanie8/10; UI N/A. Kod produktu i wygląd bez zmian.
 
+## Równoległe zwroty
+
+Rozszerzono istniejący scenariusz paneli: po zwrocie500 z zapłaconych2500 groszy dwa równoległe żądania1500+1500 z różnymi kluczami → dokładnie202/409 `refund_amount`. Odpowiedź jest związana z przesłanym kluczem, retry zwraca ten sam rekord; ledger ma dokładnie dwa oczekiwane ID. Po potwierdzeniu Stripe suma zwrotów2000, UI pokazuje pozostałe5 zł; końcowy zwrot przez UI daje trzy `succeeded`, dokładnie2500. Nadal sprawdzane klient403, obcy404, overrefund409 i stan zamówienia. Jedna sesja admina wysyła równoległe żądania; nie deklarujemy testu dwóch osobnych adminów ani niezależnego odczytu księgi Stripe.
+
+`concurrent-refund-final.json`: **1 PASS/25,7s**,0 FAIL/skipped/flaky, rzeczywiste Stripe test/API/DB. Wcześniejszy przebieg1 PASS26,1s poprzedzał dodatkową kontrolę klucza. Sol xhigh: brak blokującego problemu, drobny brak kontroli klucza poprawiono i przejrzano. Oceny zakresu8–9/10 w dziesięciu kategoriach; brak twierdzenia10/10 dla produktu. Prettier/diff-check PASS; bez zmian backendu, wyglądu i nowych zamówień poza istniejącą fixture.
+
 ## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.
