@@ -219,6 +219,140 @@ test('real batch prices follow measured plates and fixture costs for 1, 10 and 1
   }
 });
 
+test('real multi-model checkout combines measured costs once and rejects altered or foreign quotes', async ({
+  request,
+  playwright,
+  baseURL,
+}) => {
+  test.setTimeout(240_000);
+  const headers = { Origin: 'http://localhost:18437' };
+  const upload = (client: typeof request) =>
+    client.post('/api/models', {
+      headers: {
+        ...headers,
+        'Content-Type': 'application/octet-stream',
+        'x-model-filename': 'cube_20mm.stl',
+      },
+      data: readFileSync(fixture('cube_20mm.stl')),
+    });
+  const catalogResponse = await request.get('/api/catalog/materials');
+  expect(catalogResponse.status()).toBe(200);
+  const material = (await catalogResponse.json()).materials.find(
+    (m: { id: string }) => m.id === 'GFA00',
+  );
+  expect(material?.colors.length).toBeGreaterThan(0);
+  const parts: { id: string; analysis_id: string; quantity: number; quote_id: string }[] = [];
+  const measuredCosts: number[] = [];
+  let separateGross = 0;
+  for (const quantity of [1, 10]) {
+    // Identical geometry, separate real uploads: ownership and snapshot binding use model IDs.
+    const uploaded = await upload(request);
+    expect(uploaded.status()).toBe(201);
+    const model = await uploaded.json();
+    const quote = await request.post('/api/quotes/estimate', {
+      headers,
+      data: {
+        model_id: model.id,
+        material_id: material.id,
+        color_code: material.colors[0].code,
+        options: { quantity, quality: 'standard', wall_loops: 3, infill_percent: 20 },
+      },
+    });
+    expect(quote.status()).toBe(202);
+    let job = await quote.json();
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(job.poll_url);
+          expect(response.status()).toBe(200);
+          job = await response.json();
+          return job.status;
+        },
+        { timeout: 90_000, intervals: [1000, 2000] },
+      )
+      .toMatch(/^(succeeded|failed)$/);
+    expect(job.status, job.message).toBe('succeeded');
+    const { measurement, price } = job.result;
+    expect(job.result).toMatchObject({ model_id: model.id, quantity, currency: 'PLN' });
+    expect(measurement.quantity).toBe(quantity);
+    expect(measurement.filament_grams).toBeGreaterThan(0);
+    expect(measurement.time_seconds).toBeGreaterThan(0);
+    expect(measurement.plates).toBeGreaterThan(0);
+    // Invoice units from the disposable runner's fixture: 100 PLN/kg, 2 PLN/h,
+    // 150 W at 1.20 PLN/kWh, 5 PLN per actual plate. Round each measured line up.
+    const components = {
+      filament_grosze: Math.ceil(Math.ceil(measurement.filament_grams * 1000) / 100),
+      machine_grosze: Math.ceil(measurement.time_seconds / 18),
+      energy_grosze: Math.ceil(measurement.time_seconds / 200),
+      handling_grosze: measurement.plates * 500,
+    };
+    expect(price).toMatchObject(components);
+    measuredCosts.push(Object.values(components).reduce((sum, cost) => sum + cost, 0));
+    separateGross += price.gross_grosze;
+    parts.push({ id: model.id, analysis_id: model.id, quantity, quote_id: job.result.id });
+  }
+  expect(parts[0].analysis_id).not.toBe(parts[1].analysis_id);
+  expect(parts[0].quote_id).not.toBe(parts[1].quote_id);
+  const checkout = (items = parts, client = request) =>
+    client.post('/api/checkout/quote', {
+      headers,
+      data: {
+        parts: items,
+        delivery: 'pickup',
+        contact: {
+          name: 'Test Rapidmaker',
+          email: 'void@sieciowiec.xyz',
+          phone: '500600700',
+        },
+      },
+    });
+  const response = await checkout();
+  expect(response.status()).toBe(200);
+  const order = await response.json();
+  // One order invoice: setup 10 PLN, 5% loss, 30% margin, minimum 20 PLN net,
+  // then 23% VAT. Never sum the individually marked-up/minimum-priced quotes.
+  const base = measuredCosts.reduce((sum, cost) => sum + cost, 1000);
+  const costNet = base + Math.ceil(base / 20);
+  const net = Math.ceil(Math.max(2000, (costNet * 10) / 7));
+  const gross = net + Math.ceil((net * 23) / 100);
+  expect(order.print_grosze).toBe(gross);
+  expect(order.print_grosze).toBeLessThan(separateGross);
+  expect(order.manual_required).toBe(false);
+  expect(order.packaging_grosze).toBe(0);
+  expect(order.offers).toHaveLength(1);
+  expect(order.offers[0]).toMatchObject({ price_grosze: 0, total_grosze: gross });
+  expect(order.print_lines).toHaveLength(2);
+  type Line = { model_id: string; quantity: number; total_grosze: number; unit_grosze: number };
+  const lines: Line[] = order.print_lines;
+  for (const [index, part] of parts.entries()) {
+    const line = lines.find((item) => item.model_id === part.id);
+    expect(line).toBeDefined();
+    expect(line!.quantity).toBe(part.quantity);
+    expect(Number.isSafeInteger(line!.total_grosze)).toBe(true);
+    expect(line!.total_grosze).toBeGreaterThan(0);
+    expect(line!.unit_grosze).toBe(Math.ceil(line!.total_grosze / part.quantity));
+    // Gross allocation must reflect physical costs, allowing only grosz rounding.
+    expect(Math.abs(line!.total_grosze - (gross * measuredCosts[index]) / base)).toBeLessThan(1);
+  }
+  expect(Math.abs(order.setup_grosze - (gross * 1000) / base)).toBeLessThan(1);
+  expect(lines.reduce((sum, line) => sum + line.total_grosze, order.setup_grosze)).toBe(gross);
+
+  expect((await checkout([{ ...parts[0], quantity: 2 }, parts[1]])).status()).toBe(409);
+  expect(
+    (await checkout([{ ...parts[0], analysis_id: parts[1].analysis_id }, parts[1]])).status(),
+  ).toBe(409);
+  expect((await checkout([parts[0], { ...parts[1], id: parts[0].id }])).status()).toBe(400);
+  const foreign = await playwright.request.newContext({ baseURL });
+  try {
+    // Give the other guest a valid identity, then try this owner's real quote snapshots.
+    expect((await upload(foreign)).status()).toBe(201);
+    expect((await checkout(parts, foreign)).status()).toBe(409);
+  } finally {
+    await foreign.dispose();
+  }
+  expect((await checkout()).status()).toBe(200);
+});
+
 test('oversized server geometry requests manual handling before any slicer job', async ({
   request,
 }) => {
