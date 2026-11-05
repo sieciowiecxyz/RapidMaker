@@ -4,21 +4,22 @@ Cel nadal aktywny. Pobrano **41/100** różnych projektów MakerWorld: 34 × 3MF
 
 ## Rzeczywisty korpus
 
-`corpus41-mirrors`: 41 przypadków, 203,2 s, bez pominięć i flaky. Porównanie z `corpus41-indexed`: poprawiony przypadek22, brak innych zmian wyników/klasyfikacji.
+`corpus41-entry32`: 41 przypadków,215,1s, bez pominięć i flaky. Porównanie z `corpus41-mirrors`: poprawiony przypadek25, brak innych zmian wyników/klasyfikacji. Wcześniejsza poprawka odbić uratowała przypadek22.
 
 | Wynik | Liczba | Co potwierdza |
 | --- | ---: | --- |
 | Automatyczna cena | 15 | Upload, GLB, prawdziwy slicer, dodatnie pomiary i całkowitoliczbowe koszty |
-| Ręczna wycena | 7 | Podgląd działa; gabaryt przekracza politykę automatycznej wyceny/P1P |
+| Ręczna wycena | 8 | Podgląd działa; gabaryt przekracza politykę automatycznej wyceny/P1P |
 | Za duży upload | 5 | Prawidłowe HTTP 413 powyżej 32 MiB |
-| Limit geometrii | 14 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
+| Limit geometrii | 13 | HTTP 422 `model_resource_limit`; pełna wycena nie została wykonana |
 
-Runner zwrócił **27 PASS / 14 FAIL**, nie „41 działa”. Czternaście testów nadal oczekuje obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 50 MiB łącznie / 25 MiB wpis / 512 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
+Runner zwrócił **28 PASS / 13 FAIL**, nie „41 działa”. Trzynaście testów nadal oczekuje obsługi, mimo ochronnego odrzucenia. Pozostają jawnie oznaczone `resource-limit`; nie zmieniono asercji, żeby uzyskać zielony raport. Limity: 1 mln unikalnych wierzchołków i 1 mln trójkątów, ZIP 50 MiB łącznie / 32 MiB wpis / 512 wpisów, GLB 25 MiB. Zwykły frontend dodatkowo ogranicza plik do 25 MiB. Duże poprawne projekty MakerWorld mogą być nieobsługiwane.
 
 Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 17 limitów, 3 błędy proxy oraz 2 niewyjaśnione odrzucenia parsera. Model 2 otrzymuje **wycenę ręczną**, nie automatyczną cenę.
 
 ## Poprawki i dowody
 
+- Limit pojedynczego wpisu3MF25→32 MiB, przy niezmienionych50 MiB łącznie,512 wpisach i limitach siatki/wyjścia/RAM/czasu. Model25 ma43,9 MiB łącznie i28,7 MiB w jednym wpisie; teraz upload/GLB/ręczna wycena przechodzą w13s. Izolowana próba diagnostyczna:12,7s/około157 MiB peak RSS,248333 wierzchołki/497026 trójkątów,464×534×12mm; to nie automatyczna cena. Jedna wartość produkcyjna i test czterech rzeczywistych granic ZIP:32 MiB,32 MiB+1,50 MiB łącznie,50 MiB+1. Geometria29 PASS/1 opcjonalny ignored, fmt/Clippy/build PASS. Pełne41 jak wyżej; inne wyniki niezmienione.
 - Odbicia w 3MF: przypadek22 ma434 wpisy i lustrzaną transformację odrzucaną przez lib3mf. Prywatna kopia normalizuje jej wyznacznik do walidacji, sprawdza dopasowanie i przywraca dokładną macierz; wynikowe odbicie odwraca orientację trójkątów. Oryginał niezmieniony. Limit wpisów256→512; bajty, siatka, RAM i czas bez zmian. Root przechodzi dotychczasową walidację pakietu; części podrzędne zachowują wcześniejszy parser XML. Normalizacja ma kontrole czasu i tworzy kopię XML tylko przy zmianie. Geometria**28 PASS/1 opcjonalny ignored**, Clippy/build PASS; testy pojedynczego/podwójnego odbicia, orientacji/objętości/współrzędnych, małej skali, błędnych macierzy, dopasowania i granicy512/513. Rzeczywisty upload/GLB/ręczna wycena**1 PASS10,1s**; pełne41 jak wyżej. Model obejmuje cały projekt około801×559×35mm, więc nie uzyskał automatycznej ceny. Sol xhigh: dwie uwagi poprawione, brak dalszej ustalonej regresji; oceny7–8/10, część kategorii N/A. Nie oznacza10/10 ani kompletnej walidacji wszystkich części 3MF.
 - Bambu `paint_*`/`face_property`: pomijane tylko jako ustawienia trójkątów w kopii geometrycznej. Wierzchołki, transformacje, oryginał i pełna walidacja pakietu pozostają. 21 testów geometrii PASS; model 28 przechodzi do ręcznej wyceny, model 36 po indeksowaniu uzyskuje podgląd i ręczną wycenę. Znaczenie pól sprawdzono w [źródle Bambu v02.08.02.61](https://github.com/bambulab/BambuStudio/blob/v02.08.02.61/src/libslic3r/Format/bbs_3mf.cpp).
 - Dokładne indeksowanie wierzchołków STL/3MF: zachowane bity współrzędnych, kolejność i orientacja każdego trójkąta, bez uproszczenia siatki. ASCII kontroluje limity podczas czytania. Geometria23 PASS, Clippy PASS; realne modele3/6 dostają cenę,36 podgląd/ręczną wycenę. Budżety czasu/RAM, trójkątów, ZIP i GLB nie zostały zwiększone. Porównanie całego41: trzy poprawione przypadki, zero nowych FAIL ani zmian klasyfikacji wcześniejszych sukcesów. `indexed-models-ui.json`1 PASS2,7s: pięć wariantów STL/STEP/3MF, prywatne GLB i UI; obejrzany desktop zachowuje styl autora. HashMap ma koszt pamięci/CPU; nie jest to dowód działania każdego dużego modelu. Sol xhigh: bez blokera w tym zakresie, oceny8–9/10.
@@ -120,7 +121,7 @@ Test zarejestrowany w `core`; po jego dodaniu cały aktualny zestaw przeszedł30
 
 ## Wspólne sprawdzenie aktualnego kodu
 
-Źródło `564977f`, `core.json`: **30 PASS/0 FAIL/0 skipped/0 flaky,241,3s**. Rzeczywiste lokalne API/DB/slicer, wyceny1/10/1000, równoległość i własność, STL/STEP/3MF/prywatne GLB/retencja, konfigurator, publiczne i wypełnione panele,20 widoków pokazowych, logowanie/zmiana hasła/passkey/TOTP/sesje oraz dokumenty prawne. Uwzględnia poprawki nazw, odbić3MF i nowe testy pokazowe. Nie uruchamia zewnętrznych Stripe/Furgonetki/iCloud; ich odrębne dowody i ograniczenia pozostają powyżej. Nie obejmuje opt-in korpusu41, którego ostatni wynik nadal27 PASS/14 FAIL.
+Źródło `564977f`, `core.json`: **30 PASS/0 FAIL/0 skipped/0 flaky,241,3s**. Rzeczywiste lokalne API/DB/slicer, wyceny1/10/1000, równoległość i własność, STL/STEP/3MF/prywatne GLB/retencja, konfigurator, publiczne i wypełnione panele,20 widoków pokazowych, logowanie/zmiana hasła/passkey/TOTP/sesje oraz dokumenty prawne. Uwzględnia poprawki nazw, odbić3MF i nowe testy pokazowe. Nie uruchamia zewnętrznych Stripe/Furgonetki/iCloud; ich odrębne dowody i ograniczenia pozostają powyżej. Nie obejmuje opt-in korpusu41; jego późniejszy wynik jest w tabeli na początku raportu.
 
 ## Aktualny sandbox i logistyka
 

@@ -51,7 +51,7 @@ impl Default for ThreeMfLimits {
         Self {
             max_entry_count: 512,
             max_uncompressed_bytes: 50 * 1024 * 1024,
-            max_entry_bytes: 25 * 1024 * 1024,
+            max_entry_bytes: 32 * 1024 * 1024,
         }
     }
 }
@@ -1934,6 +1934,44 @@ mod tests {
             } else {
                 assert_eq!(result.unwrap_err(), PreviewError::TooManyContainerEntries);
             }
+        }
+    }
+
+    #[test]
+    fn three_mf_container_byte_boundaries() {
+        let mib = 1024 * 1024;
+        let limits = ThreeMfLimits::default();
+        for (sizes, accepted) in [
+            (vec![32 * mib], true),
+            (vec![32 * mib + 1], false),
+            (vec![32 * mib, 18 * mib], true),
+            (vec![32 * mib, 18 * mib + 1], false),
+        ] {
+            let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .compression_level(Some(1));
+            for (index, &size) in sizes.iter().enumerate() {
+                let name = if index == 0 {
+                    "3D/3dmodel.model"
+                } else {
+                    "padding.bin"
+                };
+                archive.start_file(name, options).unwrap();
+                std::io::copy(&mut std::io::repeat(0).take(size), &mut archive).unwrap();
+            }
+            // Exercise only the container gate; zero-filled entries are not valid geometry.
+            let input = archive.finish().unwrap().into_inner();
+            let result = validate_3mf_container(&input, &limits);
+            assert_eq!(
+                result,
+                if accepted {
+                    Ok(())
+                } else {
+                    Err(PreviewError::ContainerTooLarge)
+                },
+                "entry sizes: {sizes:?}"
+            );
         }
     }
 
