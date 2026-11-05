@@ -28,12 +28,12 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 - **Combined core:**source `564977f`, `core.json`:30 PASS/0 FAIL/0 skipped/0 flaky,241.3s. Includes current label/mirror/showcase changes, real local API/slicer/MFA and populated panels; external providers run separately.
 - **Latest sandbox:**`sandbox.json`7 PASS/2 FAIL136.9s; both logistics radio-scroll failures fixed in test only. Focused `logistics-current.json`2 PASS73.5s, no provider-blocked annotation: DHL sandbox booking/PDF/pickup/cancel and tracking/handover confirmed. Full9 after fix NOT RUN; do not describe split runs as one9/9. No product/style change.
 - **Latest email:**source `8dbdb07`, `email.json`:2 PASS/0 FAIL/0 skipped/0 flaky213.2s. Actual iCloud MFA, manual offer notice, Stripe test payment/terms email and one inbound reply in chat; virtual passkey only. Sole recipient void@sieciowiec.xyz.
+- **Large real-model UI:**`corpus-ui-final.json`6 PASS/119.8s,0 skipped/flaky: four real large3MFs plus two authored showcase tests,36 scene captures. True UI upload/private GLB/pixels/rotation, case9 displayed price equals server cents, other three explicitly manual due size. Fixed UTF-8 locale in test browser and ellipsized long preview filenames without losing full text or changing design. Build0/0. Current full core not rerun.
 - **Reviews:**GPT-6-Sol xhigh after each implementation; actionable findings fixed, scores honest and still below10/10 for full scope. No review score replaces tests.
 
 ## Next
 
 1. Complete100 source downloads once CAPTCHA is cleared; extend manifest and rerun corpus without fabricating formats, dropping difficult cases or hiding failures.
 2. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.
-3. Verify newly admitted complex3MF previews through actual UI upload and rendered pixels, beyond API/GLB-header checks.
-4. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
-5. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.
+3. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
+4. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.

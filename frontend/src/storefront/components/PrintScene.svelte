@@ -69,7 +69,7 @@
   <div class="chamber-visual" role="img" aria-label={mesh ? `Model z pliku ${fileName}. Obróć przeciągając myszą. Kolor: ${colorName}.` : `Pokazowa część: ${sample.name}, ${materialName}, ${colorName}, jakość ${quality === 'fine' ? 'dokładna' : quality === 'standard' ? 'standardowa' : quality === 'draft' ? 'robocza' : 'nie wybrano'}. ${demonstrating ? `Poglądowe wypełnienie i ścianki: ${strengthName}.` : ''} Nie przedstawia wgranego pliku.`}>
     <span class="chamber-watermark" aria-hidden="true">{mesh && material === 'unselected' ? '3D' : materialName}</span>
     <canvas bind:this={canvas} aria-hidden="true"></canvas>{#if unavailable}<p class="viewer-fallback">Podgląd 3D jest niedostępny na tym urządzeniu. Konfigurator działa dalej.</p>{/if}
-    <span class="chamber-callout"><IconArrowDownRight size={16} stroke={1.5} />{fileName ?? sample.name}</span>
+    <span class="chamber-callout"><IconArrowDownRight size={16} stroke={1.5} /><span class="chamber-filename" title={fileName ?? sample.name}>{fileName ?? sample.name}</span></span>
   </div>
   {#if demonstrating}<div class="strength-demonstration" role="status"><span>Wypełnienie i ścianki · {strengthName}</span><small>Pokaz poglądowy</small></div>{/if}
   <div class="chamber-data"><div><span>Materiał</span><strong>{materialName}</strong></div><div><span>Kolor</span><strong>{colorName}</strong></div><div><span>Warstwy</span><strong>{quality === 'fine' ? 'Dokładne' : quality === 'standard' ? 'Standard' : quality === 'draft' ? 'Robocze' : 'Nie wybrano'}</strong></div></div>

@@ -466,7 +466,9 @@ p { text-wrap: pretty; }
 .settings-copied { display:flex; align-items:center; gap:8px; color:var(--accent); font-size:12px; line-height:1.5; margin-bottom:14px; }
 .settings-copied svg { flex-shrink:0; }
 
-.chamber-callout { max-width:calc(100% - 44px); overflow-wrap:anywhere; }
+.chamber-callout { max-width:calc(100% - 44px); }
+.chamber-callout svg { flex-shrink:0; }
+.chamber-filename { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .scene-actions { flex-wrap:wrap; }
 
 .order-nav-back { min-height:44px; padding:0; border:0; background:transparent; color:var(--ink); font-size:13px; font-weight:600; }
