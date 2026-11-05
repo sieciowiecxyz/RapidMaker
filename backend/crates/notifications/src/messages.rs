@@ -15,6 +15,10 @@ pub enum Notification<'a> {
         reference: &'a str,
         amount_grosze: u64,
     },
+    RefundSucceeded {
+        reference: &'a str,
+        amount_grosze: u64,
+    },
     ManualOffer {
         reference: &'a str,
         amount_grosze: u64,
@@ -70,6 +74,11 @@ impl Notification<'_> {
             Self::PaymentReceived { reference, amount_grosze } => {
                 field(reference)?;
                 ("Rapidmaker — płatność otrzymana", format!("Otrzymaliśmy płatność {}.{:02} PLN za zamówienie {reference}.", amount_grosze / 100, amount_grosze % 100))
+            }
+            Self::RefundSucceeded { reference, amount_grosze } => {
+                field(reference)?;
+                if !(1..=99999999).contains(&amount_grosze) { return Err(MailError::InvalidMessage); }
+                ("Rapidmaker — zwrot płatności", format!("Stripe potwierdził zwrot {}.{:02} PLN za zamówienie {reference}. Środki mogą pojawić się na rachunku później, zależnie od banku.", amount_grosze / 100, amount_grosze % 100))
             }
             Self::ManualOffer { reference, amount_grosze, valid_until } => {
                 field(reference)?;
@@ -132,6 +141,10 @@ pub enum EmailNotification {
         reference: String,
     },
     PaymentReceived {
+        reference: String,
+        amount_grosze: u64,
+    },
+    RefundSucceeded {
         reference: String,
         amount_grosze: u64,
     },
@@ -218,6 +231,13 @@ impl EmailNotification {
                 reference,
                 amount_grosze: *amount_grosze,
             },
+            Self::RefundSucceeded {
+                reference,
+                amount_grosze,
+            } => Notification::RefundSucceeded {
+                reference,
+                amount_grosze: *amount_grosze,
+            },
             Self::ManualOffer {
                 reference,
                 amount_grosze,
@@ -251,6 +271,71 @@ impl EmailNotification {
                 body,
                 operator: *operator,
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refund_confirmation_formats_exact_amount_and_bank_timing() {
+        let payload = EmailPayload {
+            version: 1,
+            notification: EmailNotification::RefundSucceeded {
+                reference: "order-123".into(),
+                amount_grosze: 500,
+            },
+        };
+        payload.validate().unwrap();
+        let (subject, body) = payload.notification.borrowed().render().unwrap();
+        assert_eq!(subject, "Rapidmaker — zwrot płatności");
+        assert_eq!(
+            body,
+            "Stripe potwierdził zwrot 5.00 PLN za zamówienie order-123. Środki mogą pojawić się na rachunku później, zależnie od banku."
+        );
+        for amount in [1, 99999999] {
+            assert!(
+                Notification::RefundSucceeded {
+                    reference: "order-123",
+                    amount_grosze: amount
+                }
+                .render()
+                .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn refund_confirmation_rejects_invalid_reference_and_amount() {
+        for reference in ["", "order\n123", "order\r123", "order\0"] {
+            assert!(
+                Notification::RefundSucceeded {
+                    reference,
+                    amount_grosze: 500
+                }
+                .render()
+                .is_err()
+            );
+        }
+        assert!(
+            Notification::RefundSucceeded {
+                reference: &"x".repeat(161),
+                amount_grosze: 500
+            }
+            .render()
+            .is_err()
+        );
+        for amount in [0, 100000000, u64::MAX] {
+            assert!(
+                Notification::RefundSucceeded {
+                    reference: "order-123",
+                    amount_grosze: amount
+                }
+                .render()
+                .is_err()
+            );
         }
     }
 }

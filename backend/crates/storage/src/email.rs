@@ -102,6 +102,13 @@ fn validate(input: &EmailInput) -> Result<(), StorageError> {
                         .and_then(Value::as_u64)
                         .is_some_and(|v| v > 0)
             }
+            "refund_succeeded" => {
+                data.len() == 3
+                    && data
+                        .get("amount_grosze")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|v| (1..=99999999).contains(&v))
+            }
             "payment_received" => {
                 data.len() == 3 && data.get("amount_grosze").and_then(Value::as_u64).is_some()
             }
@@ -169,7 +176,7 @@ pub(crate) async fn enqueue(
         return Ok(false);
     }
     let allowed: bool = sqlx::query_scalar("SELECT CASE WHEN $1::text IS NULL THEN $3 ELSE EXISTS(SELECT 1 FROM users WHERE id=$1 AND disabled_at IS NULL AND CASE $2 WHEN 'shipment_dispatched' THEN email_order_updates WHEN 'status_changed' THEN email_order_updates WHEN 'chat_message' THEN email_chat_messages ELSE true END) END")
-        .bind(&input.user_id).bind(&input.kind).bind(input.optional_enabled || matches!(input.kind.as_str(), "order_confirmed" | "payment_received" | "legal_documents"))
+        .bind(&input.user_id).bind(&input.kind).bind(input.optional_enabled || matches!(input.kind.as_str(), "order_confirmed" | "payment_received" | "refund_succeeded" | "legal_documents"))
         .fetch_one(&mut **tx).await?;
     if !allowed {
         return Ok(false);
@@ -213,7 +220,7 @@ impl Storage {
 
     /// Recheck preferences immediately before SMTP, including changes after enqueue.
     pub async fn email_allowed(&self, mail: &QueuedEmail) -> Result<bool, StorageError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM email_outbox e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1 AND e.status='sending' AND e.attempts=$2 AND e.locked_until=$3 AND CASE WHEN e.user_id IS NULL THEN (e.optional_enabled OR e.kind IN ('order_confirmed','payment_received','legal_documents')) ELSE u.disabled_at IS NULL AND CASE e.kind WHEN 'shipment_dispatched' THEN u.email_order_updates WHEN 'status_changed' THEN u.email_order_updates WHEN 'chat_message' THEN u.email_chat_messages AND u.email=e.recipient AND (NOT COALESCE(e.chat_operator,false) OR u.role='admin') ELSE true END END AND (e.reply_route IS NULL OR EXISTS(SELECT 1 FROM chat_reply_routes r JOIN orders o ON o.id=r.order_id WHERE r.id=e.reply_route AND r.revoked_at IS NULL AND r.expires_at>extract(epoch from now())::bigint AND (r.operator OR o.user_id=r.user_id OR (o.user_id IS NULL AND r.user_id IS NULL)))))")
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM email_outbox e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1 AND e.status='sending' AND e.attempts=$2 AND e.locked_until=$3 AND CASE WHEN e.user_id IS NULL THEN (e.optional_enabled OR e.kind IN ('order_confirmed','payment_received','refund_succeeded','legal_documents')) ELSE u.disabled_at IS NULL AND CASE e.kind WHEN 'shipment_dispatched' THEN u.email_order_updates WHEN 'status_changed' THEN u.email_order_updates WHEN 'chat_message' THEN u.email_chat_messages AND u.email=e.recipient AND (NOT COALESCE(e.chat_operator,false) OR u.role='admin') ELSE true END END AND (e.reply_route IS NULL OR EXISTS(SELECT 1 FROM chat_reply_routes r JOIN orders o ON o.id=r.order_id WHERE r.id=e.reply_route AND r.revoked_at IS NULL AND r.expires_at>extract(epoch from now())::bigint AND (r.operator OR o.user_id=r.user_id OR (o.user_id IS NULL AND r.user_id IS NULL)))))")
             .bind(&mail.id).bind(mail.attempts).bind(mail.locked_until).fetch_one(&self.pool).await?)
     }
 
@@ -295,6 +302,26 @@ mod tests {
         assert!(validate(&value).is_err());
         value = input("1", None, "order_confirmed");
         value.payload["version"] = json!(2);
+        assert!(validate(&value).is_err());
+    }
+
+    #[test]
+    fn refund_snapshot_requires_exact_fields_positive_amount_and_recipient() {
+        let mut value = input("refund-1", None, "refund_succeeded");
+        value.payload["notification"]["amount_grosze"] = json!(500);
+        assert!(validate(&value).is_ok());
+        for amount in [json!(0), json!(-1), json!(100000000), json!("500")] {
+            value.payload["notification"]["amount_grosze"] = amount;
+            assert!(validate(&value).is_err());
+        }
+        value.payload["notification"]["amount_grosze"] = json!(500);
+        value.payload["notification"]["extra"] = json!(true);
+        assert!(validate(&value).is_err());
+        value.payload["notification"]
+            .as_object_mut()
+            .unwrap()
+            .remove("extra");
+        value.recipient.clear();
         assert!(validate(&value).is_err());
     }
 

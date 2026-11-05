@@ -91,6 +91,12 @@ try:
                         print(json.dumps({'received': True})); sys.exit(0)
                     elif request['mode'] == 'offer' and request['reference'] in body and '/konto/zamowienia/' in body:
                         print(json.dumps({'received': True})); sys.exit(0)
+                    elif request['mode'] == 'refund' and str(message.get('Subject', '')) == 'Rapidmaker — zwrot płatności':
+                        amount = request['amount_grosze']
+                        if type(amount) is not int or amount <= 0: raise ValueError('refund_amount')
+                        expected = f"Stripe potwierdził zwrot {amount // 100}.{amount % 100:02d} PLN za zamówienie {request['reference']}."
+                        if expected in body:
+                            print(json.dumps({'received': True})); sys.exit(0)
                 time.sleep(2)
             raise RuntimeError('mail_timeout')
 except Exception as error:

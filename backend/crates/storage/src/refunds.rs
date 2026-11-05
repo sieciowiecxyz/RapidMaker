@@ -229,7 +229,51 @@ impl Storage {
         {
             return Ok(false);
         }
-        Ok(sqlx::query("UPDATE payment_refunds SET provider_id=$3,state=$4,updated_at=$5,next_attempt=$5+60,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND lease_until>$5 AND (provider_id IS NULL OR provider_id=$3) AND state IN ('queued','unknown','pending','requires_action')").bind(id).bind(lease).bind(provider).bind(state).bind(now).execute(&self.pool).await?.rows_affected()==1)
+        Ok(sqlx::query("UPDATE payment_refunds SET provider_id=$3,state=$4,updated_at=$5,next_attempt=$5+60,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND lease_until>$5 AND (provider_id IS NULL OR provider_id=$3) AND state IN ('queued','unknown','pending','requires_action')")
+            .bind(id).bind(lease).bind(provider).bind(state).bind(now)
+            .execute(&self.pool).await?.rows_affected() == 1)
+    }
+    /// Confirmed money state survives email admission failures; the marker is the durable handoff.
+    pub async fn refund_notify_next(&self, now: i64) -> Result<bool, StorageError> {
+        // Reserve before the email transaction so a failing contact cannot starve later rows.
+        let id: Option<String> = sqlx::query_scalar("UPDATE payment_refunds SET notification_retry_at=$1+60 WHERE id=(SELECT id FROM payment_refunds WHERE state='succeeded' AND notification_queued_at IS NULL AND notification_retry_at<=$1 ORDER BY notification_retry_at,created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id")
+            .bind(now).fetch_optional(&self.pool).await?;
+        let Some(id) = id else {
+            return Ok(false);
+        };
+        let mut tx = self.pool.begin().await?;
+        let row = sqlx::query("SELECT order_id,amount_grosze FROM payment_refunds WHERE id=$1 AND state='succeeded' AND notification_queued_at IS NULL FOR UPDATE")
+            .bind(&id).fetch_optional(&mut *tx).await?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let order_id: String = row.try_get("order_id")?;
+        let amount: i64 = row.try_get("amount_grosze")?;
+        let order = sqlx::query("SELECT user_id,contact FROM orders WHERE id=$1")
+            .bind(&order_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        let user: Option<String> = order.try_get("user_id")?;
+        let contact: serde_json::Value = order.try_get("contact")?;
+        super::orders::enqueue(
+            &mut tx,
+            &order_id,
+            &format!("refund:{id}:succeeded"),
+            user.as_deref(),
+            contact["email"].as_str().ok_or("invalid order contact")?,
+            "refund_succeeded",
+            serde_json::json!({"reference":order_id,"amount_grosze":amount}),
+            true,
+            now,
+        )
+        .await?;
+        sqlx::query("UPDATE payment_refunds SET notification_queued_at=$2 WHERE id=$1")
+            .bind(&id)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(true)
     }
     /// Only the first unambiguous rejection releases money. Later errors cannot disprove a previous create.
     pub async fn refund_retry(
@@ -257,6 +301,235 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires isolated TEST_DATABASE_URL"]
+    async fn refund_success_survives_notification_failures_and_enqueues_once() {
+        let url = std::env::var("TEST_DATABASE_URL").unwrap();
+        assert!(
+            url.rsplit('/')
+                .next()
+                .unwrap()
+                .starts_with("rapidmaker_test")
+        );
+        let db = Storage::connect(&url).await.unwrap();
+        let actor = uuid::Uuid::new_v4().to_string();
+        let order = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO users(id,email,role,created_at) VALUES($1,$2,'admin',1000)")
+            .bind(&actor)
+            .bind(format!("{actor}@example.invalid"))
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO orders(id,owner_hash,user_id,contact,lines,amount_grosze,provider_kind,provider_id,status,guest_updates,created_at,paid_at) VALUES($1,$2,$3,'{\"email\":\"void@sieciowiec.xyz\"}','[]',1000,'intent',$4,'paid',false,1000,1000)")
+            .bind(&order).bind("a".repeat(64)).bind(&actor).bind(format!("pi_{}", order.replace('-', ""))).execute(&db.pool).await.unwrap();
+        let first = db
+            .refund_prepare(&order, &uuid::Uuid::new_v4().to_string(), 500, &actor, 1001)
+            .await
+            .unwrap()
+            .unwrap();
+        let leased = db
+            .refund_lease(Some(&first.id), 1002)
+            .await
+            .unwrap()
+            .unwrap();
+        let lease = leased.lease_token.as_deref().unwrap();
+        assert!(
+            !db.refund_resolve(&first.id, "wrong", "re_first", "succeeded", 1003)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !db.refund_resolve(&first.id, lease, "re_first", "succeeded", 1122)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !db.refund_resolve(&first.id, lease, "invalid", "succeeded", 1003)
+                .await
+                .unwrap()
+        );
+        assert!(
+            db.refund_resolve(&first.id, lease, "re_first", "pending", 1003)
+                .await
+                .unwrap()
+        );
+        let leased = db
+            .refund_lease(Some(&first.id), 1063)
+            .await
+            .unwrap()
+            .unwrap();
+        let lease = leased.lease_token.as_deref().unwrap();
+        assert!(
+            !db.refund_resolve(&first.id, lease, "re_other", "succeeded", 1064)
+                .await
+                .unwrap()
+        );
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM email_outbox WHERE event_key LIKE $1")
+                .bind(format!("order:{order}:refund:%"))
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0);
+        // Fill only the isolated test DB's spare capacity; admission cannot alter confirmed money.
+        sqlx::query("INSERT INTO email_outbox(id,event_key,kind,recipient,payload,optional_enabled,available_at,created_at) SELECT replace($1,':','-') || '-' || n,$1 || ':' || n,'order_confirmed','void@sieciowiec.xyz','{\"version\":1,\"notification\":{\"kind\":\"order_confirmed\",\"reference\":\"capacity\"}}',true,1000,1000 FROM generate_series(1,GREATEST(0,10000-(SELECT count(*) FROM email_outbox WHERE status IN ('pending','sending')))::integer) n")
+            .bind(format!("capacity:{order}")).execute(&db.pool).await.unwrap();
+        let (a, b) = tokio::join!(
+            db.refund_resolve(&first.id, lease, "re_first", "succeeded", 1064),
+            db.refund_resolve(&first.id, lease, "re_first", "succeeded", 1064)
+        );
+        assert_eq!(usize::from(a.unwrap()) + usize::from(b.unwrap()), 1);
+        assert!(
+            !db.refund_resolve(&first.id, lease, "re_first", "succeeded", 1065)
+                .await
+                .unwrap()
+        );
+        assert!(db.refund_notify_next(1065).await.is_err());
+        let confirmed =
+            sqlx::query("SELECT state,notification_queued_at FROM payment_refunds WHERE id=$1")
+                .bind(&first.id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(confirmed.get::<String, _>("state"), "succeeded");
+        assert_eq!(
+            confirmed.get::<Option<i64>, _>("notification_queued_at"),
+            None
+        );
+        sqlx::query("DELETE FROM email_outbox WHERE event_key LIKE $1")
+            .bind(format!("capacity:{order}:%"))
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        let fresh = Storage::connect(&url).await.unwrap();
+        assert!(!fresh.refund_notify_next(1124).await.unwrap());
+        assert!(fresh.refund_notify_next(1126).await.unwrap());
+        assert!(!fresh.refund_notify_next(1126).await.unwrap());
+        let rows = sqlx::query("SELECT event_key,user_id,recipient,kind,payload FROM email_outbox WHERE event_key LIKE $1")
+            .bind(format!("order:{order}:refund:%")).fetch_all(&db.pool).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].get::<String, _>("event_key"),
+            format!("order:{order}:refund:{}:succeeded", first.id)
+        );
+        assert_eq!(
+            rows[0].get::<Option<String>, _>("user_id"),
+            Some(actor.clone())
+        );
+        assert_eq!(rows[0].get::<String, _>("recipient"), "void@sieciowiec.xyz");
+        assert_eq!(rows[0].get::<String, _>("kind"), "refund_succeeded");
+        assert_eq!(
+            rows[0].get::<serde_json::Value, _>("payload"),
+            serde_json::json!({"version":1,"notification":{"kind":"refund_succeeded","reference":order,"amount_grosze":500}})
+        );
+        let second = db
+            .refund_prepare(&order, &uuid::Uuid::new_v4().to_string(), 500, &actor, 1066)
+            .await
+            .unwrap()
+            .unwrap();
+        let leased = db
+            .refund_lease(Some(&second.id), 1066)
+            .await
+            .unwrap()
+            .unwrap();
+        let second_lease = leased.lease_token.as_deref().unwrap();
+        // Establish a pending provider before confirmation and notification admission failure.
+        assert!(
+            db.refund_resolve(&second.id, second_lease, "re_second", "pending", 1067)
+                .await
+                .unwrap()
+        );
+        let leased = db
+            .refund_lease(Some(&second.id), 1127)
+            .await
+            .unwrap()
+            .unwrap();
+        let lease = leased.lease_token.as_deref().unwrap();
+        sqlx::query("UPDATE orders SET contact='{\"email\":\"invalid\"}' WHERE id=$1")
+            .bind(&order)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert!(
+            db.refund_resolve(&second.id, lease, "re_second", "succeeded", 1128)
+                .await
+                .unwrap()
+        );
+        assert!(fresh.refund_notify_next(1128).await.is_err());
+        let pending = sqlx::query(
+            "SELECT state,lease_token,notification_queued_at FROM payment_refunds WHERE id=$1",
+        )
+        .bind(&second.id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(pending.get::<String, _>("state"), "succeeded");
+        assert_eq!(pending.get::<Option<String>, _>("lease_token"), None);
+        assert_eq!(
+            pending.get::<Option<i64>, _>("notification_queued_at"),
+            None
+        );
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM email_outbox WHERE event_key=$1")
+            .bind(format!("order:{order}:refund:{}:succeeded", second.id))
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        // Another valid order is delivered while the invalid contact waits for its retry.
+        let other_order = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO orders(id,owner_hash,user_id,contact,lines,amount_grosze,provider_kind,provider_id,status,guest_updates,created_at,paid_at) VALUES($1,$2,$3,'{\"email\":\"void@sieciowiec.xyz\"}','[]',500,'intent',$4,'paid',false,1000,1000)")
+            .bind(&other_order).bind("b".repeat(64)).bind(&actor).bind(format!("pi_{}", other_order.replace('-', ""))).execute(&db.pool).await.unwrap();
+        let other = db
+            .refund_prepare(
+                &other_order,
+                &uuid::Uuid::new_v4().to_string(),
+                500,
+                &actor,
+                1130,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let other_lease = db
+            .refund_lease(Some(&other.id), 1130)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            db.refund_resolve(
+                &other.id,
+                other_lease.lease_token.as_deref().unwrap(),
+                "re_other",
+                "succeeded",
+                1131
+            )
+            .await
+            .unwrap()
+        );
+        assert!(fresh.refund_notify_next(1131).await.unwrap());
+        let other_count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM email_outbox WHERE event_key=$1")
+                .bind(format!("order:{other_order}:refund:{}:succeeded", other.id))
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(other_count, 1);
+        assert!(!fresh.refund_notify_next(1132).await.unwrap());
+        sqlx::query("UPDATE orders SET contact='{\"email\":\"void@sieciowiec.xyz\"}' WHERE id=$1")
+            .bind(&order)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert!(fresh.refund_notify_next(1189).await.unwrap());
+        assert!(!fresh.refund_notify_next(1190).await.unwrap());
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM email_outbox WHERE event_key=$1")
+            .bind(format!("order:{order}:refund:{}:succeeded", second.id))
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated TEST_DATABASE_URL"]
     async fn refund_reservations_are_atomic_and_survive_ambiguous_results() {
         let url = std::env::var("TEST_DATABASE_URL").unwrap();
         assert!(
@@ -274,7 +547,7 @@ mod tests {
             .execute(&db.pool)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO orders(id,owner_hash,contact,lines,amount_grosze,provider_kind,provider_id,status,guest_updates,created_at,paid_at) VALUES($1,$2,'{}','[]',1000,'intent',$3,'paid',false,1000,1000)")
+        sqlx::query("INSERT INTO orders(id,owner_hash,contact,lines,amount_grosze,provider_kind,provider_id,status,guest_updates,created_at,paid_at) VALUES($1,$2,'{\"email\":\"void@sieciowiec.xyz\"}','[]',1000,'intent',$3,'paid',false,1000,1000)")
             .bind(&order).bind("a".repeat(64)).bind(format!("pi_{}",order.replace('-',""))).execute(&db.pool).await.unwrap();
         let request = uuid::Uuid::new_v4().to_string();
         let first = db

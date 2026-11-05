@@ -62,7 +62,7 @@ Gotowe gdy: kod z odebranej wiadomości działa raz, a awaria SMTP nie pozostawi
 
 Wdrażaj wraz z trwałymi zamówieniami/zdarzeniami. Jedna tabela `email_outbox`: `id`, unikalny `event_key`, `user_id` opcjonalne dla gościa, `kind`, `recipient`, ograniczony `payload`, `status`, `attempts`, `available_at`, `locked_until`, `created_at`, `sent_at`, `last_error_code`. `payload` jest walidowanym snapshotem danych konkretnej wiadomości; bez tokenów, kodów i danych karty. Indeks kolejki po statusie/czasie; bez tabeli dla każdego rodzaju maila.
 
-Zapis zdarzenia biznesowego i outboxa w jednej transakcji PostgreSQL. `event_key` rozróżnia zdarzenie, odbiorcę i typ — powtórzony webhook nie tworzy następnego maila. Potwierdzenie płatności dopiero po zweryfikowanym, trwałym zdarzeniu Stripe; nie po powrocie przeglądarki.
+Zapis zdarzenia biznesowego i outboxa w jednej transakcji PostgreSQL. Wyjątek finansowy: potwierdzony zwrot zapisuje się niezależnie od dostępności kolejki. Rekord `succeeded` bez `notification_queued_at` stanowi trwałe zlecenie powiadomienia; worker rezerwuje jedną pozycję z 60s odroczeniem błędu, a outbox i znacznik zapisuje atomowo. Pełna kolejka/błędny kontakt nie cofają pieniędzy ani nie blokują innych adresatów. `refund_succeeded` zawiera tylko zamówienie i potwierdzoną kwotę; brak emaila dla pending/failed. Migracja nie wysyła wstecz dawnych zwrotów. Zablokowane konta zachowują dotychczasowe wyciszenie wiadomości. `event_key` rozróżnia zdarzenie, odbiorcę i typ — powtórzony webhook nie tworzy następnego maila. Potwierdzenie płatności dopiero po zweryfikowanym, trwałym zdarzeniu Stripe; nie po powrocie przeglądarki.
 
 Jeden worker w obecnym procesie: krótka transakcja pobiera rekordy przez `FOR UPDATE SKIP LOCKED`, ustawia lease 60 s, kończy transakcję; SMTP poza blokadą. Po wysyłce zapisuje wynik. Wygasły lease pozwala wznowić po restarcie. Aktualizacja wyniku wymaga tej samej wersji próby/lease, aby spóźniony worker nie nadpisał nowej próby.
 
@@ -79,7 +79,7 @@ Dwa pola przy koncie: `email_order_updates` i `email_chat_messages`, domyślnie 
 | Wiadomość | Odbiorca | Można wyłączyć |
 | --- | --- | --- |
 | Kod logowania / bezpieczeństwo konta | Weryfikowany adres / właściciel konta | Nie |
-| Potwierdzenie zamówienia / płatności | Kontakt utrwalony przy zamówieniu | Nie |
+| Potwierdzenie zamówienia / płatności / zwrotu | Kontakt utrwalony przy zamówieniu | Nie |
 | Zmiana statusu realizacji | Właściciel zamówienia | Tak |
 | Nowa wiadomość w rozmowie | Drugi uprawniony uczestnik | Tak, klient |
 

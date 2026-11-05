@@ -5,7 +5,7 @@ import { accounts, login, mail, fillStripeCard } from './helpers';
 import { fillAuthorContact } from './checkout-helpers';
 
 test.use({ screenshot: 'off', trace: 'off' });
-test('real manual quote, admin publication, iCloud notice, Stripe payment and email reply', async ({
+test('real manual quote, admin publication, iCloud notice, Stripe payment/refund and email reply', async ({
   page,
   browser,
 }) => {
@@ -117,6 +117,32 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment and em
     );
     const adminMe = await (await adminPage.request.get('/api/auth/me')).json();
     const headers = { Origin: 'http://localhost:18437', 'X-CSRF-Token': adminMe.csrf_token };
+    const refundCursor = await mail({ mode: 'watermark' });
+    const refundData = { request_id: randomUUID(), amount_grosze: 500 };
+    const refundUrl = `/api/admin/orders/${id}/refunds`;
+    const refundResponse = await adminPage.request.post(refundUrl, { headers, data: refundData });
+    expect(refundResponse.status()).toBe(202);
+    const refund = await refundResponse.json();
+    const retry = await adminPage.request.post(refundUrl, { headers, data: refundData });
+    expect(retry.status()).toBe(202);
+    expect((await retry.json()).id).toBe(refund.id);
+    await expect
+      .poll(
+        async () => {
+          const order = await (await page.request.get(`/api/account/orders/${id}`)).json();
+          const refunds = await (await adminPage.request.get(refundUrl)).json();
+          return {
+            amount: order.refunded_grosze,
+            state: refunds.find((entry: { id: string }) => entry.id === refund.id)?.state,
+          };
+        },
+        { timeout: 90_000, intervals: [1000, 3000] },
+      )
+      .toEqual({ amount: 500, state: 'succeeded' });
+    expect(
+      (await mail({ mode: 'refund', reference: id, amount_grosze: 500, after: refundCursor.after }))
+        .received,
+    ).toBe(true);
     const mailCursor = await mail({ mode: 'watermark' });
     const marker = 'Browser chat ' + randomUUID();
     const sent = await adminPage.request.post(`/api/admin/orders/${id}/messages`, {

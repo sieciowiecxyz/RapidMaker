@@ -56,6 +56,14 @@ Regresja: po częściowym zwrocie klient API500, po pełnym detal/lista2500, bad
 
 Rust build PASS; frontend build/svelte-check0 errors/0 warnings, Prettier/diff-check PASS. Sol xhigh: korekty zakresu screenshotu/ścisłych kwot oraz osi realizacji wdrożone i ponownie przejrzane; brak dalszego konkretnego blokera. Oceny produktu w zmienionym zakresie przed końcową regresją7–10/10, bez deklaracji10/10 całego celu. Starszy `paid-refunded-visual` FAIL to dowód błędu; `...-fixed`1 PASS37,2s poprzedza kontrolę osi, końcowy wynik powyżej obejmuje obie poprawki.
 
+## Potwierdzenie zwrotu przez email
+
+Dodano `refund_succeeded` z numerem zamówienia i dokładną potwierdzoną kwotą. Wiadomość wyjaśnia, że uznanie rachunku zależy od banku; nie wysyła się dla pending/failed. Potwierdzenie Stripe zapisuje się niezależnie od kolejki. Trwały rekord `succeeded` bez znacznika powiadomienia jest ponawiany co najmniej po60s; rezerwacja jest utrwalona przed próbą, a outbox + znacznik atomowe. Unikalny klucz dotyczy konkretnego zwrotu, nie całego zamówienia. Pełna kolejka/błędny kontakt nie cofają kwot ani nie blokują innych adresatów. Migracja0022 nie wysyła starych sukcesów wstecz. Dotychczasowe wyciszenie zablokowanych kont pozostaje. To jeden wpis outbox na zdarzenie, nie gwarancja exactly-once SMTP.
+
+Dowody: notifications13 PASS, storage7 szybkich PASS (18 bazodanowych pominiętych w tym poleceniu); osobno na nowej usuniętej po teście DB **2 PASS/0 ignored** dla rezerwacji i nowych powiadomień. Sprawdzono zapełnienie outboxa10000, trwały sukces mimo braku miejsca, restart/60s retry, równoległy CAS/jeden event, błędny kontakt i postęp innego zamówienia, naprawę kontaktu. Build/Clippy all-targets `-D warnings`/fmt/diff-check PASS; znane ostrzeżenie generatora CXX bez zmian.
+
+`refund-mail-journey.json`: **1 PASS/211,1s**,0 FAIL/skipped/flaky. Rzeczywiste iCloud MFA → oferta/email → Stripe test płatność → dokumenty email → częściowy zwrot500 groszy i idempotentny retry → klient API500 + odebrany nowy email z dokładnym5.00 PLN/ref → odpowiedź email widoczna raz w chat. Tylko void@sieciowiec.xyz; brak mocków dostawców i dowodu SMTP exactly-once. Sol xhigh wykrył ryzyko cofnięcia sukcesu przez pełną kolejkę w pierwszym projekcie; przeprojektowano trwałe przekazanie i ponownie sprawdzono. Końcowy review bez nowego blokera, oceny zakresu7–9/N/A, nie10/10 całego celu.
+
 ## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.

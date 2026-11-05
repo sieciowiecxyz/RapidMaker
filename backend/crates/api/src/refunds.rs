@@ -138,6 +138,9 @@ pub(super) async fn process_next(app: &App) {
         Err(_) => tracing::error!(event = "refund_claim_failed"),
         _ => {}
     }
+    if db.refund_notify_next(now()).await.is_err() {
+        tracing::error!(event = "refund_notification_enqueue_failed");
+    }
 }
 #[tracing::instrument(skip_all, fields(refund_id=%refund.id, order_id=%refund.order_id))]
 async fn reconcile(
