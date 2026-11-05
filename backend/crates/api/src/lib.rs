@@ -100,6 +100,13 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     } else {
         None
     };
+    // Complete the cold bundle hash before serving quotes; other APIs can run without a slicer.
+    if storage.is_some() && rapidmaker_slicer::runtime_sha256().await.is_err() {
+        tracing::warn!(
+            event = "slicer_runtime_unavailable",
+            reason = "bundle_missing_or_changed"
+        );
+    }
     let imap = rapidmaker_notifications::Imap::from_env()?;
     let auth = auth::Auth::new(storage.clone(), mailer.clone())?;
     let (checkout, webhook, checkout_worker, shipping_worker) = checkout::router(storage.clone())?;
