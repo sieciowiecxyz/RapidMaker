@@ -39,6 +39,10 @@ Pełny core po poprawce: **33 PASS/312,6 s,0 skipped/flaky**. Poprzedni przebieg
 
 ## Diagnostyka większych modeli —2026-11-06
 
+Kolejny krok: dwa wpisy profilu dev optymalizują istniejące `zlib-rs`/`quick-xml` (bez zmiany wersji, release, walidacji lub limitów). Dla stałego SHA modelu20 zaobserwowano15,674s→12,893s→10,034s; liczby punktów/trójkątów, wymiary i długość GLB zgodne. To pojedyncze próbki diagnostyczne, nie gwarancja czasu HTTP.14 nadal `MalformedInput` (8,884s);21/37 osiągają ten błąd w22,302/20,542s zamiast SIGKILL, bez dowodu niepoprawności źródła.41 nadalSIGKILL przy25s CPU. Porównanie z hashami binariów/źródeł: prywatne `large-model-probe-xml-opt/comparison.json`.
+
+`xml-zlib-models.json`: **5 PASS/4,1s**,0 skip/flaky —realne STL/STEP/3MF, prywatne GLB bez koloru, odrzucenia bezpieczeństwa, retencja i izolacja klientów. Geometry31 PASS/1 istniejący opcjonalny ignored; build główny/przykład, fmt/diff-check PASS. Domyślne limity i wynik korpusu36/5 bez zmian. Usunięto wyłącznie4 zakończone własne binaria testowe/stare kopie probe (161903432B); źródła, aktywne API, aktualny probe i wyniki zachowane.
+
 Nowy [plan](plans/large-models.md) obejmuje9 plików8/14/19/20/21/29/37/40/41, także pięć wcześniejszych413. Dołożono diagnostyczny przykład Rust, bez zmiany API/defaultów i bez zapisu siatek. Pomiary SHA-zweryfikowanych plików: izolacja bez sieci/sekretów,2GiB RAM/25s CPU/30s wall; tymczasowe limity parsera96MiB wejścia/512MiB ZIP/128MiB GLB/4M punktów/8M trójkątów. To nie jest wdrożony profil produktu.
 
 | Przypadki | Wynik diagnostyki |
@@ -61,7 +65,7 @@ Prywatne `large-model-probe/results-combined.json` łączy9 przypadków z hasham
 | FAIL 422 `model_resource_limit` | 4 | 14,19,20,40 |
 | FAIL 422 nieprawidłowy pakiet | 1 | 32, niezadeklarowany prefiks metadanych |
 
-Limity: upload API 32 MiB/UI 25 MiB; ZIP 96 MiB łącznie i na wpis, 512 wpisów; 1 mln unikalnych wierzchołków, **1 048 574 trójkąty** z budżetu kanonicznego STL 50 MiB; GLB 25 MiB; worker 2 GiB RAM/25 s CPU/30 s wall, bez sieci/sekretów. Lokalny parser STL nadal 25 MiB/1 mln. Dev optymalizuje tylko geometry/lib3mf, z debug assertions i kontrolą przepełnień. Większe ZIP dopuszczono decyzją użytkownika; osobnego profilu ponad STL 50 MiB nie zatwierdzono.
+Limity: upload API 32 MiB/UI 25 MiB; ZIP 96 MiB łącznie i na wpis, 512 wpisów; 1 mln unikalnych wierzchołków, **1 048 574 trójkąty** z budżetu kanonicznego STL 50 MiB; GLB 25 MiB; worker 2 GiB RAM/25 s CPU/30 s wall, bez sieci/sekretów. Lokalny parser STL nadal 25 MiB/1 mln. Dev optymalizuje geometry/lib3mf/zlib-rs/quick-xml, z debug assertions i kontrolą przepełnień. Większe ZIP dopuszczono decyzją użytkownika; osobnego profilu ponad STL 50 MiB nie zatwierdzono.
 
 Diagnostyka rozwiniętych buildów/instancji wykazała brak nieużywanych trójkątów pozwalających zmieścić pozostałe sceny: 14 → 1 953 958 trójkątów/97 697 984 B STL; 19 → 3 861 000/193 050 084 B; 20 → 1 487 438/74 371 984 B; 40 → 1 677 324/83 866 284 B. To liczenie referencji, nie udana konwersja ani walidacja topologii. Nie zgadujemy namespace modelu 32 i nie obchodzimy lib3mf. Ograniczony preflight jednoznacznego małego manifestu/relacji ≤64 KiB skrócił obserwowane odrzucenie z 22,8 s do 633 ms (1 PASS/1,3 s); pełna walidacja zostaje, inne manifesty używają dotychczasowej ścieżki. Geometry 33 PASS/1 opcjonalny ignored.
 

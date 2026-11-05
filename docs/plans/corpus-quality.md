@@ -30,7 +30,7 @@ Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi
 ## Granice i decyzje
 
 - **Brak odpowiedzi użytkownika**: osobny profil dużych modeli czy pozostanie przy STL 50 MiB. Nie zakładać zgody na dalsze zwiększanie zasobów.
-- Obecne limity: ZIP 96 MiB łącznie/na wpis i512 wpisów (rozszerzenie zaakceptowane); 1 mln unikalnych wierzchołków,1 048 574 trójkąty z budżetu STL 50 MiB, GLB25 MiB, API upload32 MiB/UI25 MiB, worker2 GiB/25 s CPU/30 s wall. Dev optymalizuje geometry/lib3mf bez wyłączania sprawdzeń.
+- Obecne limity: ZIP 96 MiB łącznie/na wpis i512 wpisów (rozszerzenie zaakceptowane); 1 mln unikalnych wierzchołków,1 048 574 trójkąty z budżetu STL 50 MiB, GLB25 MiB, API upload32 MiB/UI25 MiB, worker2 GiB/25 s CPU/30 s wall. Dev optymalizuje geometry/lib3mf/zlib-rs/quick-xml bez wyłączania sprawdzeń.
 - Aktualnie 24 ma podgląd/ręczną `printer_fit`,39 cenę; historyczny exit137 modelu24 nie opisuje obecnego API. 14/19/20/40 potrzebują po rozwinięciu instancji 74–193 MB STL; nie ma nieużywanych trójkątów do usunięcia. 32 pozostaje nieprawidłowym pakietem; bez zgadywania namespace/obchodzenia walidatora. Preflight tylko przyspiesza odrzucenie.
 - Tożsamość od dd24620 obejmuje całe drzewo pakietu Bambu, także zasoby/uprawnienia. Hashowanie przez `spawn_blocking`: zimno6,905 s,10 ciepłych kontroli101,117 ms; biblioteki systemowe poza pakietem nadal poza dowodem.
 - Rachunek z testowych100 PLN netto/kg potwierdza arytmetykę, nie produkcyjną rentowność. Kwoty, auth, hold/retencja i limit sumy zwrotów pozostają obowiązkowe.

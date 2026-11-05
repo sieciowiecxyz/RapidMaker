@@ -42,3 +42,7 @@
 -14 returned `MalformedInput` after14.3s; validity/compatibility unresolved, not declared corrupt.21/37/41 repeated with explicit metrics: childSIGKILL9,CPU25.004–25.009s at configured25/25,wall25.1s,RSS0.27–0.73GiB. Signal cause unresolved; no OOM claim.
 - Initial infrastructure attempt lacked `/usr/bin/time` and did not execute parsers; retained separately. Metrics now use isolated Python `resource.getrusage`.
 - Next: diagnose14, optimize3MF parsing for21/37/41, choose a bounded preview representation for all nine, then implement exact production mesh and quota/contracts. Budget/default choice remains unanswered; no expanded HTTP profile enabled.
+
+- Development codec/XML optimizations: `zlib-rs` and `quick-xml` now use opt-level2, with inherited debug/overflow checks. No dependency versions, release policy or API budgets changed. Private A/B: `large-model-probe-xml-opt/comparison.json` (five fixed-SHA cases, separate binary hashes).
+- Case20 remains the same preview geometry/counts/dimensions/GLB length: observed15.674s→12.893s with zlib→10.034s with both. One sample per profile, not a latency guarantee.14 still `MalformedInput` (8.884s);21/37 now reach `MalformedInput` at22.302/20.542s instead of SIGKILL. Their validity remains unresolved.41 still SIGKILL9 at25s CPU.
+-31 geometry tests PASS/1 optional ignored; `xml-zlib-models.json`:5 real API tests PASS/4.1s; main/example builds and fmt/diff-check PASS. No new supported HTTP case. Next remains diagnosing parser rejections and bounded preview/production output.
