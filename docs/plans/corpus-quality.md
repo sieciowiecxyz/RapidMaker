@@ -44,6 +44,8 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 - Brak twierdzeń o fizycznym passkey/przewozie, wszystkich przewoźnikach, produkcyjnym wdrożeniu, exactly-once SMTP lub każdym pikselu. Niski niezałatany upstream `deepmerge` pozostaje opisany w raporcie.
 - Usunięto345 martwych linii makiety i zbędne lokalne kopie prawdziwych zamówień. Szkic kontaktu celowo pozostaje w przypisanym `sessionStorage`.
 
+- Rozwinięcie scen potwierdziło, że14/19/20/40 wymagają74–193 MB STL, nie ma nieużywanych trójkątów.32 pozostaje nieprawidłowy; mały preflight skrócił obserwowany scenariusz odrzucenia z22,8s do633ms (1 PASS1,3s). Geometry33 PASS/1 optionalignored; pełna walidacja/limity pozostają, Sol review bez blokera.
+
 ## Review i następne kroki
 
 Po kroku: GPT-6-Sol xhigh,10 kategorii: poprawność, uprawnienia/bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody testowe, prostota, utrzymanie, zgodność wizualna/kontrakt. Naprawiać konkretne uwagi; nie wymuszać oceny10 ani utożsamiać oceny małej zmiany z oceną całego produktu.

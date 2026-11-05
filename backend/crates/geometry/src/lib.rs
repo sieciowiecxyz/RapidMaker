@@ -855,6 +855,39 @@ type GeometryPackage<'a> = (
     HashMap<String, three_mf_mirrors::Mirrors>,
 );
 
+// An optional hint only: ambiguous/large relationships retain the full parser path.
+fn canonical_root_relationship(source: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Option<()> {
+    use quick_xml::{Reader, events::Event};
+    let entry = source.by_name("_rels/.rels").ok()?;
+    if entry.size() > 64 * 1024 {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    entry.take(64 * 1024 + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() > 64 * 1024 {
+        return None;
+    }
+    let mut reader = Reader::from_str(std::str::from_utf8(&bytes).ok()?);
+    let mut models = 0;
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(e) | Event::Empty(e) if e.name().as_ref().ends_with("Relationship") => {
+                let attrs = e.attributes().collect::<Result<Vec<_>, _>>().ok()?;
+                let get = |key: &str| attrs.iter().find(|a| a.key.as_ref() == key);
+                if get("Type")?.value.as_ref() == lib3mf::opc::MODEL_REL_TYPE {
+                    let target = get("Target")?.value.as_ref();
+                    if target.strip_prefix('/').unwrap_or(target) != "3D/3dmodel.model" {
+                        return None;
+                    }
+                    models += 1;
+                }
+            }
+            Event::Eof => return (models == 1).then_some(()),
+            _ => {}
+        }
+    }
+}
+
 fn geometry_package<'a>(
     input: &'a [u8],
     limits: &ConversionLimits,
@@ -863,6 +896,29 @@ fn geometry_package<'a>(
     use std::{borrow::Cow, io::Write};
     let mut source =
         zip::ZipArchive::new(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
+    check_timeout(started, limits)?;
+    // Reject bad small actual roots before normalizing potentially large secondary parts.
+    if canonical_root_relationship(&mut source).is_some()
+        && let Ok(mut root) = source.by_name("3D/3dmodel.model")
+        && root.size() <= 64 * 1024
+    {
+        check_timeout(started, limits)?;
+        let mut bytes = Vec::new();
+        Read::by_ref(&mut root)
+            .take(64 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| PreviewError::MalformedInput)?;
+        if bytes.len() <= 64 * 1024 {
+            let xml = std::str::from_utf8(&bytes).map_err(|_| PreviewError::MalformedInput)?;
+            let (normalized, _) = three_mf_mirrors::normalize(xml, limits, started)?;
+            lib3mf::parser::parse_model_from_reader(
+                Cursor::new(normalized.as_deref().unwrap_or(xml).as_bytes()),
+                ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
+            )
+            .map_err(|_| PreviewError::MalformedInput)?;
+        }
+        check_timeout(started, limits)?;
+    }
     let mut replacements = HashMap::new();
     let mut mirrors = HashMap::new();
     for index in 0..source.len() {
@@ -1772,6 +1828,114 @@ mod tests {
                 .unwrap();
         }
         output.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn root_relationship_hint_skips_ambiguous_and_oversized_relationships() {
+        let relationship = format!(
+            r#"<Relationship Type="{}" Target="/3D/3dmodel.model"/>"#,
+            lib3mf::opc::MODEL_REL_TYPE
+        );
+        for (relationships, expected) in [
+            (relationship.clone(), true),
+            (relationship.repeat(2), false),
+            (format!("{relationship}{}", " ".repeat(64 * 1024)), false),
+        ] {
+            let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            output
+                .start_file("_rels/.rels", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            write!(output, "<Relationships>{relationships}</Relationships>").unwrap();
+            let input = output.finish().unwrap().into_inner();
+            let mut source = zip::ZipArchive::new(Cursor::new(input.as_slice())).unwrap();
+            assert_eq!(canonical_root_relationship(&mut source).is_some(), expected);
+        }
+    }
+
+    #[test]
+    fn alternate_actual_root_ignores_bad_metadata_in_unused_canonical_model() {
+        let mut source = zip::ZipArchive::new(Cursor::new(THREEMF_SIMPLE)).unwrap();
+        let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        for index in 0..source.len() {
+            let mut entry = source.by_index(index).unwrap();
+            let name = entry.name().unwrap().into_owned();
+            if name == "3D/3dmodel.model" || name == "_rels/.rels" {
+                let mut xml = String::new();
+                entry.read_to_string(&mut xml).unwrap();
+                let replacement = if name == "3D/3dmodel.model" {
+                    output.start_file("3D/actual.model", options).unwrap();
+                    output.write_all(xml.as_bytes()).unwrap();
+                    xml.replacen(
+                        "<resources>",
+                        r#"<metadata name="3DManufacturing:3mfVersion">1</metadata><resources>"#,
+                        1,
+                    )
+                } else {
+                    xml.replace("3D/3dmodel.model", "3D/actual.model")
+                };
+                output.start_file(name, options).unwrap();
+                output.write_all(replacement.as_bytes()).unwrap();
+            } else {
+                output.raw_copy_file(entry).unwrap();
+            }
+        }
+        let input = output.finish().unwrap().into_inner();
+        let limits = ConversionLimits::default();
+        assert!(geometry_package(&input, &limits, Instant::now()).is_ok());
+        let baseline = source_to_production(
+            "baseline.3mf",
+            THREEMF_SIMPLE,
+            &limits,
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        let result =
+            source_to_production("alternate.3mf", &input, &limits, &ThreeMfLimits::default())
+                .unwrap();
+        assert_eq!(result.stl, baseline.stl);
+    }
+
+    #[test]
+    fn small_root_preflight_rejects_metadata_and_skips_large_or_noncanonical_roots() {
+        for metadata in [
+            r#"<metadata name="3DManufacturing:3mfVersion">1</metadata>"#,
+            r#"<metadata>1</metadata>"#,
+        ] {
+            for (root_path, padding, rejected) in [
+                ("3D/3dmodel.model", 0, true),
+                ("3D/3dmodel.model", 64 * 1024, false),
+                ("3D/other.model", 0, false),
+            ] {
+                let mut source = zip::ZipArchive::new(Cursor::new(THREEMF_SIMPLE)).unwrap();
+                let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+                for index in 0..source.len() {
+                    let mut entry = source.by_index(index).unwrap();
+                    if entry.name().unwrap() == "3D/3dmodel.model" {
+                        let mut xml = String::new();
+                        entry.read_to_string(&mut xml).unwrap();
+                        let xml = xml.replacen(
+                            "<resources>",
+                            &format!("{metadata}{}<resources>", " ".repeat(padding)),
+                            1,
+                        );
+                        assert!(xml.contains(metadata));
+                        output
+                            .start_file(root_path, zip::write::SimpleFileOptions::default())
+                            .unwrap();
+                        output.write_all(xml.as_bytes()).unwrap();
+                    } else {
+                        output.raw_copy_file(entry).unwrap();
+                    }
+                }
+                let input = output.finish().unwrap().into_inner();
+                let result = geometry_package(&input, &ConversionLimits::default(), Instant::now());
+                assert_eq!(result.is_err(), rejected, "{root_path}, padding={padding}");
+                if let Err(error) = result {
+                    assert_eq!(error, PreviewError::MalformedInput);
+                }
+            }
+        }
     }
 
     #[test]

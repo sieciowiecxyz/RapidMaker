@@ -8,6 +8,23 @@ Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**.
 
 Uaktualniono checkpoint i sprzeczne historyczne opisy w email/chat/checkout: interfejsy i odpowiedzi email nie są już makietami, sandbox obejmuje zwroty i logistykę. Sol xhigh zweryfikował źródła liczb i wskazał te rozbieżności; zachowano pełny zakres obrazów/przykładów i klikalnych przepływów. Roboczy audyt całego celu nadal8–9/10 (zasoby7), nie żądane10/10; siedem nieobsłużonych modeli pozostaje jawne.
 
+## Pozostałe sceny i szybkie odrzucenie błędnego manifestu
+
+Izolowana diagnostyka SHA-zweryfikowanych plików rozwinęła build/komponenty/instancje i ścieżki Production (CPU10s/AS512 MiB/wall15s, bez sieci/sekretów, bez zapisu modeli). Nie ma nieużywanych trójkątów, których usunięcie zmieści te cztery sceny w obecnym STL50 MiB:
+
+| Przypadek | Trójkąty po instancjach | Wynikowe bajty STL |
+| --- | ---: | ---: |
+| 14 | 1953958 | 97697984 |
+| 19 | 3861000 | 193050084 |
+| 20 | 1487438 | 74371984 |
+| 40 | 1677324 | 83866284 |
+
+To liczenie referencji, nie walidacja współrzędnych/topologii ani udana konwersja.19 ma tylko1608124 surowych trójkątów, lecz instancje zwiększają wynik. Prywatne skrypty/wyniki: `/tmp/rapidmaker-reachable-DPB0a6/`.32 zapisano przez `BambuStudio-02.08.02.61`, ale jego `3DManufacturing:3mfVersion` nie ma deklaracji i nie jest poprawnym QName. Wymaganie nazwy: [3MF Core, metadata](https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md). Nie naprawiamy jej przez zgadywanie lub usunięcie metadanych.
+
+Zamiast zmieniać walidację dodano ograniczony preflight małego rzeczywistego manifestu: max64 KiB relacji/root, dokładnie jeden kanoniczny wybór OPC, istniejąca normalizacja odbić/malowania i publiczny parser strumieniowy lib3mf. Pełne sprawdzenie pakietu nadal obowiązuje. Inny/duży/zakodowany/niejednoznaczny root pozostawia poprzednią ścieżkę; test alternatywnego root z błędnym nieużywanym kanonicznym plikiem zachowuje ten sam STL.
+
+`metadata-root-fast-reject.json`: **1 PASS/1,3s**, ciało scenariusza633ms; wcześniej ten sam32 miał22,8s. To obserwowane porównanie E2E, nie gwarantowany benchmark. GUI wymaga422 z dokładnym błędem, bez ceny i możliwości zakupu po wypełnieniu opcji. Geometry33 PASS/1 istniejący opcjonalny ignored; build/Clippy/fmt/diff-check PASS. Początkowy błąd kompilacji porównań quick-xml poprawiono przed testami. Sol xhigh bez blokera, oceny zakresu8–9/N/A; mały dodatkowy odczyt poprawnych manifestów jest ograniczony. Kod/style frontendu bez zmian; pięć plików nadal nie ma wyceny.
+
 ## Dwa kolejne modele w istniejącym budżecie STL
 
 Limit trójkątów1000000 był niższy niż rzeczywista pojemność zachowanego STL50 MiB. Backend i prywatny viewer GLB używają teraz `(52428800−84)/50 = 1048574` (następny trójkąt przekracza plik o34 B). Nadal1 mln unikalnych punktów,96 MiB ZIP,25 MiB GLB,2 GiB RAM/25s CPU/30s wall i pozostałe walidacje; bez zmniejszania dokładności lub pomijania geometrii produkcyjnej. Frontowy parser lokalnego STL nadal25 MiB/1M; wspólny builder renderera dopuszcza pojemność STL. Zmiana produktu kilkanaście linii.
