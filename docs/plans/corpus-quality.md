@@ -19,6 +19,8 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 
 The user accepted41 models and cancelled further downloads on 2026-11-05. CAPTCHA is no longer a task blocker or required user action. Existing test results and remaining limitations below are unchanged; only the download milestone is complete.
 
+Latest96 MiB API check: `expanded96-optimized`,4 PASS/3 FAIL,165.2s;7/13/38 newly priced,31 manual;24/39 resource limit and32 invalid metadata still rejected. Geometry29 PASS/1 optional ignored; build/Clippy/fmt PASS. UI `expanded96-ui`:7 PASS/194.8s (four renders, three explicit rejections, not seven prices); tightened invalid32 rejection assertion:1 PASS/23.5s (`expanded96-invalid32`), final review found no remaining concrete blocker in this slice. Full41 baseline below remains historical64 MiB. Sol xhigh found no blocking code defect; doc/evidence findings corrected; grades7–9/10.
+
 Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior results: [report](../corpus-report.md).
 
 - **Downloads:**41/41 accepted distinct sources/hashes;34 3MF,7 STL. Originals and manifest remain ignored/private. Further downloads and CAPTCHA handling cancelled by the user.
@@ -31,8 +33,15 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 - **Latest sandbox:**`sandbox.json`7 PASS/2 FAIL136.9s; both logistics radio-scroll failures fixed in test only. Focused `logistics-current.json`2 PASS73.5s, no provider-blocked annotation: DHL sandbox booking/PDF/pickup/cancel and tracking/handover confirmed. Full9 after fix NOT RUN; do not describe split runs as one9/9. No product/style change.
 - **Latest email:**source `8dbdb07`, `email.json`:2 PASS/0 FAIL/0 skipped/0 flaky213.2s. Actual iCloud MFA, manual offer notice, Stripe test payment/terms email and one inbound reply in chat; virtual passkey only. Sole recipient void@sieciowiec.xyz.
 - **Large real-model UI:**`corpus-ui-final.json`6 PASS/119.8s,0 skipped/flaky: four real large3MFs plus two authored showcase tests,36 scene captures, now all inspected in four scaled overview sheets (not pixel-perfect review). True UI upload/private GLB/pixels/rotation, case9 displayed price equals server cents, other three explicitly manual due size. Fixed UTF-8 locale in test browser and ellipsized long preview filenames without losing full text or changing design. Build0/0. Current full core not rerun.
-- **All accepted files through UI:**`corpus-ui-all41-final.json`41 PASS235.0s:25 rendered models/100 scene captures,9 server-resource UI errors,7 form-size rejections. All100 frames inspected as scaled overview sheets. Stronger settled rejection/fully selected settings checks targeted-retested9 PASS5.4s after the full run. Separate API result stays30 PASS/11 FAIL; UI negative handling is not successful pricing. Product/limits unchanged. User decision on remaining resource policy requested; no dependent implementation until answered.
+- **All accepted files through UI:**`corpus-ui-all41-final.json`41 PASS235.0s:25 rendered models/100 scene captures,9 server-resource UI errors,7 form-size rejections. All100 frames inspected as scaled overview sheets. Stronger settled rejection/fully selected settings checks targeted-retested9 PASS5.4s after the full run. Separate API result stays30 PASS/11 FAIL; UI negative handling is not successful pricing. Product/limits unchanged in that run. User approved larger-model support on2026-11-05; the controlled expansion below is now in progress.
 - **Reviews:**GPT-6-Sol xhigh after each implementation; actionable findings fixed, scores honest and still below10/10 for full scope. No review score replaces tests.
+
+## Larger-model expansion (approved2026-11-05)
+
+1. Raise only decompressed ZIP total/per-entry allowance64→96 MiB; keep upload,512 entries,1M mesh,GLB,CPU/RAM/wall limits. Test exact byte boundaries.
+2. Optimize geometry/lib3mf in local dev builds instead of extending process time; preserve debug assertions/overflow checks. Verify real candidate imports and measured prices.
+3. Keep invalid metadata/topology and over-complex meshes rejected; no guessed namespace repair or validator bypass.
+4. Run actual API/UI regression, report changed outcomes and review with Sol xhigh. No frontend redesign.
 
 ## Next
 

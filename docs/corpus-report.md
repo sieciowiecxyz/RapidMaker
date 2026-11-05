@@ -2,7 +2,15 @@
 
 Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
-## Rzeczywisty korpus
+## Rozszerzenie większych modeli — 96 MiB
+
+Decyzja użytkownika: rozszerzyć obsługę większych modeli. Limit rozpakowanego ZIP i pojedynczego wpisu64→96 MiB;512 wpisów,1 mln wierzchołków/trójkątów,2 GiB RAM,25s CPU/30s wall i limity uploadu/GLB pozostają. Dev kompiluje tylko geometry/lib3mf z opt-level2, zachowując debug assertions i kontrolę przepełnień. Granice ZIP96 MiB/+1 i48+48 MiB/+1: geometria29 PASS/1 istniejący opcjonalny ignored, fmt/Clippy/build PASS.
+
+`expanded96-optimized.json`: rzeczywisty API/slicer,7 przypadków,165,2s, **4 PASS / 3 FAIL**, bez skips/flaky. Nowe ceny:7/13/38;31 ma podgląd i ręczną wycenę z powodu gabarytu.24/39 nadal422 `model_resource_limit`;32 mieści się w limicie bajtów, ale ma błędny prefiks metadanych `3DManufacturing:3mfVersion`, więc walidacja go odrzuca. Nie zgadujemy namespace ani nie obchodzimy walidatora. Runner nadal wymaga201: trzech odrzuceń nie zmieniono na zielone wyceny. Wyniki całych41 poniżej są historyczną bazą64 MiB, nie nowym pełnym przebiegiem.
+
+Sol xhigh: brak blokującego defektu w zmianie; wskazał nieaktualny limit w ARCHITECTURE i brak wpisu wyników — poprawiono. Oceny zakresu7–9/10, bez deklaracji10/10 ani gotowości produkcyjnej. `expanded96-ui.json`:7 PASS/194,8s; cztery rzeczywiste podglądy i trzy jawne odrzucenia, również po uzupełnieniu opcji druku brak ceny/checkoutu dla odrzuconych. To wynik obsługi UI, nie siedem udanych wycen. Review testu wykrył możliwość zaakceptowania201 dla wadliwego przypadku32; dodano obowiązkowe422 przed rozgałęzieniem, `expanded96-invalid32.json`:1 PASS/23,5s po tej poprawce. Końcowy przegląd nie wykazał dalszego konkretnego blokera w zmienionym zakresie.
+
+## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.
 

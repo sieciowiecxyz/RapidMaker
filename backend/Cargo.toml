@@ -32,3 +32,10 @@ rapidmaker-observability = { path = "crates/observability" }
 
 utoipa = { version = "6", features = ["axum_extras"] }
 utoipa-axum = "0.3"
+
+# Keep development parsing within the sandbox's strict CPU budget for large models.
+[profile.dev.package.rapidmaker-geometry]
+opt-level = 2
+
+[profile.dev.package.lib3mf]
+opt-level = 2

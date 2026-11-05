@@ -50,8 +50,8 @@ impl Default for ThreeMfLimits {
     fn default() -> Self {
         Self {
             max_entry_count: 512,
-            max_uncompressed_bytes: 64 * 1024 * 1024,
-            max_entry_bytes: 64 * 1024 * 1024,
+            max_uncompressed_bytes: 96 * 1024 * 1024,
+            max_entry_bytes: 96 * 1024 * 1024,
         }
     }
 }
@@ -1942,10 +1942,10 @@ mod tests {
         let mib = 1024 * 1024;
         let limits = ThreeMfLimits::default();
         for (sizes, accepted) in [
-            (vec![64 * mib], true),
-            (vec![64 * mib + 1], false),
-            (vec![32 * mib, 32 * mib], true),
-            (vec![32 * mib, 32 * mib, 1], false),
+            (vec![96 * mib], true),
+            (vec![96 * mib + 1], false),
+            (vec![48 * mib, 48 * mib], true),
+            (vec![48 * mib, 48 * mib, 1], false),
         ] {
             let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
             let options = zip::write::SimpleFileOptions::default()

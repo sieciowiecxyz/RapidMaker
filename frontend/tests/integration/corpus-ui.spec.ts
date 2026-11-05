@@ -272,6 +272,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       return;
     }
     const upload = await uploaded!;
+    if (item.case === 32) expect(upload.status()).toBe(422);
     if (upload.status() === 422) {
       // Chromium can evict large upload response bodies from its inspector cache.
       // Reproduce the same rejection through the owner's HTTP client, then match the UI.
@@ -286,7 +287,13 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       });
       expect(rejected.status()).toBe(422);
       const error = await rejected.json();
-      expect(error.code).toBe('model_resource_limit');
+      // Case 32 contains an invalid 3DManufacturing:3mfVersion metadata prefix.
+      // It fits the byte budget now, but must still fail strict package validation.
+      if (item.case === 32) {
+        expect(error.message).toBe(
+          'Nie można odczytać geometrii. Wybierz poprawny STL, STEP lub 3MF.',
+        );
+      } else expect(error.code).toBe('model_resource_limit');
       expect(typeof error.message).toBe('string');
       expect(error.message.length).toBeGreaterThan(0);
       await expect(page.getByRole('alert')).toHaveText(error.message);
@@ -310,9 +317,9 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         await expect(page.locator('.chamber-visual[aria-label^="Model z pliku"]')).toHaveCount(0);
 
       info.annotations.push({
-        type: 'ui-resource-rejection',
+        type: item.case === 32 ? 'ui-invalid-rejection' : 'ui-resource-rejection',
         description:
-          'HTTP 422 model_resource_limit shown; completed print settings cannot enable checkout',
+          'HTTP 422 shown; completed print settings cannot enable checkout; no price claimed',
       });
       return;
     }
