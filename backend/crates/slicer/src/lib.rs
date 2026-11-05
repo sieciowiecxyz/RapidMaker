@@ -573,11 +573,11 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
-    runtime_sha256()?;
+    runtime_sha256().await?;
     let status = tokio::time::timeout(Duration::from_secs(65), command.status())
         .await
         .map_err(|_| Error::Failed("Slicing exceeded 65 seconds".into()))??;
-    runtime_sha256()?;
+    runtime_sha256().await?;
     let result = out.join("result.json");
     if !status.success() {
         tracing::warn!(event = "slicer_exit", exit_code = status.code());

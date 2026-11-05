@@ -116,7 +116,10 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
     input.rates.validate().map_err(|_| config)?;
     input.options.validate().map_err(|_| config)?;
     if input.slicer_profile_version != rapidmaker_slicer::PROFILE_VERSION
-        || input.slicer_runtime_sha256 != rapidmaker_slicer::runtime_sha256().map_err(|_| config)?
+        || input.slicer_runtime_sha256
+            != rapidmaker_slicer::runtime_sha256()
+                .await
+                .map_err(|_| config)?
     {
         return Err(config);
     }

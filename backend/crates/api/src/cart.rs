@@ -127,7 +127,9 @@ pub async fn validate(
             .ok_or_else(stale)?;
         if request["slicer_profile_version"] != rapidmaker_slicer::PROFILE_VERSION
             || request["slicer_runtime_sha256"]
-                != rapidmaker_slicer::runtime_sha256().map_err(|_| stale())?
+                != rapidmaker_slicer::runtime_sha256()
+                    .await
+                    .map_err(|_| stale())?
             || request["rates"] != policy
             || super::quotes::approved_cost(material).is_none_or(|cost| {
                 request["purchase_net_grosze_per_kg"].as_i64() != Some(i64::from(cost))

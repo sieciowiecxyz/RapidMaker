@@ -214,6 +214,7 @@ async fn estimate(
         profiles_sha256: material.source["profiles_sha256"].clone(),
         slicer_profile_version: rapidmaker_slicer::PROFILE_VERSION.into(),
         slicer_runtime_sha256: rapidmaker_slicer::runtime_sha256()
+            .await
             .map_err(|_| unavailable())?
             .into(),
     })

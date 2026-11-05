@@ -1,5 +1,15 @@
 # Modele i E2E — checkpoint 2026-11-05
 
+## Tożsamość pakietu slicera i aktualność ceny
+
+Hash obejmuje teraz całe stałe drzewo `/opt/bambustudio-bin`, w tym zasoby, względne ścieżki, typy, uprawnienia i zawartość. Zmiana zasobu przy tym samym launcherze/ELF zmienia tożsamość po restarcie; wykryta zmiana w działającym procesie blokuje kolejne użycia do restartu. Wymagane pliki muszą mieć bit wykonywania. Systemowe zależności poza pakietem nadal nie są hashowane; to nie jest atestacja ani ochrona przed celową podmianą w trakcie wykonania. Limity i złożoność: [slicer-queue.md](slicer-queue.md).
+
+5 testów jednostkowych PASS (zasoby, kolejność, restore, mode, limity, dowiązania/pliki specjalne); opcjonalny test rzeczywistej instalacji uruchomiono osobno:1 PASS, zimny odczyt6,905s,10 ciepłych kontroli101,117ms. Hashowanie/skanowanie przeniesiono do `spawn_blocking`; pierwsze równoległe użycia mogą oczekiwać na inicjalizację. Test nie modyfikował `/opt`.
+
+`bundle-runtime-pricing.json`: **4 PASS/24,5s**,0 skip/flaky —realny konfigurator/slicer,1/10/1000 sztuk i niezależna arytmetyka na jawnych stawkach testowych, wielomodelowy checkout, za duży model→ręczna wycena. Istniejąca regresja zmienia hash wyłącznie w izolowanej bazie: brak/inny hash→409, przywrócony→200. Nie jest to benchmark rentowności rzeczywistych kosztów firmy. Build, Clippy API/slicer all-targets -D warnings oraz fmt/diff-check PASS; wcześniejszy warning wygenerowanego CXX nadal obecny.
+
+Sol xhigh wskazał brak mode w hashu i wczesnej kontroli wykonywalności —oba poprawione i przetestowane; finalnie bez konkretnego blokera, oceny7–9/N/A (dowody E2E sprawdzone przez agenta głównego po review). Frontendu/style nie zmieniano, korpusu i dostawców nie powtarzano.
+
 ## Dodatkowe rzeczywiste testy DB/API
 
 `database-with-api-final.json`: **20 PASS/0 FAIL/0 skipped/0 flaky** —18 testów storage, katalog API oraz HTTP: klient/gość/admin nie mogą przekraczać granic cudzych modeli, zamówień i operacji. Każdy test ma osobną tymczasową bazę, access także własny katalog modeli; sprzątanie jest częścią wyniku. Runner jest w grupie `storage` i `test:all`, bez kluczy dostawców. Z25 pomijanych testów workspace wykonano osobno20; pozostałe5 nie są zaliczone jako wykonane.
