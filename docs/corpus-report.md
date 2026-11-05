@@ -1,4 +1,4 @@
-# Modele i E2E — checkpoint 2026-11-05
+# Modele i E2E — checkpoint 2026-11-06
 
 Przeczytaj gdy: oceniasz dowody celu lub wybierasz kolejne sprawdzenie.
 Opis: bieżące wyniki, granice i decyzje; plan w [corpus-quality.md](plans/corpus-quality.md).
@@ -14,7 +14,7 @@ Wyniki dotyczą podanych przebiegów, nie późniejszego HEAD. Kontrolowane kont
 | Artefakt / źródło | Wynik | Zakres |
 | --- | --- | --- |
 | `contracts.json`, 97c10dd | 21 PASS / 5,7 s | Kontrolowane kontrakty UI/narzędzi; bez dowodu dostawców |
-| `core.json`, po inicjalizacji runtime przy starcie | 33 PASS / 312,6 s | Realne lokalne API/DB/parser/slicer, koszyk, współbieżność, własność/retencja, konfigurator, panele, motywy/zasoby i bezpieczeństwo |
+| `core.json`, 242a935 | 33 PASS / 312,6 s | Realne lokalne API/DB/parser/slicer, koszyk, współbieżność, własność/retencja, konfigurator, panele, motywy/zasoby i bezpieczeństwo |
 | `corpus41-trimmed.json`, 8bd6fcc | 36 PASS / 5 FAIL / 424,3 s | Pełne 41 po poprawkach parsera; klasyfikacja niżej |
 | `database-with-api-final.json` | 20 PASS / 0 skipped | 18 storage + katalog API + granice dostępu HTTP; osobna tymczasowa baza na test |
 | Rust workspace, 8bd6fcc (historyczny) | 139 PASS / 25 ignored | 20 pomijanych wykonano osobno powyższym runnerem; pozostałych 5 nie zaliczamy |
@@ -39,19 +39,23 @@ Pełny core po poprawce: **33 PASS/312,6 s,0 skipped/flaky**. Poprzedni przebieg
 
 ## Diagnostyka większych modeli —2026-11-06
 
-Kolejny krok: dwa wpisy profilu dev optymalizują istniejące `zlib-rs`/`quick-xml` (bez zmiany wersji, release, walidacji lub limitów). Dla stałego SHA modelu20 zaobserwowano15,674s→12,893s→10,034s; liczby punktów/trójkątów, wymiary i długość GLB zgodne. To pojedyncze próbki diagnostyczne, nie gwarancja czasu HTTP.14 nadal `MalformedInput` (8,884s);21/37 osiągają ten błąd w22,302/20,542s zamiast SIGKILL, bez dowodu niepoprawności źródła.41 nadalSIGKILL przy25s CPU. Porównanie z hashami binariów/źródeł: prywatne `large-model-probe-xml-opt/comparison.json`.
+[Plan](plans/large-models.md) obejmuje9 plików8/14/19/20/21/29/37/40/41, także pięć wcześniejszych413. Diagnostyka jest odrębna od HTTP: SHA-zweryfikowane wejścia, brak sieci/sekretów/zapisu siatek,2GiB RAM/25s CPU/30s wall; parser96MiB wejścia/512MiB ZIP/128MiB GLB/4M punktów/8M trójkątów. To nie jest włączony profil produktu.
 
-`xml-zlib-models.json`: **5 PASS/4,1s**,0 skip/flaky —realne STL/STEP/3MF, prywatne GLB bez koloru, odrzucenia bezpieczeństwa, retencja i izolacja klientów. Geometry31 PASS/1 istniejący opcjonalny ignored; build główny/przykład, fmt/diff-check PASS. Domyślne limity i wynik korpusu36/5 bez zmian. Usunięto wyłącznie4 zakończone własne binaria testowe/stare kopie probe (161903432B); źródła, aktywne API, aktualny probe i wyniki zachowane.
-
-Nowy [plan](plans/large-models.md) obejmuje9 plików8/14/19/20/21/29/37/40/41, także pięć wcześniejszych413. Dołożono diagnostyczny przykład Rust, bez zmiany API/defaultów i bez zapisu siatek. Pomiary SHA-zweryfikowanych plików: izolacja bez sieci/sekretów,2GiB RAM/25s CPU/30s wall; tymczasowe limity parsera96MiB wejścia/512MiB ZIP/128MiB GLB/4M punktów/8M trójkątów. To nie jest wdrożony profil produktu.
-
-| Przypadki | Wynik diagnostyki |
+| Przypadki | Najnowszy dowód diagnostyczny |
 | --- | --- |
-|8/19/20/29/40 | Pełny parser+GLB,1,49–3,86M trójkątów,26,8–69,5MB GLB,0,2–21,3s; wszystkie GLB przekraczają25MiB |
-|14 | `MalformedInput` po14,3s; przyczyna/walidność nierozstrzygnięte |
-|21/37/41 | PowtórzonySIGKILL9 przyCPU25,004–25,009s (limity25/25),RSS~274–744MiB; bez dowodu OOM lub jednoznacznej przyczyny sygnału |
+|8/19/20/29/40 | Pełny parser+GLB,1,49–3,86M trójkątów,26,8–69,5MB GLB; wszystkie GLB przekraczają25MiB |
+|14/21/37 | Po dokładnie tej samej normalizacji `geometry_package` SDK odrzuca krawędź współdzieloną przez4 trójkąty zamiast najwyżej2. Aktualny probe: `NonManifoldMesh` w9,040/22,522/20,447s |
+|41 | SIGKILL9 przy~25s CPU (limity25/25); przyczyna sygnału nierozstrzygnięta, bez dowodu OOM |
 
-Prywatne `large-model-probe/results-combined.json` łączy9 przypadków z hashami źródeł/binariów i źródłem przebiegu; pierwotny raport i pomiar CPU/sygnałów zachowane. Pierwsza próba infrastruktury bez `/usr/bin/time` nie uruchomiła parserów; zastąpiono ją izolowanym pomiarem Python. Przykład skrócono87 linii bez nowych zależności. Build/fmt/diff-check PASS. To nie dowodzi kanonicznego STL, jednostek GLB dla klienta, slicingu ani nowych obsługiwanych uploadów; bieżący korpus36/5 pozostaje bez zmian.
+Prywatne dowody: `large-model-probe/results-combined.json` —pierwotne9 przypadków z hashami źródeł/binariów; `large-model-probe-xml-opt/comparison.json` —oddzielne próbki optymalizacji; `sdk-rejection/normalized-results.json` —dokładny etap SDK po normalizacji, surowe SDK zapisane osobno; `large-model-probe-topology/results.json` —nowy typ błędu na3 rzeczywistych plikach. Tymczasowy przykład SDK usunięto po zachowaniu źródła/proweniencji prywatnie. Pierwsza infrastruktura bez `/usr/bin/time` nie uruchomiła parserów; pomiar zastąpił Python `resource.getrusage`.
+
+Dev opt-level2 dla istniejących `zlib-rs`/`quick-xml` skrócił pojedynczą próbkę modelu20 z15,674s do10,034s (te same liczby punktów/trójkątów, wymiary i długość GLB). Bez zmiany wersji, release, walidacji/limitów; nie jest to gwarancja czasu HTTP. Wcześniejsze `MalformedInput` dla14/21/37 rozpoznano dopiero w osobnej diagnostyce SDK; nie utożsamiamy starego braku przyczyny z dowodem uszkodzenia całego pliku.
+
+### Bezpieczny komunikat o topologii
+
+Nowy `NonManifoldMesh` zachowuje odrzucenie SDK. Upload podaje stałe422 `model_topology_invalid` („Siatka modelu wymaga naprawy…”), bez diagnostyki/objectIDs. Dopasowanie wariantu/frazy dotyczy lib3mf0.1.7; inna fraza wraca do ogólnego odrzucenia, nie akceptacji. Legacy `/analyze` nadal ma ogólny błąd. Duże źródła w HTTP nadal najpierw podlegają dotychczasowym limitom; brak automatycznej naprawy lub nowych zaakceptowanych dużych uploadów.
+
+`topology-models-ui-final.json`: **6 PASS/5,5s**,0 skip/flaky —syntetyczny3MF934B odrzucony, brak zaakceptowanego modelu/GLB/checkoutu, następny poprawny upload działa. Wiersz pokazuje błąd analizy zamiast prośby o ustawienia; zrzut obejrzany, bez zmian CSS/układu. Pierwszy test FAIL przez zgubione body inspektora Chromium; finalny sprawdza status/UI i identyczny HTTP w tym samym kontekście przeglądarki, bez mocków. Geometry33 PASS/1 opcjonalny ignored, klasyfikacja API1 PASS; backend/example/frontend build, Clippy geometry/API all-targets, fmt/Prettier/diff-check PASS. Wcześniejsze `xml-zlib-models.json`:5 PASS/4,1s, przed nowym typem. Nie powtarzano pełnego korpusu; wynik36/5 pozostaje historycznym dowodem z8bd6fcc.
 
 ## Korpus, geometria i ograniczenia
 

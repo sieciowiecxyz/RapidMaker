@@ -238,3 +238,93 @@ test('geometry resource limits explain a rejection without calling the model mal
     page.getByText('Model przekracza limit złożoności lub rozpakowanego pliku.', { exact: false }),
   ).toBeVisible();
 });
+
+test('non-manifold 3MF requires repair and the next valid upload recovers', async ({ page }, info) => {
+  await page.goto('/wycena');
+  const previewRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/preview.glb'))
+      previewRequests.push(request.url());
+  });
+  const rejected = page.waitForResponse(
+    (response) => response.url().endsWith('/api/models') && response.request().method() === 'POST',
+  );
+  await page
+    .getByLabel('Dodaj modele STL, STEP lub 3MF')
+    .setInputFiles(fixture('non_manifold.3mf'));
+  const response = await rejected;
+  expect(response.status()).toBe(422);
+  const message = 'Siatka modelu wymaga naprawy. Napraw model i prześlij plik ponownie.';
+  // Chromium can evict browser fetch bodies; verify identical input through the same browser context.
+  const checked = await page.request.post('/api/models', {
+    headers: {
+      Origin: new URL(page.url()).origin,
+      'Content-Type': 'application/octet-stream',
+      'x-model-filename': 'non_manifold.3mf',
+    },
+    data: readFileSync(fixture('non_manifold.3mf')),
+  });
+  expect(checked.status()).toBe(422);
+  // Exact safe JSON excludes native library diagnostics, object IDs and accepted model metadata.
+  expect(await checked.json()).toEqual({ code: 'model_topology_invalid', message });
+  await expect(page.getByRole('alert').filter({ hasText: message })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Konfiguruj non_manifold.3mf', exact: true })).toContainText('Błąd analizy modelu');
+  await page.screenshot({ path: info.outputPath('topology-error.png'), fullPage: false });
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const draft = JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1') ?? 'null');
+        return draft?.models?.map(
+          (model: { name: string; status: string; analysis?: unknown }) => ({
+            name: model.name,
+            status: model.status,
+            accepted: !!model.analysis,
+          }),
+        );
+      }),
+    )
+    .toEqual([{ name: 'non_manifold.3mf', status: 'error', accepted: false }]);
+  await expect(
+    page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true }),
+  ).toBeDisabled();
+  expect(previewRequests).toEqual([]);
+  const checkout = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1') ?? 'null');
+    return {
+      ready: localStorage.getItem('rapidmaker.storefront.checkout-ready'),
+      models: state?.cart?.models ?? [],
+      quote: state?.cart?.quote ?? null,
+    };
+  });
+  expect(checkout).toEqual({ ready: null, models: [], quote: null });
+
+  await page.getByRole('button', { name: 'Usuń non_manifold.3mf', exact: true }).click();
+  const uploaded = page.waitForResponse(
+    (result) => result.url().endsWith('/api/models') && result.request().method() === 'POST',
+  );
+  await page
+    .getByLabel('Dodaj modele STL, STEP lub 3MF')
+    .setInputFiles(fixture('simple_model.3mf'));
+  const recovered = await uploaded;
+  expect(recovered.status()).toBe(201);
+  await expect(
+    page.getByRole('img', { name: /Model z pliku simple_model.3mf.*Czarny/ }),
+  ).toBeVisible();
+  const id = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1')!).models.find(
+        (model: { name: string }) => model.name === 'simple_model.3mf',
+      ).analysis.id,
+  );
+  expect(id).toMatch(/^[a-f0-9-]{36}$/);
+  const metadata = await page.request.get(`/api/models/${id}`);
+  expect(metadata.status()).toBe(200);
+  const model = await metadata.json();
+  const preview = await page.request.get(model.preview_url);
+  expect(preview.status()).toBe(200);
+  expect((await preview.body()).subarray(0, 4).toString()).toBe('glTF');
+  await expect(page.getByRole('alert').filter({ hasText: message })).toHaveCount(0);
+  await expect(
+    page.getByRole('img', { name: /Model z pliku simple_model.3mf.*Czarny/ }),
+  ).toBeVisible();
+});

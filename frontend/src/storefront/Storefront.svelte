@@ -354,7 +354,7 @@
               <div class="model-row" class:model-selected={selectedId===model.id} class:model-invalid={issues.length>0}>
                 <button class="model-select" aria-pressed={selectedId===model.id} aria-label={`Konfiguruj ${model.name}`} onclick={()=>selectModel(model.id)}>
                   <IconFile3d size={23} stroke={1.5} />
-                  <span><span class="model-name">{model.name}</span><span class="model-meta">{model.settings ? settingsSummary(model.settings,materials) : 'Wybierz ustawienia'}</span><span class="model-state">{issues.length ? 'Uzupełnij ustawienia' : selectedId===model.id ? 'Edytujesz ten model' : 'Ustawienia kompletne'}</span></span>
+                  <span><span class="model-name">{model.name}</span><span class="model-meta">{model.settings ? settingsSummary(model.settings,materials) : 'Wybierz ustawienia'}</span><span class="model-state">{model.status==='error' ? 'Błąd analizy modelu' : issues.length ? 'Uzupełnij ustawienia' : selectedId===model.id ? 'Edytujesz ten model' : 'Ustawienia kompletne'}</span></span>
                 </button>
                 <label class="quantity"><span class="sr-only">Liczba sztuk: {model.name}</span><Input type="number" min="1" max="1000" step="1" value={model.quantity} oninput={event => changeQuantity(model.id, event.currentTarget.valueAsNumber)} /></label>
                 <button class="remove" aria-label={`Usuń ${model.name}`} onclick={()=>removeModel(model.id)}><IconX size={17} stroke={1.7} /></button>

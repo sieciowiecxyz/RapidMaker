@@ -309,6 +309,11 @@ async fn upload(
                     StatusCode::TOO_MANY_REQUESTS,
                     "Trwa analiza innego modelu. Spróbuj za chwilę.",
                 )
+            } else if message == "Model topology invalid" {
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({
+                    "code": "model_topology_invalid",
+                    "message": "Siatka modelu wymaga naprawy. Napraw model i prześlij plik ponownie."
+                })))
             } else if message == "Model resource limit" {
                 (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({
                     "code": "model_resource_limit",

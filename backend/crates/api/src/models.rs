@@ -278,6 +278,7 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
             return Err(match status.code() {
                 Some(65) => "Unsupported or invalid model geometry",
                 Some(66) => "Model resource limit",
+                Some(67) => "Model topology invalid",
                 _ => "Model conversion unavailable",
             }
             .into());
@@ -365,6 +366,7 @@ pub fn worker() -> bool {
         return false;
     }
     let mut resource_limited = false;
+    let mut topology_invalid = false;
     let result = args
         .next()
         .ok_or_else(|| "Missing model path".to_string())
@@ -387,6 +389,7 @@ pub fn worker() -> bool {
                 )
                 .map_err(|e| {
                     resource_limited = is_resource_limit(&e);
+                    topology_invalid = matches!(e, PreviewError::NonManifoldMesh);
                     e.to_string()
                 })?;
                 let metadata = serde_json::to_vec(&PreparedModel {
@@ -408,7 +411,13 @@ pub fn worker() -> bool {
         })
         .is_err()
     {
-        std::process::exit(if resource_limited { 66 } else { 65 });
+        std::process::exit(if topology_invalid {
+            67
+        } else if resource_limited {
+            66
+        } else {
+            65
+        });
     }
     true
 }
@@ -588,6 +597,7 @@ mod resource_tests {
         }
         for error in [
             PreviewError::MalformedInput,
+            PreviewError::NonManifoldMesh,
             PreviewError::UnsafeContainer,
             PreviewError::DuplicateContainerPath,
             PreviewError::ExternalReferenceDisabled,

@@ -103,6 +103,7 @@ pub enum PreviewError {
     ParseTimeout,
     UnsupportedFormat,
     MalformedInput,
+    NonManifoldMesh,
     EmptyMesh,
     NonFiniteCoordinate,
     CoordinateOutOfBounds,
@@ -123,6 +124,7 @@ impl std::fmt::Display for PreviewError {
             Self::ParseTimeout => f.write_str("parse timeout"),
             Self::UnsupportedFormat => f.write_str("unsupported source format"),
             Self::MalformedInput => f.write_str("malformed mesh input"),
+            Self::NonManifoldMesh => f.write_str("non-manifold mesh"),
             Self::EmptyMesh => f.write_str("empty mesh"),
             Self::NonFiniteCoordinate => f.write_str("non-finite coordinate"),
             Self::CoordinateOutOfBounds => f.write_str("coordinate out of bounds"),
@@ -138,6 +140,17 @@ impl std::fmt::Display for PreviewError {
 }
 
 impl std::error::Error for PreviewError {}
+
+fn classify_three_mf_error(error: lib3mf::Error) -> PreviewError {
+    match error {
+        lib3mf::Error::InvalidModel(message)
+            if message.contains("Non-manifold edge (vertices ") =>
+        {
+            PreviewError::NonManifoldMesh
+        }
+        _ => PreviewError::MalformedInput,
+    }
+}
 
 #[tracing::instrument(skip_all, level = "debug")]
 pub fn source_to_preview_glb(
@@ -657,7 +670,7 @@ fn geometry_package<'a>(
                 Cursor::new(normalized.as_deref().unwrap_or(xml).as_bytes()),
                 ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
             )
-            .map_err(|_| PreviewError::MalformedInput)?;
+            .map_err(classify_three_mf_error)?;
         }
         check_timeout(started, limits)?;
     }
@@ -736,7 +749,7 @@ fn scene_from_3mf(
     let config =
         ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient);
     let mut model = ThreeMfModel::from_reader_with_config(Cursor::new(input), config)
-        .map_err(|_| PreviewError::MalformedInput)?;
+        .map_err(classify_three_mf_error)?;
     mirrors
         .remove("3D/3dmodel.model")
         .ok_or(PreviewError::MalformedInput)?
@@ -756,7 +769,7 @@ fn scene_from_3mf(
                 &xml,
                 ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
             )
-            .map_err(|_| PreviewError::MalformedInput)?;
+            .map_err(classify_three_mf_error)?;
             mirrors
                 .remove(&path)
                 .ok_or(PreviewError::MalformedInput)?
@@ -1318,6 +1331,7 @@ mod tests {
     const PLY_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple.ply");
     const GLB_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple.glb");
     const THREEMF_SIMPLE: &[u8] = include_bytes!("../tests/fixtures/simple_model.3mf");
+    const THREEMF_NON_MANIFOLD: &[u8] = include_bytes!("../tests/fixtures/non_manifold.3mf");
     const THREEMF_TRAVERSAL: &[u8] = include_bytes!("../tests/fixtures/zip_path_traversal.3mf");
     const THREEMF_DUPLICATE: &[u8] =
         include_bytes!("../tests/fixtures/zip_duplicate_normalized.3mf");
@@ -1331,6 +1345,63 @@ mod tests {
     const STEP_CYLINDER: &[u8] = include_bytes!("../tests/fixtures/step_cylinder.step");
     const STEP_UNSUPPORTED_NURBS: &[u8] =
         include_bytes!("../tests/fixtures/step_unsupported_nurbs.step");
+
+    #[test]
+    fn three_mf_non_manifold_rejection_is_typed_without_relaxing_validation() {
+        let limits = ConversionLimits::default();
+        let archive_limits = ThreeMfLimits::default();
+        // Padding bypasses the small-root preflight and exercises full SDK loading.
+        // A bad vertex index remains MalformedInput rather than a topology error.
+        for (padding, bad_index, expected) in [
+            (0, false, PreviewError::NonManifoldMesh),
+            (64 * 1024, false, PreviewError::NonManifoldMesh),
+            (0, true, PreviewError::MalformedInput),
+        ] {
+            let mut source = zip::ZipArchive::new(Cursor::new(THREEMF_NON_MANIFOLD)).unwrap();
+            let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            for index in 0..source.len() {
+                let mut entry = source.by_index(index).unwrap();
+                if entry.name().unwrap() == "3D/3dmodel.model" {
+                    let mut xml = String::new();
+                    entry.read_to_string(&mut xml).unwrap();
+                    if bad_index {
+                        xml = xml.replace("v1=\"0\"", "v1=\"99\"");
+                    }
+                    xml.push_str(&" ".repeat(padding));
+                    output
+                        .start_file("3D/3dmodel.model", zip::write::SimpleFileOptions::default())
+                        .unwrap();
+                    output.write_all(xml.as_bytes()).unwrap();
+                } else {
+                    output.raw_copy_file(entry).unwrap();
+                }
+            }
+            let input = output.finish().unwrap().into_inner();
+            assert_eq!(
+                source_to_preview_glb("mesh.3mf", &input, &limits, &archive_limits).unwrap_err(),
+                expected
+            );
+            assert_eq!(
+                source_to_production("mesh.3mf", &input, &limits, &archive_limits).err(),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn unrelated_sdk_errors_remain_malformed() {
+        for error in [
+            lib3mf::Error::InvalidModel("bad vertex index".into()),
+            lib3mf::Error::InvalidModel("non-finite coordinate".into()),
+            lib3mf::Error::Io(std::io::Error::other("Non-manifold edge (vertices 0-1)")),
+        ] {
+            assert_eq!(classify_three_mf_error(error), PreviewError::MalformedInput);
+        }
+        assert_eq!(
+            PreviewError::NonManifoldMesh.to_string(),
+            "non-manifold mesh"
+        );
+    }
 
     fn mirror_package(build: &str, component: Option<&str>, extra: usize) -> Vec<u8> {
         let mesh = r#"<object id="1" type="model"><mesh><vertices>

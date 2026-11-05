@@ -23,7 +23,7 @@ Większe pliki: [aktywny plan](large-models.md),9 przypadków wraz z pięcioma41
 | C4 Konta/zakup | Realne MFA/ownership/email/Stripe test/Furgonetka sandbox/refundy/wznowienia; zakresy i dostawcy oddzielone w raporcie |
 | C5 Zamknięcie | Otwarte: pozostałe modele/decyzja, luki dowodów całego wymagania i końcowy audyt |
 
-Aktualny `core.json` po inicjalizacji runtime przed obsługą HTTP: **33 PASS/312,6 s,0 skipped/flaky**, bez Stripe/Furgonetki/iCloud. Poprzedni przebieg na30cd52a:32 PASS/1 FAIL/333,9s —pierwsze zlecenia6861ms>5000ms przez zimny hash. Bez poluzowania progu, po poprawce test1,5s. `contracts.json`: osobne historyczne **21 PASS/5,7 s** na97c10dd, kontrolowane UI/narzędzia; nie dowód dostawców.
+Ostatni pełny `core.json` na242a935 po inicjalizacji runtime przed obsługą HTTP: **33 PASS/312,6 s,0 skipped/flaky**, bez Stripe/Furgonetki/iCloud. Poprzedni przebieg na30cd52a:32 PASS/1 FAIL/333,9s —pierwsze zlecenia6861ms>5000ms przez zimny hash. Bez poluzowania progu, po poprawce test1,5s. `contracts.json`: osobne historyczne **21 PASS/5,7 s** na97c10dd, kontrolowane UI/narzędzia; nie dowód dostawców.
 
 Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi + macierz ofert 2 PASS/29,3 s; stany ofert 1 PASS/25,5 s (72 PNG/28 nowych kart); hash pakietu/ceny 4 PASS/24,5 s. DB/API 20 PASS/0 skipped w osobnych bazach. Historyczny workspace na8bd6fcc: **139 PASS/25 ignored**; 20 pomijanych uruchomiono osobno, pozostałych 5 nie zaliczamy. Dostawcy i paid/refunded/email mają odrębne artefakty oraz źródła w raporcie.
 
@@ -44,3 +44,5 @@ Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi
 2. Po decyzji użytkownika ustalić politykę pozostałych dużych modeli. Zachować jawny FAIL wadliwego32; raportować limity i skutki dla UI zamiast udawać obsługę/cenę.
 3. Uzupełniać wykazane luki całej mapy interakcji, grafik/przykładów i stanów/dialogów w obu motywach/rozmiarach, zachowując styl Piotra; nie ograniczać pierwotnego wymagania do istniejących testów.
 4. Końcowy review GPT-6-Sol xhigh: poprawność, uprawnienia/bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody testowe, prostota, utrzymanie, zgodność wizualna/kontrakt. Naprawiać konkretne uwagi, bez wymuszania ocen. Cel otwarty przy nieudowodnionych wymaganiach lub ocenach poniżej żądanego poziomu.
+
+Bieżąca regresja uploadów: `topology-models-ui-final.json`,6 PASS/5,5s. Naprawiono klasyfikację topologii3MF bez akceptowania wadliwej siatki; duże14/21/37 mają potwierdzony problem krawędzi,41 nadal ograniczenie CPU w diagnostyce. Szczegóły w planie większych modeli.
