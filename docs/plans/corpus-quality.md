@@ -12,7 +12,7 @@
 | Etap | Kryterium | Stan |
 | --- | --- | --- |
 | C1 Korpus | 41 unikalnych źródeł/hashów, manifest i ignorowane pliki | Zrobione:34×3MF,7×STL; STEP z fixtures |
-| C2 Modele i ceny | Prawdziwy pipeline, granice, ilości i niezależny rachunek; każdy wynik opisany | Częściowo:pełny34/7; później odzyskano24/39 w osobnych testach API/UI |
+| C2 Modele i ceny | Prawdziwy pipeline, granice, ilości i niezależny rachunek; każdy wynik opisany | Częściowo:aktualne36 PASS/5 FAIL;20 cen,11 ręcznych,5×413,4 limity i1 błędny pakiet |
 | C3 UI | Renderowane obrazy/przykłady, podglądy i klikalne przepływy, desktop/mobile, oba motywy; naprawy zgodne ze stylem | Wykonane zakresy w tabeli dowodów; bez twierdzenia wszystkich kombinacji/pikseli |
 | C4 Konta i zakup | Realne MFA/ownership/email/Stripe/Furgonetka/refundy i wznowienia | Przepływy sprawdzone, wyniki oddzielone według źródła |
 | C5 Zamknięcie | Raport + aktualny audyt całego celu w10 kategoriach, brak niepotwierdzonych wymagań | Otwarte; nie deklarować10/10 bez dowodów |
@@ -25,7 +25,9 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 | --- | --- |
 | `contracts.json` — HEAD97c10dd | 21 PASS/5,7s; kontrolowane kontrakty UI/narzędzi, nie dowód dostawców |
 | `core.json` — HEAD97c10dd | 31 PASS/237,4s; realne API/DB/slicer/MFA/konfigurator/panele/zasoby; dostawcy osobno |
-| `corpus41-96.json` | 34 PASS/7 FAIL/419,5s:19 cen,10 ręcznych,5 oczekiwanych413,6 limitów422,1 błędny model422 |
+| `corpus41-trimmed.json` — HEAD8bd6fcc | 36 PASS/5 FAIL/424,3s:20 cen,11 ręcznych,5 oczekiwanych413,4 limity422,1 błędny model422 |
+| `storage.json` | 18 PASS/0 skipped, osobna tymczasowa baza na test; runner w test:all |
+| Rust workspace | 139 PASS/25 ignored;18 ignored wykonano osobno przez storage, pozostałe7 nadal nie |
 | `expanded96-ui.json` | 7 PASS/194,8s:4 nowe podglądy i3 poprawnie pokazane odrzucenia; nie7 cen |
 | `sandbox.json` — baza f60b381 | 9 PASS/168,0s bez provider-blocked; późniejsze poprawki mają osobne regresje |
 | `selected-carrier-payment.json` | 2 PASS/35,3s; wybrany przewoźnik/kwota/intent/trwałe zamówienie |
@@ -39,9 +41,9 @@ Pełne wyjaśnienia, źródła commitów, komendy i ograniczenia: [raport](../co
 ## Granice i decyzje
 
 - Większe modele dopuszczono decyzją użytkownika: ZIP96 MiB łącznie/na wpis,512 wpisów. Nadal1 mln unikalnych wierzchołków; trójkąty1 048 574 wynikają z niezmienionego STL50 MiB, worker2 GiB/25s CPU/30s wall, GLB25 MiB, upload API32 MiB/UI25 MiB. Optymalizacja dev tylko geometry/lib3mf, bez wyłączania sprawdzeń.
-- Pełny przebieg odrzucił14/19/20/24/39/40 zasobowo i32 przez metadane. Po nim24/39 odzyskano: API2 PASS60,5s (24 ręczna printer_fit,39 cena), UI2 PASS58,6s z ponad1M widocznych trójkątów, GLB i niezależną kontrolą zerowego pola. Pozostałe14/19/20/40 i32 nie są obsługiwane; pełne41 po tej ostatniej zmianie NOT RUN. Nie obchodzimy walidatora ani nie zgadujemy namespace. W obecnym API24 jest kontrolowanym422, nie historycznym niezidentyfikowanym exit137.
+- Pełny przebieg odrzucił14/19/20/24/39/40 zasobowo i32 przez metadane. Po nim24/39 odzyskano: API2 PASS60,5s (24 ręczna printer_fit,39 cena), UI2 PASS58,6s z ponad1M widocznych trójkątów, GLB i niezależną kontrolą zerowego pola. Pozostałe14/19/20/40 i32 nie są obsługiwane; aktualny pełny przebieg41 potwierdził36/5. Nie obchodzimy walidatora ani nie zgadujemy namespace. W obecnym API24 jest kontrolowanym422, nie historycznym niezidentyfikowanym exit137.
 - Rachunek testowy100 PLN netto/kg dowodzi arytmetyki, nie produkcyjnej rentowności. Fingerprint slicera chroni launcher/ELF, nie wszystkie zasoby instalacji.
-- Brak twierdzeń o fizycznym passkey/przewozie, wszystkich przewoźnikach, produkcyjnym wdrożeniu, exactly-once SMTP lub każdym pikselu. Niski niezałatany upstream `deepmerge` pozostaje opisany w raporcie.
+- Brak twierdzeń o fizycznym passkey/przewozie, wszystkich przewoźnikach, produkcyjnym wdrożeniu, exactly-once SMTP lub każdym pikselu. Niski niezałatany upstream `deepmerge` i informacyjne ostrzeżenie `pin-utils` pozostają opisane w security.md.
 - Usunięto345 martwych linii makiety i zbędne lokalne kopie prawdziwych zamówień. Szkic kontaktu celowo pozostaje w przypisanym `sessionStorage`.
 
 - Rozwinięcie scen potwierdziło, że14/19/20/40 wymagają74–193 MB STL, nie ma nieużywanych trójkątów.32 pozostaje nieprawidłowy; mały preflight skrócił obserwowany scenariusz odrzucenia z22,8s do633ms (1 PASS1,3s). Geometry33 PASS/1 optionalignored; pełna walidacja/limity pozostają, Sol review bez blokera.

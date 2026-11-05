@@ -1,6 +1,6 @@
 # Bezpieczeństwo — stan 2026-10-24
 
-Aktualny Cargo audit: **0 podatności, 0 ostrzeżeń RustSec**, bez ignorowania zgłoszeń. To wynik bazy RustSec dla Cargo.lock, nie certyfikat bezpieczeństwa aplikacji ani systemowych bibliotek C++. Poprzedni npm audit: 0 zgłoszeń; frontend nie był zmieniany w etapie L7.
+Audyt 2026-11-05 na `8bd6fcc`: Cargo **0 podatności,1 ostrzeżenie o utrzymaniu** — [RUSTSEC-2026-0441, pin-utils](https://rustsec.org/advisories/RUSTSEC-2026-0441.html), pośrednio przez async-imap0.12.0. To nie zgłoszona luka wykonania kodu; brak nowszej wydanej wersji async-imap usuwającej ten pakiet. Nie wyciszano zgłoszenia ani nie dodano forka. npm:3 wpisy low opisujące tę samą zależność deepmerge/pluginy Svelte ([GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)), bez dostępnej poprawki według audytu. Raporty prywatne: `frontend/tests/artifacts/dependency-audit/`. Nie jest to certyfikat bezpieczeństwa aplikacji ani systemowych bibliotek C++.
 
 ## Zależności i poprawki
 

@@ -2,7 +2,17 @@
 
 Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
-## Bieżąca regresja całości — HEAD97c10dd
+## Aktualny korpus i testy bazodanowe — HEAD8bd6fcc
+
+`corpus41-trimmed.json`: **36 PASS/5 FAIL/424,3s**,0 skipped/flaky —20 rzeczywistych cen,11 ręcznych,5 oczekiwanych413. FAIL14/19/20/40: kontrolowane limity;32: błędne metadane. To pełny aktualny przebieg po ostatnich poprawkach parsera, nie suma wcześniejszych regresji. Decyzja o osobnym profilu dużych modeli albo pozostaniu przy STL50 MiB jest pytaniem do użytkownika; w tej zmianie budżetu nie rozszerzano.
+
+`cargo test --offline --locked --workspace`: **139 PASS/25 ignored**. Nowy `python frontend/tests/run-all.py --group storage --no-build` uruchamia18 pomijanych testów storage pojedynczo, w18 nowych tymczasowych lokalnych DB. `storage.json`: **18 PASS/0 FAIL/0 skipped** —MFA/sesje/hasła/passkey, kolejka, własność/retencja, rozmowy/outbox, checkout, zwroty i logistyka. Nie zaliczamy pozostałych7 ignored z workspace jako wykonanych. Runner jest częścią `test:all`; standalone nie wymaga frontendu/Chromium. Nie przekazuje sekretów dostawców, tylko URL własnej bazy.
+
+Oddzielny kontrolowany SIGTERM (symulowany proces Cargo + prawdziwa lokalna DB) potwierdził zatrzymanie childa, usunięcie własnej DB i prawidłowy FAIL przerwanego przebiegu. Nie jest dodatkowym PASS logiki biznesowej. Logi0700/0600; nieudany DROP zachowuje nazwę własnej bazy w prywatnym raporcie, bez URL/sekretów na stdout. Sol xhigh: brak blokera po poprawce diagnostyki cleanup, oceny8–9/N/A, dowody9 po wykonaniu. Python syntax/diff-check PASS.
+
+Świeży audyt: Cargo0 podatności/1 `pin-utils` unmaintained przez async-imap0.12.0; npm3 low (jeden problem deepmerge, bez poprawki). Nie wyciszano zgłoszeń ani nie dodano forka: [security.md](security.md). Podczas zapisu zabrakło miejsca na dysku; odzyskano raport z Git i usunięto wyłącznie671501112 B zakończonych własnych binariów testowych. Wyniki/modele zachowane, raport odzyskany przed commitem.
+
+## Bieżąca regresja całości — wcześniejszy HEAD97c10dd
 
 `core.json`: **31 PASS/237,4s**,0 FAIL/skipped/flaky — realne API/DB/parser/slicer, wyceny i koszyk, współbieżność, własność/retencja, konfigurator, motywy/zasoby/przykłady, panele z danymi i ustawienia bezpieczeństwa. `contracts.json`: **21 PASS/5,7s**,0 FAIL/skipped/flaky — osobny przebieg kontrolowanych kontraktów UI/narzędzi. Nie jest to jeden wspólny52-testowy run ani nowe potwierdzenie Stripe/Furgonetki/iCloud; aktualne regresje dostawców mają własne wpisy niżej. Oba przebiegi wykonano po zmianach zwrotów/emaili/lokalnych potwierdzeń i usunięciu martwej makiety.
 
@@ -14,7 +24,7 @@ Usunięto nieudostępniane przez stronę wejściowe OBJ/PLY/glTF/GLB: **494 lini
 
 Naprawiono ignorowanie statusu `Unsupported` w obu wejściach biblioteki: `.exe` z poprawnym STL i plik bez rozszerzenia nie są już parsowane jako STL. HTTP wcześniej miało własną prawidłową kontrolę trzech formatów; nie była to luka w publicznym uploadzie. Nowe negatywne regresje zastępują wyłącznie testy usuniętych formatów; STEP/3MF manual gate nie blokuje konwersji, uppercaseSTP zachowane.
 
-Geometry31 PASS/1 opcjonalny ignored; workspace check i build `--offline --locked`, Clippy all-target `-D warnings`, fmt/diff-check PASS. `geometry-formats-trim.json`: **5 PASS/4,2s**,0 FAIL/skipped/flaky — rzeczywiste3 formaty→prywatnyGLB, odrzucenia/ścieżki zewnętrzne, retencja, własność/równoległość i limity. Sol xhigh bez blokera; oceny zakresu8–9/N/A. Nie zmieniano frontendu/stylem ani limitów. Pełny korpus i dostawcy nie były powtarzane w tej regresji.
+Geometry31 PASS/1 opcjonalny ignored; workspace check i build `--offline --locked`, Clippy all-target `-D warnings`, fmt/diff-check PASS. `geometry-formats-trim.json`: **5 PASS/4,2s**,0 FAIL/skipped/flaky — rzeczywiste3 formaty→prywatnyGLB, odrzucenia/ścieżki zewnętrzne, retencja, własność/równoległość i limity. Sol xhigh bez blokera; oceny zakresu8–9/N/A. Frontend, styl i limity pozostają bez zmian. Pełny korpus i dostawcy nie były powtarzane w tej regresji.
 
 ## Pozostałe sceny i szybkie odrzucenie błędnego manifestu
 

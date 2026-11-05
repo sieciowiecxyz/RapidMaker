@@ -9,7 +9,7 @@ import signal
 import sys
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--group', choices=('all', 'core', 'contracts', 'sandbox', 'email', 'registration'), default='all')
+parser.add_argument('--group', choices=('all', 'storage', 'core', 'contracts', 'sandbox', 'email', 'registration'), default='all')
 parser.add_argument('--no-build', action='store_true')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
@@ -19,14 +19,15 @@ artifacts.mkdir(parents=True, exist_ok=True)
 artifacts.chmod(0o700)
 summary = artifacts / 'summary.json'
 summary.unlink(missing_ok=True)
-if not args.no_build:
+if not args.no_build and args.group != 'storage':
     for command in (['cargo', 'build', '--locked', '--manifest-path', 'backend/Cargo.toml'], ['npm', '--prefix', 'frontend', 'run', 'build']):
         subprocess.run(command, cwd=root, check=True)
 
-if not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') and not Path('/usr/bin/chromium').is_file():
+if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') and not Path('/usr/bin/chromium').is_file():
     subprocess.run(['npx', 'playwright', 'install', 'chromium'], cwd=root / 'frontend', check=True)
 
 suites = {
+    'storage': [],
     'core': ['--local-accounts', 'models.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
     'sandbox': ['--sandbox', '--client-totp', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'journey.spec.ts'],
@@ -44,7 +45,10 @@ for name in selected:
     if name.startswith('registration-'): env['E2E_REGISTRATION_METHOD'] = name.removeprefix('registration-')
     if 'PLAYWRIGHT_CHROMIUM_EXECUTABLE' not in env and Path('/usr/bin/chromium').is_file():
         env['PLAYWRIGHT_CHROMIUM_EXECUTABLE'] = '/usr/bin/chromium'
-    if name == 'contracts':
+    if name == 'storage':
+        command = [sys.executable, 'frontend/tests/run-storage.py']
+        cwd = root
+    elif name == 'contracts':
         command = ['npx', 'playwright', 'test', '--reporter=list,json', *suites[name]]
         cwd = root / 'frontend'
     else:

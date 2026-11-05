@@ -4,11 +4,14 @@ Pełny zestaw: `npm --prefix frontend run test:all`. Pierwszy krok buduje Rust i
 
 | Grupa | Komenda po buildzie | Co naprawdę sprawdza |
 | --- | --- | --- |
+| storage | `python frontend/tests/run-all.py --group storage` | Wszystkie ignorowane testy biblioteki storage; świeża osobna baza PostgreSQL dla każdego testu, bez przeglądarki i dostawców |
 | core | `python frontend/tests/run-all.py --group core --no-build` | Prawdziwe API/DB/parser/slicer, konfigurator, modele, współbieżne wyceny, motywy/zasoby i bezpieczeństwo; bez dostawców |
 | sandbox | `python frontend/tests/run-all.py --group sandbox --no-build` | Stripe test, Furgonetka sandbox, kurier/paczkomaty, panele/refundy/logistyka, porzucona płatność |
 | email | `python frontend/tests/run-all.py --group email --no-build` | Hasło/passkey + email, admin TOTP, oferta → płatność → warunki/email → odpowiedź chat |
 | registration | `python frontend/tests/run-all.py --group registration --no-build` | Osobne bazy dla pierwszego hasła i pierwszego passkey, prawdziwe potwierdzenie emaila |
 | contracts | `python frontend/tests/run-all.py --group contracts --no-build` | Szybkie kontrakty UI i narzędzi, w większości kontrolowane API; nie dowodzą działania dostawców |
+
+Grupa storage należy również do `all`; osobno pomija build frontendu i instalację Chromium (Cargo sam buduje testy). `run-storage.py` czyta wyłącznie `DATABASE_URL` z lokalnego `.env`, wymaga localhost/127.0.0.1:18434 i używa Podmana (`TEST_PG_CONTAINER`, domyślnie rapidmaker-catalog-postgres; rola rapidmaker). Każdy wykryty ignorowany test dostaje własną bazę `rapidmaker_test_storage_*`, usuwaną także po kontrolowanym SIGTERM/SIGINT. Nie ładuje sekretów dostawców; prywatne logi są w `artifacts/storage-*`, wynik w `artifacts/storage.json`. Brak testów, błąd wykonania lub sprzątania daje FAIL.
 
 Runner tworzy i usuwa wyłącznie własną bazę rapidmaker_test_browser_*, pliki i konta; API:18436, frontend:18437. Nie uruchamiaj dwóch integracji naraz na tych portach. Normalny localhost i jego zamówienia pozostają poza testem. Logowanie TOTP w fixture jest prawdziwe; nie obchodzimy 2FA. Wirtualny WebAuthn nie zastępuje testu fizycznego klucza. Email tylko void@sieciowiec.xyz. Nie podawaj sekretów w argumentach CLI.
 
