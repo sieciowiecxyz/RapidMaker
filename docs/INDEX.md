@@ -1,5 +1,9 @@
 # Dokumentacja Rapidmaker
 
+- [Większe modele — plan](plans/large-models.md)
+  - przeczytaj gdy: rozwijasz obsługę plików odrzucanych przez limity.
+  - opis: pomiary, pełna geometria i ograniczony podgląd.
+
 - [Regulamin i prywatność](legal.md)
   - przeczytaj gdy: zmieniasz warunki, akceptację lub prawa klienta.
   - opis: podstrony, wersje, kopie email i braki przed publikacją.

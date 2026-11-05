@@ -11,6 +11,8 @@ Opis: wymagania i następne kroki; wyniki/źródła w [raporcie](../corpus-repor
 - Minimalny Rust/proste API/KISS; bez zbędnych warstw i usuwania kontroli kwot, własności lub zasobów dla zielonego raportu.
 - Raport i audyt całego celu w 10 kategoriach; nie utożsamiać zielonej regresji lub oceny małej zmiany z kompletnym 10/10.
 
+Większe pliki: [aktywny plan](large-models.md),9 przypadków wraz z pięcioma413. Diagnostyka:5 pełnych konwersji podglądu,1 nierozstrzygnięte odrzucenie parsera,3 sygnały przy granicyCPU; nie jest to nowa obsługa HTTP.
+
 ## Etapy i dowody
 
 | Etap | Kryterium / aktualny stan |

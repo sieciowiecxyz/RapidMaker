@@ -37,6 +37,18 @@ Wyniki dotyczą podanych przebiegów, nie późniejszego HEAD. Kontrolowane kont
 
 Pełny core po poprawce: **33 PASS/312,6 s,0 skipped/flaky**. Poprzedni przebieg na30cd52a:32 PASS/1 FAIL/333,9 s (`core-before-runtime-warmup.json`) —zimny hash opóźnił pierwsze zlecenia6861ms przy wymaganych<5000ms. API z bazą inicjalizuje teraz hash przed obsługą HTTP; test współbieżnych wycen po poprawce przeszedł w1,5s przy niezmienionym progu. Start API wydłuża się o zimny odczyt, błąd pakietu blokuje wyceny i zapisuje ostrzeżenie, pozostałe API może działać. Build/Clippy API all-targets/fmt/diff-check PASS; wcześniejszy warning wygenerowanego CXX pozostaje. Historyczny core31 PASS/237,4s na97c10dd jest zapisany w raporcie w Git, nie jest bieżącym plikiem core.json.
 
+## Diagnostyka większych modeli —2026-11-06
+
+Nowy [plan](plans/large-models.md) obejmuje9 plików8/14/19/20/21/29/37/40/41, także pięć wcześniejszych413. Dołożono diagnostyczny przykład Rust, bez zmiany API/defaultów i bez zapisu siatek. Pomiary SHA-zweryfikowanych plików: izolacja bez sieci/sekretów,2GiB RAM/25s CPU/30s wall; tymczasowe limity parsera96MiB wejścia/512MiB ZIP/128MiB GLB/4M punktów/8M trójkątów. To nie jest wdrożony profil produktu.
+
+| Przypadki | Wynik diagnostyki |
+| --- | --- |
+|8/19/20/29/40 | Pełny parser+GLB,1,49–3,86M trójkątów,26,8–69,5MB GLB,0,2–21,3s; wszystkie GLB przekraczają25MiB |
+|14 | `MalformedInput` po14,3s; przyczyna/walidność nierozstrzygnięte |
+|21/37/41 | PowtórzonySIGKILL9 przyCPU25,004–25,009s (limity25/25),RSS~274–744MiB; bez dowodu OOM lub jednoznacznej przyczyny sygnału |
+
+Prywatne `large-model-probe/results-combined.json` łączy9 przypadków z hashami źródeł/binariów i źródłem przebiegu; pierwotny raport i pomiar CPU/sygnałów zachowane. Pierwsza próba infrastruktury bez `/usr/bin/time` nie uruchomiła parserów; zastąpiono ją izolowanym pomiarem Python. Przykład skrócono87 linii bez nowych zależności. Build/fmt/diff-check PASS. To nie dowodzi kanonicznego STL, jednostek GLB dla klienta, slicingu ani nowych obsługiwanych uploadów; bieżący korpus36/5 pozostaje bez zmian.
+
 ## Korpus, geometria i ograniczenia
 
 41 unikalnych projektów MakerWorld: 34 × 3MF i 7 × STL, bez STEP; STEP pochodzi z fixtures. Offline [corpus-tool.md](../frontend/tests/corpus-tool.md): ścieżki/sygnatury/hash/unikalność i ograniczony ZIP; `--check` bez zapisu. 5 regresji +check41 PASS, bez dowodu geometrii/licencji.
