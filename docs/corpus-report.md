@@ -53,6 +53,10 @@ Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 
 
 `configurator-current.json`: **6 PASS** (130 s): nawigacja/motywy, pięć rodzin i 178 kolorów PLA, ustawienia, rzeczywiste wyceny, sterowanie WebGL (powiększenie potwierdzone zmianą obrazu), zaawansowane wartości i powrót, błędy połączenia oraz wybór/usuwanie STL/3MF. Awarię sieci wstrzyknięto celowo; wyceny pochodziły z rzeczywistego API. Kolory sprawdzono w UI/stanie, nie jako 178 osobnych wycen/pomiarów pigmentu. To nadal nie jest pełna wizualna kontrola wszystkich ekranów.
 
+## Odtwarzanie korpusu
+
+[Skrypt przygotowania](../frontend/tests/corpus-tool.md) działa offline na jawnie wskazanym katalogu. Zachowuje kolejność, hashe i nietypowe nazwy istniejących przypadków; dopisuje nowe pobrania, nie zmienia README ani wyników testów. `--check` jest tylko odczytem. Weryfikuje ścieżki, ograniczone odczyty ZIP, sygnatury oraz unikalność projektów/payloadów. Pięć syntetycznych regresji PASS; ponowny check wszystkich41 PASS. Nie zastępuje testów geometrii ani sprawdzenia licencji. Przegląd Sol xhigh: brak blokera; zakres ocen8–9/10, pieniądze/wygląd nie dotyczą skryptu.
+
 ## Tożsamość slicera
 
 SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji i snapshotu. Worker sprawdza tożsamość, checkout odrzuca brakujący/niezgodny hash. Zmiana plików wymaga restartu API/workerów; granice mechanizmu opisuje [kolejka](slicer-queue.md).
@@ -62,7 +66,7 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 ## Otwarte
 
 - Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA (obecnie „Wybierz w tej kolejności”). Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
-- Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów; trwała procedura odtworzenia korpusu.
+- Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów.
 - Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.
