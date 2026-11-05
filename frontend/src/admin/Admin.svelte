@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { saveTheme } from '../lib/theme';
   import ModelPreview from '../components/ModelPreview.svelte';
   import ManualOffer from '../components/ManualOffer.svelte';
   import {
@@ -126,7 +127,7 @@
   let storageError = $state('');
   let noteDraft = $state('');
   let noteRevision = $state(0);
-  let light = $state(false);
+  let light = $state(document.documentElement.dataset.theme === 'light');
   let panel = $state<HTMLElement>();
   let opener: HTMLElement | null = null;
   let selected = $derived(orders.find((o) => o.id === selectedId));
@@ -373,7 +374,7 @@
   }
   function theme() {
     light = !light;
-    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+    saveTheme(light ? 'light' : 'dark');
   }
   function keyboard(e: KeyboardEvent) {
     if (e.key === 'Escape' && selected) close();

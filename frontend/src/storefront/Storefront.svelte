@@ -7,6 +7,7 @@
   import './coral.css';
   import './print-background.css';
   import { apiFetch } from '../lib/http';
+  import { saveTheme } from '../lib/theme';
   import type { StlMesh } from './lib/stlParser';
   import { customColors } from './lib/colors';
   import { softValue } from './lib/motion';
@@ -70,7 +71,7 @@
     contactFrame = requestAnimationFrame(waitForArrival);
   }
   let isMobile = $state(false);
-  let theme = $state<'light' | 'dark'>('dark');
+  let theme = $state<'light' | 'dark'>(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
   let materials = $state<Material[]>([]);
   let models = $state<Model[]>([]);
   const uploadedFiles = new Map<string,File>();
@@ -171,8 +172,6 @@
       } catch { fileError='Nie udało się przywrócić konfiguracji. Dodaj pliki ponownie.'; }
       finally { draftLoaded=true; }
     })();
-    try { const saved = localStorage.getItem('rapidmaker-concept-theme'); if (saved === 'light' || saved === 'dark') theme = saved; } catch { /* An unavailable browser store does not block the prototype. */ }
-    document.documentElement.dataset.theme = theme;
     const keyboard = () => { document.documentElement.dataset.input = 'keyboard'; };
     const pointer = () => { document.documentElement.dataset.input = 'pointer'; };
     window.addEventListener('keydown', keyboard);
@@ -256,8 +255,7 @@
 
   function changeTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('rapidmaker-concept-theme', theme); } catch { /* Optional preference only. */ }
+    saveTheme(theme);
   }
   async function useSample(count = 1) { if(models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.'))return; uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied=''; models = (await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings,color:'black'}})); selectModel(models[0]?.id ?? ''); fileError = ''; simulateError = false; }
   function addFiles(files: FileList | File[] | null) {

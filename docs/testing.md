@@ -70,3 +70,7 @@ PASS: svelte-check 0 błędów/ostrzeżeń i Vite build; 2 kontrakty UI `tests/e
 NOT RUN: nowy test odbioru kopii prawnej przez IMAP, pełny zestaw przeglądarkowy, produkcja, audyt prawny i weryfikacja umów/transferów dostawców. Istniejące ostrzeżenie kompilatora C++ w generowanym mostku OCCT pozostaje; Clippy nie zgłosił błędów. Granice: [legal.md](legal.md).
 
 Rust: 27865 → 28140 (+275) linii kodu w backend/crates, bez pustych/komentarzy/generowanych; łącznie z testami inline i przykładami, bez niezależnego podziału production/test. Bez nowych zależności. Nowe moduły tylko dla wspólnej treści dokumentów i publicznego endpointu; jedna migracja rozszerza istniejące konto, zamówienie i outbox.
+
+## Motyw i zasoby publicznych widoków/paneli
+
+Po buildzie frontendu: `python frontend/tests/run-integration.py --local-accounts public-visual.spec.ts`. Bez Stripe/iCloud/Furgonetki; sesje i MFA z lokalnego API, osobna baza. Sprawdza14 wariantów tras w dwóch motywach i szerokościach, zapisuje56 prywatnych zrzutów. Zakres i ograniczenia: [raport](corpus-report.md#spójność-motywu-i-widoków).

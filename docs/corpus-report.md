@@ -34,6 +34,7 @@ Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 
 | `commerce-current.json` | 5 PASS: Stripe test, dostawa sandbox, panele/chat/pliki, częściowy/pełny/nadmierny zwrot, cennik |
 | `checkout-final-current.json` | 3 PASS: dokładna kwota oferty/przycisku/płatności, odbiór/paczkomat/kurier; obejrzane podsumowania desktop/mobile |
 | `manual-email-chat-current.json` | 1 PASS: ręczna wycena w UI, publikacja admina, prywatny podgląd, email iCloud, Stripe test, warunki zakupu i odpowiedź email → chat |
+| `public-account-visual-current.json` | 5 PASS38,2s: 14 wariantów tras, jasny/ciemny,1440/390px,56 zrzutów; fonty, `<img>`, błędy zasobów, szerokość i motyw; prawdziwe lokalne MFA, puste panele |
 | Test `assets.spec.ts` | 2 PASS: obrazki `<img>` strony głównej i oba motywy; głównie logo, nie wszystkie grafiki serwisu |
 
 To izolowane bazy i jawne koszty testowe. Nie dowodzi to produkcyjnej rentowności, fizycznego passkey, wszystkich przewoźników ani nadania przesyłki. Raportów zawierających dane formularzy nie publikujemy.
@@ -53,6 +54,14 @@ To izolowane bazy i jawne koszty testowe. Nie dowodzi to produkcyjnej rentownoś
 Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 10 zł przygotowania, 5% straty, 30% marży, minimum 20 zł netto, testowy VAT 23%. Potwierdzono powiązanie kosztu z pomiarami, jednorazowe przygotowanie i malejącą cenę jednostkową. Są to **stawki testowe**, nie weryfikacja rzeczywistych zakupów i rentowności.
 
 `configurator-current.json`: **6 PASS** (130 s): nawigacja/motywy, pięć rodzin i 178 kolorów PLA, ustawienia, rzeczywiste wyceny, sterowanie WebGL (powiększenie potwierdzone zmianą obrazu), zaawansowane wartości i powrót, błędy połączenia oraz wybór/usuwanie STL/3MF. Awarię sieci wstrzyknięto celowo; wyceny pochodziły z rzeczywistego API. Kolory sprawdzono w UI/stanie, nie jako 178 osobnych wycen/pomiarów pigmentu. To nadal nie jest pełna wizualna kontrola wszystkich ekranów.
+
+## Spójność motywu i widoków
+
+Odtworzono błąd: jasny motyw wybrany na stronie głównej znikał po bezpośrednim wejściu na logowanie. Wspólny `lib/theme.ts` przywraca preferencję przy starcie aplikacji i panelu admina; oba przełączniki zapisują ten sam klucz. Brak dostępu do browser storage nie blokuje zmiany motywu. Bez zmian CSS, palety i fontów autora: Workspace używa Manrope, storefront/admin.html ma nagłówki Oxanium.
+
+`public-visual.spec.ts`:5 PASS38,2s (56 zrzutów). Trasy publiczne: strona główna, wycena, logowanie/rejestracja, dokumenty/regulamin/prywatność. Konta: lista/ustawienia klienta oraz admin.html, starsza lista, produkcja, materiały i cennik. W obu motywach1440/390px: właściwy nagłówek, fonty i obrazy, brak błędów zasobów/poziomego overflow; admin przełącza motyw i zachowuje go po reloadzie. Obejrzano4 reprezentatywne zrzuty (login/materiały mobile, admin/konto desktop). Build frontend0 błędów/ostrzeżeń. Przegląd Sol xhigh: bez blokera; oceny8–9/10, kwoty nie dotyczą zmiany.
+
+To puste panele fixture i kontrola `<img>`/fontów/HTTP zasobów; nie obejmuje wszystkich wypełnionych zamówień, dialogów, SVG ani klatek Stripe. Nie mierzono błysku motywu przed załadowaniem JS.
 
 ## Odtwarzanie korpusu
 
