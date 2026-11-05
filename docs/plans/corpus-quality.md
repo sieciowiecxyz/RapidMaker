@@ -18,7 +18,7 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 ## Progress
 - Branch `codex/corpus-quality`; detailed verified outcomes and remaining limits: [checkpoint report](../corpus-report.md).
 - Corpus41/100 (34 3MF,7 STL,41 distinct hashes). MakerWorld CAPTCHA is visible; user handoff requested and pending. No MakerWorld STEP yet.
-- Final41-case run:13 measured prices,5 manual,5 expected413,18 resource-limit failures. No unclassified decode/proxy failures remain in this run;18 positive-pipeline assertions remain FAIL. Do not describe PASS totals as automatic prices.
+- Latest41-case run:15 measured prices,6 manual,5 expected413,15 resource-limit failures. No unclassified decode/proxy failures remain in this run;15 positive-pipeline assertions remain FAIL. Do not describe PASS totals as automatic prices.
 - Fixed known Bambu triangle metadata, slicer CPU parallelism (same budgets), actionable geometry errors, embedded delivery CSS/warning and EPIPE oversize status. Normal author style preserved.
 - Real auth/security/mail, checkout/shipping sandbox, partial/full refunds and selected desktop/mobile reviewed; report records exact scope. No production-profitability or all-assets claim.
 - Geometry21 PASS; slicer7 PASS plus native real model; build0errors/0warnings. Audits:Rust0 vulnerabilities/warnings; one underlying low development deepmerge advisory without upstream patch.
@@ -28,3 +28,5 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 - Configurator6 PASS130s (real local API, injected network faults only), including178 PLA shades/UI state, five families, advanced controls, desktop/mobile WebGL zoom pixels. Sol reviews preserve limits of evidence; full asset/auth/concurrency scope remains separate.
 
 - Runtime checkpoint: launcher+ELF SHA-256 persisted/deduplicated and checked by worker/cart. Fresh build and API regression1 PASS8.3s (fresh/missing/wrong/restored identity plus batch money oracles). Shared libraries/assets and in-flight update races remain outside this guard; restart after changes. Manual quote/iCloud/Stripe/email→chat journey1 PASS176.7s.
+
+- Corpus preparation is now reproducible offline: prepare-corpus.py plus5 synthetic regressions and41-case read-only validation PASS. Exact vertex indexing preserves triangles while rescuing cases3/6(prices) and36(preview/manual); geometry23PASS, freshbuildPASS, full41 rerun26PASS15FAIL withzero new failures, realformatUI1PASS. Sol review8–9/10; large-container policy,100 downloads and broader coverage remain open.

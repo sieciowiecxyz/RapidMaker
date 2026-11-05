@@ -62,4 +62,4 @@ POC wyceny na zwykłym localhost: jawny `backend/data/bambu/pricing-poc.json`, j
 
 Operator: api/production.rs → storage/production.rs i migracja0021 przechowują prywatne notatki/terminy, etap wewnętrzny, ilości wykonane oraz szkic faktury. Zapis z revision i blokadą zamówienia; QC i liczba sztuk nie zmieniają płatności/przesyłek. Metadane trafiają tylko do administracyjnych odczytów. Wzorce admin-design/checkout-design są osobnymi punktami wejścia, nie ścieżkami prawdziwych danych.
 
-3MF: znane atrybuty malowania trójkątów Bambu są pomijane wyłącznie w kopii do konwersji; pełna walidacja pakietu pozostaje. Upload rozróżnia limit zasobów (`model_resource_limit`) od błędnej geometrii; limity nie zostały podniesione.
+3MF: znane atrybuty malowania trójkątów Bambu są pomijane wyłącznie w kopii do konwersji; pełna walidacja pakietu pozostaje. Upload rozróżnia limit zasobów (`model_resource_limit`) od błędnej geometrii; limity nie zostały podniesione. Wspólny builder indeksuje identyczne bity współrzędnych STL/3MF bez zmiany trójkątów; limit wierzchołków dotyczy unikalnych punktów, oddzielny limit trójkątów nadal obowiązuje.

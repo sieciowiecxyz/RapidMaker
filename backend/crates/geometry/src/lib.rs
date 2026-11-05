@@ -655,37 +655,23 @@ fn parse_binary_stl(
     if triangle_count > limits.max_triangles {
         return Err(PreviewError::TooManyTriangles);
     }
-    let vertex_count = triangle_count
-        .checked_mul(3)
-        .ok_or(PreviewError::TooManyVertices)?;
-    if vertex_count > limits.max_vertices {
-        return Err(PreviewError::TooManyVertices);
-    }
-
-    let mut positions = Vec::with_capacity(vertex_count);
-    let mut indices = Vec::with_capacity(vertex_count);
+    let mut builder = MeshSceneBuilder::default();
     let mut cursor = 84;
-    for triangle_index in 0..triangle_count {
-        check_timeout(started, limits)?;
+    for _ in 0..triangle_count {
         cursor += 12;
-        for _ in 0..3 {
-            positions.push([
+        let mut points = [[0.0; 3]; 3];
+        for point in &mut points {
+            *point = [
                 read_f32_le(input, cursor)?,
                 read_f32_le(input, cursor + 4)?,
                 read_f32_le(input, cursor + 8)?,
-            ]);
-            indices.push(indices.len() as u32);
+            ];
             cursor += 12;
         }
+        builder.push_triangle(points[0], points[1], points[2], limits, started)?;
         cursor += 2;
-        if triangle_index == triangle_count.saturating_sub(1) && cursor != input.len() {
-            return Err(PreviewError::MalformedInput);
-        }
     }
-    Ok(Some(MeshScene {
-        positions_mm: positions,
-        indices,
-    }))
+    Ok(Some(builder.finish()?))
 }
 
 fn parse_ascii_stl(
@@ -693,8 +679,9 @@ fn parse_ascii_stl(
     limits: &ConversionLimits,
     started: Instant,
 ) -> Result<MeshScene, PreviewError> {
-    let mut positions = Vec::new();
-    let mut indices = Vec::new();
+    let mut builder = MeshSceneBuilder::default();
+    let mut triangle = [[0.0; 3]; 3];
+    let mut pending = 0;
     let mut saw_facet = false;
     for line in text.lines() {
         check_timeout(started, limits)?;
@@ -708,26 +695,26 @@ fn parse_ascii_stl(
                 if parts.next().is_some() {
                     return Err(PreviewError::MalformedInput);
                 }
-                positions.push([x, y, z]);
-                indices.push(indices.len() as u32);
+                triangle[pending] = [x, y, z];
+                pending += 1;
+                if pending == 3 {
+                    builder.push_triangle(
+                        triangle[0],
+                        triangle[1],
+                        triangle[2],
+                        limits,
+                        started,
+                    )?;
+                    pending = 0;
+                }
             }
             _ => {}
         }
     }
-    if !saw_facet || positions.is_empty() || positions.len() % 3 != 0 {
+    if !saw_facet || builder.indices.is_empty() || pending != 0 {
         return Err(PreviewError::MalformedInput);
     }
-    let triangle_count = positions.len() / 3;
-    if triangle_count > limits.max_triangles {
-        return Err(PreviewError::TooManyTriangles);
-    }
-    if positions.len() > limits.max_vertices {
-        return Err(PreviewError::TooManyVertices);
-    }
-    Ok(MeshScene {
-        positions_mm: positions,
-        indices,
-    })
+    builder.finish()
 }
 
 fn scene_from_obj(
@@ -1478,6 +1465,8 @@ fn point3_from_mm(x: f64, y: f64, z: f64) -> [f32; 3] {
 
 #[derive(Default)]
 struct MeshSceneBuilder {
+    // Exact bits retain signed zero and never merge nearby but different coordinates.
+    vertices: HashMap<[u32; 3], u32>,
     positions_mm: Vec<[f32; 3]>,
     indices: Vec<u32>,
 }
@@ -1510,17 +1499,28 @@ impl MeshSceneBuilder {
         if self.indices.len() / 3 >= limits.max_triangles {
             return Err(PreviewError::TooManyTriangles);
         }
-        if self.positions_mm.len().saturating_add(3) > limits.max_vertices {
-            return Err(PreviewError::TooManyVertices);
+        for point in [a, b, c] {
+            if point.iter().any(|v| !v.is_finite()) {
+                return Err(PreviewError::NonFiniteCoordinate);
+            }
+            if point.iter().any(|v| v.abs() > limits.max_coordinate_abs_mm) {
+                return Err(PreviewError::CoordinateOutOfBounds);
+            }
+            let key = point.map(f32::to_bits);
+            let index = if let Some(&index) = self.vertices.get(&key) {
+                index
+            } else {
+                if self.positions_mm.len() >= limits.max_vertices {
+                    return Err(PreviewError::TooManyVertices);
+                }
+                let index = u32::try_from(self.positions_mm.len())
+                    .map_err(|_| PreviewError::TooManyVertices)?;
+                self.positions_mm.push(point);
+                self.vertices.insert(key, index);
+                index
+            };
+            self.indices.push(index);
         }
-        let base =
-            u32::try_from(self.positions_mm.len()).map_err(|_| PreviewError::TooManyVertices)?;
-        self.positions_mm.push(a);
-        self.positions_mm.push(b);
-        self.positions_mm.push(c);
-        self.indices.push(base);
-        self.indices.push(base + 1);
-        self.indices.push(base + 2);
         Ok(())
     }
 
@@ -2088,12 +2088,92 @@ mod tests {
     }
 
     #[test]
+    fn exact_indexing_preserves_every_triangle_and_accepts_shared_vertices_at_limit() {
+        let limits = ConversionLimits {
+            max_vertices: 8,
+            ..Default::default()
+        };
+        let (scene, _) = parse_stl(CUBE_BINARY, &limits, Instant::now()).unwrap();
+        assert_eq!(scene.positions_mm.len(), 8);
+        assert_eq!(scene.indices.len(), 36);
+        for (triangle, indices) in CUBE_BINARY[84..]
+            .chunks_exact(50)
+            .zip(scene.indices.chunks_exact(3))
+        {
+            for (corner, &index) in indices.iter().enumerate() {
+                let expected = [0, 4, 8].map(|offset| {
+                    read_f32_le(triangle, 12 + corner * 12 + offset)
+                        .unwrap()
+                        .to_bits()
+                });
+                assert_eq!(
+                    scene.positions_mm[index as usize].map(f32::to_bits),
+                    expected
+                );
+            }
+        }
+        // This legacy fixture has inconsistent face winding; preserve its signed sum exactly.
+        assert!((signed_volume(&scene) + 8000.0 / 3.0).abs() < 0.0001);
+        let binary =
+            source_to_production("cube.stl", CUBE_BINARY, &limits, &ThreeMfLimits::default())
+                .unwrap();
+        let (roundtrip, _) = parse_stl(&binary.stl, &limits, Instant::now()).unwrap();
+        assert_eq!(scene, roundtrip);
+        assert_eq!(binary.dimensions_mm, [20.0; 3]);
+        let (ascii, _) = parse_stl(CUBE_ASCII, &limits, Instant::now()).unwrap();
+        assert_eq!(ascii.positions_mm.len(), 8);
+        assert!((signed_volume(&ascii) - signed_volume(&scene)).abs() < 0.0001);
+    }
+
+    #[test]
+    fn indexed_builder_keeps_exact_bits_and_enforces_unique_vertex_and_triangle_limits() {
+        let start = Instant::now();
+        let mut builder = MeshSceneBuilder::default();
+        let limits = ConversionLimits {
+            max_vertices: 3,
+            max_triangles: 2,
+            ..Default::default()
+        };
+        let a = [0.0; 3];
+        let b = [1.0, 0.0, 0.0];
+        let c = [0.0, 1.0, 0.0];
+        builder.push_triangle(a, b, c, &limits, start).unwrap();
+        builder.push_triangle(c, b, a, &limits, start).unwrap();
+        assert_eq!(builder.positions_mm.len(), 3);
+        assert_eq!(builder.indices, [0, 1, 2, 2, 1, 0]);
+        assert_eq!(
+            builder.push_triangle(a, b, c, &limits, start).unwrap_err(),
+            PreviewError::TooManyTriangles
+        );
+        for distinct in [[-0.0, 0.0, 0.0], [f32::from_bits(1), 0.0, 0.0]] {
+            let mut builder = MeshSceneBuilder::default();
+            builder.push_triangle(a, b, c, &limits, start).unwrap();
+            assert_eq!(
+                builder
+                    .push_triangle(distinct, b, c, &limits, start)
+                    .unwrap_err(),
+                PreviewError::TooManyVertices
+            );
+        }
+        // Stop at the second complete triangle, before reading any later malformed coordinates.
+        let ascii = "solid test\nfacet normal 0 0 1\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nvertex 0 1 0\nvertex 1 0 0\nvertex 0 0 0\nvertex invalid\nendsolid";
+        let limits = ConversionLimits {
+            max_triangles: 1,
+            ..limits
+        };
+        assert_eq!(
+            parse_ascii_stl(ascii, &limits, start).unwrap_err(),
+            PreviewError::TooManyTriangles
+        );
+    }
+
+    #[test]
     fn stl_binary_cube_writes_glb_magic_and_sane_dimensions() {
         let output = stl_to_preview_glb(CUBE_BINARY, &ConversionLimits::default()).unwrap();
         assert_eq!(&output.glb[..4], b"glTF");
         assert_eq!(output.analysis.source_format, SourceFormat::StlBinary);
         assert_eq!(output.analysis.triangle_count, 12);
-        assert_eq!(output.analysis.vertex_count, 36);
+        assert_eq!(output.analysis.vertex_count, 8);
         assert_eq!(output.analysis.dimensions_mm, [20.0, 20.0, 20.0]);
         assert_eq!(output.analysis.output_glb_bytes, output.glb.len());
     }
