@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 test.use({ screenshot: 'off', trace: 'off' });
-test('unpaid Stripe test session is closed before its expired upload is deleted', async ({
+test('concurrent unpaid payments share one attempt and release expired uploads after expiry', async ({
   request,
 }) => {
   test.skip(
@@ -59,18 +59,42 @@ test('unpaid Stripe test session is closed before its expired upload is deleted'
   });
   expect(priced.status()).toBe(200);
   const quote = await priced.json();
-  const started = await request.post(`/api/checkout/drafts/${draft.id}/payment`, {
-    headers: { ...headers, 'Idempotency-Key': randomUUID() },
-    data: {
-      version: quote.version,
-      offer_id: quote.quote.offers[0].id,
-      legal_version: '2026-10-25',
-    },
-  });
-  expect(started.status()).toBe(200);
-  const attempt = await started.json();
-  expect(attempt.state).toBe('open');
+  const key = randomUUID();
+  const payment = {
+    version: quote.version,
+    offer_id: quote.quote.offers[0].id,
+    legal_version: '2026-10-25',
+  };
+  const start = async () => {
+    const response = await request.post(`/api/checkout/drafts/${draft.id}/payment`, {
+      headers: { ...headers, 'Idempotency-Key': key },
+      data: payment,
+    });
+    expect([200, 202]).toContain(response.status());
+    return response.json();
+  };
+  const attempts = await Promise.all(Array.from({ length: 4 }, start));
+  const attempt = attempts[0];
   expect(attempt.order_id).toMatch(/^[a-f0-9-]{36}$/);
+  expect(new Set(attempts.map((value) => value.order_id))).toEqual(new Set([attempt.order_id]));
+  await expect
+    .poll(async () => {
+      const retried = await start();
+      expect(retried.order_id).toBe(attempt.order_id);
+      return retried.state;
+    })
+    .toBe('open');
+  for (const [retryKey, data] of [
+    [randomUUID(), payment],
+    [key, { ...payment, version: payment.version + 1 }],
+    [key, { ...payment, offer_id: randomUUID() }],
+  ] as const) {
+    const rejected = await request.post(`/api/checkout/drafts/${draft.id}/payment`, {
+      headers: { ...headers, 'Idempotency-Key': retryKey },
+      data,
+    });
+    expect(rejected.status()).toBe(409);
+  }
   const database = process.env.RAPIDMAKER_TEST_DATABASE!,
     root = process.env.RAPIDMAKER_TEST_MODEL_ROOT!;
   expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
@@ -88,11 +112,19 @@ test('unpaid Stripe test session is closed before its expired upload is deleted'
         database,
         '-v',
         'ON_ERROR_STOP=1',
+        '-At',
         '-c',
         statement,
       ],
       { stdio: 'pipe' },
     );
+  expect(
+    sql(
+      `SELECT count(p.id),count(o.id),count(DISTINCT p.provider_id) FROM payment_attempts p LEFT JOIN orders o ON o.payment_attempt_id=p.id WHERE p.draft_id='${draft.id}'`,
+    )
+      .toString()
+      .trim(),
+  ).toBe('1|1|1');
   sql(
     `UPDATE private_models SET expires_at=extract(epoch from now())::bigint-1 WHERE id='${model.id}'`,
   );

@@ -22,6 +22,12 @@ Review Sol xhigh znalazł lukę w testach kuriera/punktu: zapłata mogła przej�
 
 Końcowy Sol xhigh bez konkretnego defektu. Oceny zmienionych testów: poprawność8, kwoty9, błędy8, dowody9, prostota8, utrzymanie7/10; uprawnienia/zasoby/współbieżność/wygląd N/A dla tej zmiany. Ograniczenia: identyfikacja radio przez kolejność/etykietę (brak wartości w istniejącym HTML), potwierdzenia przez API produktu, bez niezależnego odczytu księgi Stripe. Prettier/discovery/diff-check PASS.
 
+## Równoległe rozpoczęcie nieopłaconej płatności
+
+Rozszerzono istniejący scenariusz porzuconego zamówienia: cztery równoległe POST z identycznym kluczem i parametrami →200/202 i ten sam order_id; ponowienie osiąga `open`. W testowej DB dokładnie jedna próba, jedno powiązane zamówienie i jeden zapisany provider_id. Nowy klucz na zablokowanym szkicu, zmieniona wersja i nieistniejąca oferta →409. To nie dowód dla innej **prawidłowej** oferty z tym samym kluczem ani niezależna inwentaryzacja wszystkich obiektów konta Stripe. Bez obciążania karty. Zachowano sprawdzenie hold plików podczas otwartej płatności i rzeczywistego usunięcia po wygaśnięciu.
+
+`concurrent-unpaid-payment.json`: **1 PASS/5,9s**,0 FAIL/skipped/flaky. Po tym przebiegu zmieniono wyłącznie tytuł testu, aby nie sugerował niezależnego odczytu zamknięcia sesji w Stripe. Sol xhigh bez blokującego problemu; oceny zakresu: poprawność8, bezpieczeństwo7, kwoty7, zasoby8, błędy7, współbieżność8, dowody8, prostota8, utrzymanie8/10; UI N/A. Kod produktu i wygląd bez zmian.
+
 ## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.
