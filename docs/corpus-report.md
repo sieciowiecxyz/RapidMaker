@@ -1,6 +1,6 @@
 # Modele i E2E — checkpoint 2026-11-05
 
-Cel nadal aktywny. Pobrano **41/100** różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
+Pobieranie zamknięte decyzją użytkownika 2026-11-05: **41 modeli wystarczy**. Pobrano41 różnych projektów MakerWorld: 34 × 3MF, 7 × STL; bez STEP z MakerWorld. Oryginały, warianty nazw i manifest SHA-256 pozostają lokalnie w ignorowanym `backend/test-models/makerworld/`. Licencje nie są w pełni zweryfikowane; nie publikujemy plików.
 
 ## Rzeczywisty korpus
 
@@ -109,7 +109,7 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 
 ## Otwarte
 
-- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA wymagającą ręcznego rozwiązania. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
+- Pobieranie zamknięte na41 modelach decyzją użytkownika. Nie wymagamy kolejnych59 plików ani rozwiązywania CAPTCHA.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów.
 - Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, opłacone zamówienia/dialogi we wszystkich stanach, wszystkie grafiki/SVG i większe obciążenie. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
@@ -155,4 +155,4 @@ Pierwszy przebieg2 PASS/2 FAIL ujawnił brak UTF-8 w ograniczonym środowisku Ch
 
 Na źródle `3afb0b8` obejrzano komplet36 scen z `corpus-ui-final` w czterech zestawieniach (1440/390px × jasny/ciemny); lista źródeł i zestawienia: prywatne `frontend/tests/artifacts/visual-overview/sources.json` i zestawienia `models-*.png` w tym samym katalogu. Każde źródło występuje raz. Wcześniej cztery reprezentatywne ujęcia obejrzano osobno. Zestawienia są przeskalowane do przeglądu kompozycji, nie zastępują kontroli każdego piksela ani wszystkich stron serwisu. Nie stwierdzono nowej usterki układu w tym zakresie. Nie zmieniano oryginalnych zrzutów ani kodu produktu i nie uruchamiano ponownie testów.
 
-Zbiór pozostaje41/100: MakerWorld ponownie potwierdza CAPTCHA wymagającą ręcznego rozwiązania. Bez tej czynności nie można zakończyć pobierania i weryfikacji100 modeli.11 odrzuceń zasobowych oraz oceny poniżej10/10 pozostają jawne; nie są zaliczone jako ukończenie celu. Dalsze dopuszczanie dużych plików wymaga oceny budżetu/polityki, nie pomijania walidacji.
+Historyczną blokadę CAPTCHA zamknięto zmianą zakresu: użytkownik zaakceptował41 modeli i zrezygnował z dalszego pobierania.11 odrzuceń zasobowych i oceny poniżej10/10 pozostają jawne; zamknięcie pobierania nie zmienia wyników testów ani nie oznacza ukończenia pozostałych prac. Dalsze dopuszczanie dużych plików wymaga oceny budżetu/polityki, nie pomijania walidacji.

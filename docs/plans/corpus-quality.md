@@ -1,12 +1,12 @@
 # Real-model and end-to-end reliability
 
 ## Goal
-- Finish 100 distinct MakerWorld source downloads, retain provenance, and test actual model processing and price calculation.
+- Use the accepted corpus of 41 distinct MakerWorld downloads, retain provenance, and test actual model processing and price calculation. Further downloads cancelled by the user on 2026-11-05.
 - Verify images, configuration, checkout/payment/refund, customer/admin authentication and email through meaningful E2E tests. Fix confirmed defects without changing Piotr's visual style.
 - Keep implementation small; preserve money, ownership and resource checks.
 
 ## Milestones
-1. **Corpus** — 41/100 downloaded; 34 3MF and 7 STL, 41 unique payload hashes. Complete remaining downloads and seek original STEP. Store locally outside Git; do not fabricate formats. Verify manifest, archive bounds, source and filenames. MakerWorld CAPTCHA requires user completion before more downloads.
+1. **Corpus — complete:**41 accepted downloads;34 3MF,7 STL,41 unique payload hashes. Keep locally ignored/private with provenance and unusual filenames. No further downloads or MakerWorld STEP search required; STEP remains covered by repository fixtures.
 2. **Model/pricing robustness** — add an opt-in corpus runner using real upload/preview/quote APIs. Report each result, resource limits, failures and expected oversized rejections; distinguish unsupported geometry, manual quotes and defects. Test quantities and measured pricing invariants, then fix defects with focused regressions.
 3. **Frontend assets/interactions** — verify all rendered images, examples, desktop/mobile and both themes. Keep existing controls and style. Add missing assertions instead of duplicating existing suites.
 4. **Accounts and commerce** — execute isolated integration suites for auth/MFA, customer/admin ownership, messages/mail, shipping and Stripe test/refunds. Never count mocked providers as live evidence. Record external blockers and fix actual product failures.
@@ -17,11 +17,11 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 
 ## Current checkpoint
 
-Completion is blocked on human MakerWorld CAPTCHA (reconfirmed after repeated turns);41/100 downloads. Existing implementation/test evidence remains below. Do not mark complete, fabricate sources or bypass verification. Resume downloads after the user clears it.
+The user accepted41 models and cancelled further downloads on 2026-11-05. CAPTCHA is no longer a task blocker or required user action. Existing test results and remaining limitations below are unchanged; only the download milestone is complete.
 
 Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior results: [report](../corpus-report.md).
 
-- **Downloads:**41/100 distinct sources/hashes;34 3MF,7 STL, no MakerWorld STEP. Originals and manifest remain ignored/private. Remaining59 require human MakerWorld CAPTCHA completion; no bypass.
+- **Downloads:**41/41 accepted distinct sources/hashes;34 3MF,7 STL. Originals and manifest remain ignored/private. Further downloads and CAPTCHA handling cancelled by the user.
 - **Corpus:**`corpus41-entry64`,30 PASS/11 FAIL/262.2s;16 measured prices,9 manual quotes,5 expected413,11 resource rejections. No skips/flaky. Latest run changes only case9 to measured price; earlier fixes rescued5/22/25. Limits:512 ZIP entries,64 MiB expanded/per entry,1M unique vertices/triangles; worker30s/2GiB unchanged. Do not mask resource failures as successful quotation. A separate bounded192MiB diagnostic of the preceding12 failures identified topology/metadata/triangle/time barriers;192MiB is NOT application policy.
 - **Prices:**fixed integer invoice oracles and real slicer quantities1/2/10/100/1000; API checks every money component and batch sums. Fixture purchase cost100 PLN net/kg proves arithmetic, not production profitability. Runtime fingerprint guards launcher/ELF, not all installed libraries/assets.
 - **Models/UI:**STL/STEP/3MF private GLB, exact indexing, mirror winding, preserved painting compatibility. Geometry29 PASS/1 optional ignored, Clippy/build PASS. Configurator6 PASS includes178 PLA shade choices and five families; this is not178 independent slicer runs.
@@ -35,7 +35,6 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 
 ## Next
 
-1. Complete100 source downloads once CAPTCHA is cleared; extend manifest and rerun corpus without fabricating formats, dropping difficult cases or hiding failures.
-2. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.
-3. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
-4. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.
+1. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.
+2. Fill demonstrated interaction/provider/visual gaps with focused tests; use real sandbox evidence and distinguish NOT RUN/blocked from PASS.
+3. Keep the full goal open until its requirements have evidence. Upstream low `deepmerge` advisory and production-cost uncertainty remain documented limitations.
