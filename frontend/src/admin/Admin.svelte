@@ -32,6 +32,7 @@
     money,
     csvCell,
     orderFromServer,
+    orderColors,
     nextStatus,
     type ServerOrder,
     type Message,
@@ -196,6 +197,8 @@
       }
       m.material = f.material_id;
       m.color = f.color_code;
+      m.materialName = f.material_name || undefined;
+      m.colorName = f.color_name || undefined;
       m.quality = f.options?.quality
         ? ({
             draft: 'Roboczy · 0,28 mm',
@@ -508,15 +511,14 @@
                         <span class="muted">/ {pieces(o)} szt.</span></strong
                       >
                       <div class="material-colors">
-                        {#each [...new Set(o.models.map((m) => m.material))] as material}<span
+                        {#each [...new Set(o.models.map((m) => m.materialName || m.material))] as material}<span
                             class="material-tag">{material}</span
-                          >{/each}{#each [...new Set(o.models.map((m) => m.color))] as color}<span
-                            class="color-label"
+                          >{/each}{#each orderColors(o.models) as color}<span class="color-label"
                             ><span
                               class="color-swatch"
-                              style:background={swatch(color)}
+                              style:background={swatch(color.code)}
                               aria-hidden="true"
-                            ></span>{color}</span
+                            ></span>{color.name}</span
                           >{/each}
                       </div></td
                     ><td
@@ -580,7 +582,9 @@
                     >
                     <h3>{o.client}</h3>
                     <p>
-                      {[...new Set(o.models.map((m) => m.material))].join(', ')} · {pieces(o)} szt.
+                      {[...new Set(o.models.map((m) => m.materialName || m.material))].join(', ')} · {pieces(
+                        o,
+                      )} szt.
                     </p>
                     <div class="production-progress">
                       <span
@@ -703,12 +707,13 @@
                   <div>
                     <strong>{m.name}</strong><small>{m.qty} szt.</small>
                     <div class="material-colors">
-                      <span class="material-tag">{m.material}</span><span class="color-label"
+                      <span class="material-tag">{m.materialName || m.material}</span><span
+                        class="color-label"
                         ><span
                           class="color-swatch"
                           style:background={swatch(m.color)}
                           aria-hidden="true"
-                        ></span>{m.color}</span
+                        ></span>{m.colorName || m.color}</span
                       >
                     </div>
                   </div>

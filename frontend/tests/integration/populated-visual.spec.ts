@@ -3,6 +3,7 @@ import { accounts, login } from './helpers';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 // Login codes and secrets are never captured. Later screenshots contain synthetic order data only.
 test.use({ screenshot: 'off', trace: 'off' });
@@ -70,9 +71,10 @@ test('populated unpaid order, private previews and chat fit both themes and view
     });
     expect(upload.status()).toBe(201);
     const model = await upload.json();
-    const catalog = await (await page.request.get('/api/catalog/materials')).json();
-    const color = catalog.materials.find((material: { id: string }) => material.id === 'GFA00')
-      .colors[0].code;
+    const catalog = await (await operator.request.get('/api/admin/materials')).json();
+    const material = catalog.materials.find((material: { id: string }) => material.id === 'GFA00');
+    const chosenColor = material.colors[0];
+    const color = chosenColor.code;
     const created = await page.request.post('/api/account/manual-quotes', {
       headers: await headers(page),
       data: {
@@ -104,6 +106,115 @@ test('populated unpaid order, private previews and chat fit both themes and view
     expect(created.status()).toBe(200);
     const { order_id: id } = await created.json();
     expect(id).toMatch(/^[a-f0-9-]{36}$/);
+    // Names belong to the quote snapshot, even after the catalog is edited.
+    const materialInput = {
+      name: material.name,
+      density_g_cm3: material.density_g_cm3,
+      cost_net_grosze_per_kg: material.cost_net_grosze_per_kg,
+      production_enabled: material.production_enabled,
+    };
+    const materialUrl = '/api/admin/materials/GFA00';
+    const colorUrl = `${materialUrl}/colors/${encodeURIComponent(color)}`;
+    const adminHeaders = await headers(operator);
+    const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+    expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
+    const sql = (query: string) =>
+      execFileSync(
+        'podman',
+        [
+          'exec',
+          process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+          'psql',
+          '-U',
+          'rapidmaker',
+          '-d',
+          database,
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-c',
+          query,
+        ],
+        { stdio: 'pipe' },
+      );
+    try {
+      expect(
+        (
+          await operator.request.put(materialUrl, {
+            headers: adminHeaders,
+            data: { ...materialInput, name: 'Renamed material for snapshot check' },
+          })
+        ).status(),
+      ).toBe(200);
+      expect(
+        (
+          await operator.request.put(colorUrl, {
+            headers: adminHeaders,
+            data: { ...chosenColor, name: 'Renamed color for snapshot check' },
+          })
+        ).status(),
+      ).toBe(200);
+      for (const [target, prefix] of [
+        [page, 'account'],
+        [operator, 'admin'],
+      ] as const) {
+        const response = await target.request.get(`/api/${prefix}/orders/${id}/files`);
+        expect(response.status()).toBe(200);
+        const data = await response.json();
+        expect(data.files).toHaveLength(1);
+        expect(data.files[0]).toMatchObject({
+          material_id: 'GFA00',
+          color_code: color,
+          material_name: material.name,
+          color_name: chosenColor.name,
+          options: { quality: 'standard', wall_loops: 3, infill_percent: 20 },
+        });
+      }
+      const file = (await (await page.request.get(`/api/account/orders/${id}/files`)).json())
+        .files[0];
+      expect(file.quote_id).toMatch(
+        /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/,
+      );
+      const hexText = (text: string) =>
+        `convert_from(decode('${Buffer.from(text).toString('hex')}','hex'),'UTF8')`;
+      try {
+        // Simulate old snapshots only in the disposable DB; never weaken the public write API.
+        sql(
+          `UPDATE quotes SET request=request-'material_name'-'color_name' WHERE id='${file.quote_id}'`,
+        );
+        const legacy = (await (await page.request.get(`/api/account/orders/${id}/files`)).json())
+          .files;
+        expect(legacy).toHaveLength(1);
+        expect(legacy[0]).toMatchObject({
+          material_name: 'Renamed material for snapshot check',
+          color_name: 'Renamed color for snapshot check',
+        });
+        sql(
+          `UPDATE quotes SET request=request||jsonb_build_object('material_id','missing-test-material','color_code','missing-test-color') WHERE id='${file.quote_id}'`,
+        );
+        const missing = (await (await page.request.get(`/api/account/orders/${id}/files`)).json())
+          .files;
+        expect(missing).toHaveLength(1);
+        expect(missing[0]).toMatchObject({
+          material_id: 'missing-test-material',
+          color_code: 'missing-test-color',
+          material_name: null,
+          color_name: null,
+          available: true,
+        });
+        expect((await page.request.get(missing[0].preview_url)).status()).toBe(200);
+      } finally {
+        sql(
+          `UPDATE quotes SET request=request||jsonb_build_object('material_id','GFA00','color_code',${hexText(color)},'material_name',${hexText(material.name)},'color_name',${hexText(chosenColor.name)}) WHERE id='${file.quote_id}'`,
+        );
+      }
+    } finally {
+      // Always restore both records, including when a regression assertion fails.
+      const restored = await Promise.all([
+        operator.request.put(materialUrl, { headers: adminHeaders, data: materialInput }),
+        operator.request.put(colorUrl, { headers: adminHeaders, data: chosenColor }),
+      ]);
+      expect(restored.map((response) => response.status())).toEqual([200, 200]);
+    }
     const number = `RM-${id.slice(0, 8).toUpperCase()}`;
     const clientMessage = 'Proszę przygotować trzy jednakowe części.';
     const reply = 'Sprawdzimy plik i prześlemy indywidualną wycenę.';
@@ -182,6 +293,11 @@ test('populated unpaid order, private previews and chat fit both themes and view
           type: 'status-contrast',
           description: `${label}: ${contrast.toFixed(2)}`,
         });
+        await expect(
+          page
+            .locator('article.model')
+            .getByText(`${material.name} · ${chosenColor.name}`, { exact: true }),
+        ).toBeVisible();
         await preview(page, `${label}-client-detail`);
         await capture(page, `${label}-client-detail`);
         const chat = page.getByRole('region', { name: 'Rozmowa o zamówieniu', exact: true });
@@ -206,6 +322,8 @@ test('populated unpaid order, private previews and chat fit both themes and view
           exact: true,
         });
         await expect(drawer).toBeVisible();
+        await expect(drawer.locator('.material-tag')).toHaveText(material.name);
+        await expect(drawer.locator('.color-label')).toHaveText(chosenColor.name);
         const rect = await drawer.boundingBox();
         expect(rect!.x).toBeGreaterThanOrEqual(0);
         expect(rect!.x + rect!.width).toBeLessThanOrEqual(width + 1);
@@ -237,6 +355,11 @@ test('populated unpaid order, private previews and chat fit both themes and view
           operator.getByRole('heading', { level: 1, name: number, exact: true }),
         ).toBeVisible();
         await expect(operator.getByLabel('Całość brutto (zł)')).toBeEnabled();
+        await expect(
+          operator
+            .locator('article.model')
+            .getByText(`${material.name} · ${chosenColor.name}`, { exact: true }),
+        ).toBeVisible();
         await preview(operator, `${label}-admin-detail`);
         await capture(operator, `${label}-admin-detail`);
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);

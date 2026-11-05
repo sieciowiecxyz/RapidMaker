@@ -85,7 +85,18 @@ impl Storage {
             let q = uuid::Uuid::new_v4().to_string();
             let filename: String = model.try_get("filename")?;
             let dimensions: Vec<f64> = model.try_get("dimensions_mm")?;
-            let snapshot = json!({"kind":"manual","owner_hash":owner,"user_id":user,"model_id":model_id,"model_sha256":model.try_get::<String,_>("sha256")?,"expires_at":until,"dimensions_mm":dimensions,"quantity":quantity,"material_id":part["material_id"],"color_code":part["requested_color"].as_str().map_or(&part["color_code"], |_| &part["requested_color"]),"requested_color":part["requested_color"],"options":part["options"]});
+            let names: Option<(String, Option<String>)> = sqlx::query_as(
+                "SELECT m.name,c.name FROM catalog_materials m LEFT JOIN catalog_colors c ON c.material_id=m.id AND c.code=$2 WHERE m.id=$1",
+            )
+            .bind(part["material_id"].as_str())
+            .bind(part["color_code"].as_str())
+            .fetch_optional(&mut *tx)
+            .await?;
+            let material_name = names.as_ref().map(|(name, _)| name.as_str());
+            let color_name = part["requested_color"]
+                .as_str()
+                .or_else(|| names.as_ref().and_then(|(_, name)| name.as_deref()));
+            let snapshot = json!({"kind":"manual","owner_hash":owner,"user_id":user,"model_id":model_id,"model_sha256":model.try_get::<String,_>("sha256")?,"expires_at":until,"dimensions_mm":dimensions,"quantity":quantity,"material_id":part["material_id"],"color_code":part["requested_color"].as_str().map_or(&part["color_code"], |_| &part["requested_color"]),"requested_color":part["requested_color"],"material_name":material_name,"color_name":color_name,"options":part["options"]});
             sqlx::query("INSERT INTO quotes(id,request,result,user_id) VALUES($1,$2,$3,$4)")
                 .bind(&q)
                 .bind(snapshot)

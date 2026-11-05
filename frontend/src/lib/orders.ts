@@ -39,6 +39,8 @@ type FileRecord = {
   preview_url?: string;
   material_id: string;
   color_code: string;
+  material_name?: string | null;
+  color_name?: string | null;
   quantity: number;
   dimensions_mm: [number, number, number];
   options?: {
@@ -120,6 +122,8 @@ function model(line: RawOrder['lines'][number], files: FileRecord[]): PrintModel
   return {
     id: line.model_id,
     name,
+    materialName: file?.material_name || undefined,
+    colorName: file?.color_name || undefined,
     dimensions: file?.dimensions_mm?.join(' × ') || 'Brak danych',
     weight: 'Brak danych',
     format: /\.3mf$/i.test(name) ? '3MF' : /\.(step|stp)$/i.test(name) ? 'STEP' : 'STL',

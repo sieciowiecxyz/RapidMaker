@@ -91,6 +91,8 @@ test('five storefront families have real profiles; requested swatches remain man
   const files = await (await page.request.get(`/api/account/orders/${id}/files`)).json();
   expect(files.files[0].material_id).toBe('GFG02');
   expect(files.files[0].color_code).toBe(body.parts[0].requested_color);
+  expect(files.files[0].color_name).toBe(body.parts[0].requested_color);
+  expect(files.files[0].material_name).toContain('PETG');
   const other = await browser.newContext();
   try {
     expect((await other.request.get(`/api/account/orders/${id}`)).status()).toBe(401);

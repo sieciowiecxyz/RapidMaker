@@ -18,6 +18,8 @@ export type Model = {
   name: string;
   material: string;
   color: string;
+  materialName?: string;
+  colorName?: string;
   qty: number;
   quality: string;
   strength: string;
@@ -25,6 +27,14 @@ export type Model = {
   amount: number | null;
   done: number;
 };
+export function orderColors(models: readonly Pick<Model, 'color' | 'colorName'>[]) {
+  const colors = new Map<string, { code: string; name: string }>();
+  for (const model of models) {
+    const color = { code: model.color, name: model.colorName || model.color };
+    colors.set(JSON.stringify([color.code, color.name]), color);
+  }
+  return [...colors.values()];
+}
 export type Message = {
   id: string;
   sequence: number;
@@ -40,6 +50,8 @@ export type OrderFile = {
   preview_url?: string;
   material_id: string;
   color_code: string;
+  material_name?: string | null;
+  color_name?: string | null;
   options?: { quality?: string; wall_loops?: number; infill_percent?: number };
 };
 export type Order = {

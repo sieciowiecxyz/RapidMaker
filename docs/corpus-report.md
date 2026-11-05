@@ -80,6 +80,12 @@ Ten wcześniejszy zestaw obejmuje puste panele fixture i kontrolę `<img>`/font�
 
 Naprawiono słaby kontrast etykiety „Ręczna wycena”: przed zmianą1,32:1, po zmianie6,66:1 w jasnym i13,38:1 w ciemnym motywie. Jeden token ostrzeżenia w istniejącym motywie; bez zmiany układu. Build frontend0 błędów/ostrzeżeń. Sol xhigh: bez blokera w zakresie poprawki; oceny7–9/10. Kontrola kontrastu dotyczy tej etykiety, nie całej strony. Rejestracja passkey używa wirtualnego uwierzytelniacza Chromium; fizyczny klucz pozostaje niesprawdzony.
 
+## Czytelne nazwy materiałów i kolorów
+
+Szczegóły klienta i operatora pokazują np. „Bambu PLA Basic · Jade White”. Nowe snapshoty zachowują nazwy mimo późniejszej edycji katalogu. ID/opcje/kwoty/fingerprint pozostają niezmienione. Starsze snapshoty pobierają bieżące etykiety katalogu; brak profilu/koloru pozostawia plik i surowe ID. Własny opis koloru pozostaje dokładnym tekstem klienta. Poprawiono też scalanie różnych historycznych nazw jednego kodu w liście admina.
+
+`order-labels-current.json`:**3 PASS27s** — ręczny snapshot po zmianie katalogu, symulowany stary rekord i brak katalogu, prywatny GLB, własny opis koloru, automatyczne snapshoty oraz rachunek1/10/1000 sztuk. Zmiany fixture cofane w finally, wyłącznie w osobnej bazie. Test pomocnika kolorów i CSV:**2 PASS**. Obejrzano nowy widok klienta390px/jasny i admina1440px/ciemny; bez zmiany CSS/układu. Build Rust i frontend PASS (svelte-check0/0; wcześniejsze ostrzeżenie CXX pozostaje). Sol xhigh: wcześniejsza uwaga zamknięta, brak kolejnych usterek w zakresie; pieniądze10/10, pozostałe8–9/10. Pełne28 testów poprzedzają tę zmianę; po niej sprawdzono wskazany zakres. Historycznej nazwy brakującej w starym snapshotcie nie da się odtworzyć po zmianie katalogu.
+
 ## Zatrzymywanie testów
 
 Przerwany SIGTERM przebieg28 nie został zaliczony jako sukces. Naprawiono zbyt krótki budżet nadrzędnego sprzątania, ponowne przerwanie cleanupu i pozostawianie starego summary. Tworzenie bazy ma128-bitową nazwę; cleanup obsługuje nieznany wynik CREATE i błąd kopiowania logu.
@@ -100,6 +106,6 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 
 - Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA wymagającą ręcznego rozwiązania. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów.
-- Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, opłacone zamówienia/dialogi we wszystkich stanach, wszystkie grafiki/SVG i większe obciążenie. Widoki zamówień nadal pokazują techniczne identyfikatory materiału/koloru; warto nadać im czytelne etykiety. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
+- Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, opłacone zamówienia/dialogi we wszystkich stanach, wszystkie grafiki/SVG i większe obciążenie. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.

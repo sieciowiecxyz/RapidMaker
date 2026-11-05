@@ -174,7 +174,10 @@
             <div>
               <h3>{model.name}</h3>
               <p class="muted">{model.dimensions} · {model.weight}</p>
-              <p>{model.options.materialId.toUpperCase()} · {model.options.color}</p>
+              <p>
+                {model.materialName || model.options.materialId.toUpperCase()} · {model.colorName ||
+                  model.options.color}
+              </p>
               <p class="muted">{model.options.quantity} szt.</p>
               <details class="configuration">
                 <summary>Parametry wydruku</summary>

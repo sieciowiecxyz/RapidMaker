@@ -174,6 +174,7 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
     let request = json!({"owner_hash":job.owner_hash,"user_id":model.record.user_id,
         "model_id":job.model_id,"expires_at":expires_at,"dimensions_mm":model.record.dimensions_mm,
         "model_sha256":input.model_sha256,"material_id":input.material_id,"color_code":input.color_code,
+        "material_name":material.name,"color_name":material.colors.iter().find(|c| c.code == input.color_code).map(|c| &c.name),
         "quantity":input.options.quantity,"slicer_profile_version":input.slicer_profile_version,
         "slicer_runtime_sha256":input.slicer_runtime_sha256,
         "options":input.options,"purchase_net_grosze_per_kg":input.purchase_net_grosze_per_kg,

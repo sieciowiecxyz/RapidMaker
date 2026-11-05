@@ -112,6 +112,15 @@ test('real batch prices follow measured plates and fixture costs for 1, 10 and 1
       const id = job.result.id;
       const digest = sql(`SELECT request->>'slicer_runtime_sha256' FROM quotes WHERE id='${id}'`);
       expect(digest).toMatch(/^[a-f0-9]{64}$/);
+      const names = JSON.parse(
+        sql(
+          `SELECT jsonb_build_array(q.request->>'material_name',q.request->>'color_name',m.name,c.name) FROM quotes q JOIN catalog_materials m ON m.id=q.request->>'material_id' JOIN catalog_colors c ON c.material_id=m.id AND c.code=q.request->>'color_code' WHERE q.id='${id}'`,
+        ),
+      );
+      expect(names.slice(0, 2)).toEqual(names.slice(2));
+      expect(names.every((name: unknown) => typeof name === 'string' && name.length > 0)).toBe(
+        true,
+      );
       const checkout = () =>
         request.post('/api/checkout/quote', {
           headers,

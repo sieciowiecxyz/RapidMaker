@@ -25,6 +25,8 @@ export type QuoteOptions = {
 };
 export type DemoModel = { name: string; dimensions: string; weight: string };
 export type PrintModel = DemoModel & {
+  materialName?: string;
+  colorName?: string;
   colorPreference?: string;
   id: string;
   format: 'STL' | 'STEP' | '3MF';

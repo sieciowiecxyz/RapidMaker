@@ -40,3 +40,7 @@ Tło: szerokie 35 konturów prowadzone przez nagłówek, podgląd, główną akc
 Implementacja: `src/storefront/components/FlowBackground.svelte`, `coral.css`, `print-background.css`. Źródło akceptacji: lokalny podgląd 127.0.0.1:5173. Zmiana dotyczy wyglądu, bez zastępowania nowszych adapterów/API z main.
 
 Poprawka PR #5 (2026-11-04): SVG wypełnia wysokość treści CSS `height:100%`; pomiar tła nie powiększa mierzonej strony. Regresja `flow-background.spec.ts` sprawdza skrócenie strony po przejściu do formularza, powrót do konfiguratora, jasny motyw i szerokość na desktop/mobile. Wynik: 2/2 PASS (1440 i 390 px), svelte-check 0 błędów/ostrzeżeń i Vite build PASS. Ceny i uploady są w tym teście stubowane; nie potwierdza on płatności ani wyceny backendu.
+
+## Nazwy w zamówieniach
+
+Prywatne `/api/{account|admin}/orders/{id}/files` zwraca opcjonalne `material_name` i `color_name`. Nowe wyceny automatyczne i ręczne zapisują nazwy z katalogu w snapshotach; `requested_color` zachowuje dokładny opis klienta. Starsze rekordy korzystają z bieżących nazw katalogu, a przy ich braku UI pokazuje ID. Brak katalogu nie usuwa pliku z odpowiedzi. Nazwy służą wyłącznie do wyświetlania: surowe ID, ustawienia, ceny i fingerprint slicera pozostają bez zmian. Lista kolorów grupuje parę kod/nazwa; tekst nazwy nie trafia do CSS ani HTML.
