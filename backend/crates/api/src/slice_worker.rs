@@ -115,7 +115,9 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
     let input: SliceInput = serde_json::from_value(job.payload.clone()).map_err(|_| config)?;
     input.rates.validate().map_err(|_| config)?;
     input.options.validate().map_err(|_| config)?;
-    if input.slicer_profile_version != rapidmaker_slicer::PROFILE_VERSION {
+    if input.slicer_profile_version != rapidmaker_slicer::PROFILE_VERSION
+        || input.slicer_runtime_sha256 != rapidmaker_slicer::runtime_sha256().map_err(|_| config)?
+    {
         return Err(config);
     }
     let record = db
@@ -173,6 +175,7 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
         "model_id":job.model_id,"expires_at":expires_at,"dimensions_mm":model.record.dimensions_mm,
         "model_sha256":input.model_sha256,"material_id":input.material_id,"color_code":input.color_code,
         "quantity":input.options.quantity,"slicer_profile_version":input.slicer_profile_version,
+        "slicer_runtime_sha256":input.slicer_runtime_sha256,
         "options":input.options,"purchase_net_grosze_per_kg":input.purchase_net_grosze_per_kg,
         "rates":input.rates,"profiles_sha256":input.profiles_sha256});
     let result = json!({"id":job.id,"model_id":job.model_id,"expires_at":expires_at,

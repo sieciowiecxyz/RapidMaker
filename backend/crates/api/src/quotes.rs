@@ -154,6 +154,7 @@ pub(super) struct SliceInput {
     pub rates: Rates,
     pub profiles_sha256: Value,
     pub slicer_profile_version: String,
+    pub slicer_runtime_sha256: String,
 }
 #[utoipa::path(operation_id = "quotes_estimate", post, path = "/api/quotes/estimate", tag = "Wycena", request_body = EstimateRequest,
     responses((status = 202, description = "Trwałe zadanie: id, status, poll_url i opcjonalny wynik", body = Value),
@@ -212,6 +213,9 @@ async fn estimate(
         rates,
         profiles_sha256: material.source["profiles_sha256"].clone(),
         slicer_profile_version: rapidmaker_slicer::PROFILE_VERSION.into(),
+        slicer_runtime_sha256: rapidmaker_slicer::runtime_sha256()
+            .map_err(|_| unavailable())?
+            .into(),
     })
     .map_err(|_| unavailable())?;
     let fingerprint = format!(
@@ -279,6 +283,33 @@ fn public_job(job: SlicerJob) -> Value {
 mod tests {
     use super::*;
     use rapidmaker_storage::Color;
+    #[test]
+    fn persisted_slice_requires_runtime_identity_and_fingerprints_it() {
+        let mut payload = json!({
+            "model_sha256":"model", "material_id":"GFA00", "color_code":"known",
+            "options":Options::default(), "purchase_net_grosze_per_kg":8000,
+            "rates":{"version":"fixture", "setup_grosze":1200, "handling_per_plate_grosze":200,
+                "machine_per_hour_grosze":1000, "energy_per_kwh_grosze":120, "printer_watts":200,
+                "loss_bps":500, "margin_bps":3000, "vat_bps":2300, "minimum_net_grosze":0},
+            "profiles_sha256":"profiles", "slicer_profile_version":rapidmaker_slicer::PROFILE_VERSION,
+            "slicer_runtime_sha256":"runtime-a"
+        });
+        let input: SliceInput = serde_json::from_value(payload.clone()).unwrap();
+        assert_eq!(input.slicer_runtime_sha256, "runtime-a");
+        let first = Sha256::digest(serde_json::to_vec(&payload).unwrap());
+        payload["slicer_runtime_sha256"] = json!("runtime-b");
+        assert_ne!(first, Sha256::digest(serde_json::to_vec(&payload).unwrap()));
+        payload
+            .as_object_mut()
+            .unwrap()
+            .remove("slicer_runtime_sha256");
+        let error = serde_json::from_value::<SliceInput>(payload).err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("missing field `slicer_runtime_sha256`")
+        );
+    }
     fn material(id: &str) -> Material {
         Material {
             id: id.into(),

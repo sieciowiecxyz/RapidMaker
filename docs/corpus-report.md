@@ -32,6 +32,7 @@ Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 
 | `auth-email-current.json` | 1 PASS: prawdziwy iCloud do void, hasło/email, wirtualny passkey/email, admin TOTP i klient → admin 403 |
 | `commerce-current.json` | 5 PASS: Stripe test, dostawa sandbox, panele/chat/pliki, częściowy/pełny/nadmierny zwrot, cennik |
 | `checkout-final-current.json` | 3 PASS: dokładna kwota oferty/przycisku/płatności, odbiór/paczkomat/kurier; obejrzane podsumowania desktop/mobile |
+| `manual-email-chat-current.json` | 1 PASS: ręczna wycena w UI, publikacja admina, prywatny podgląd, email iCloud, Stripe test, warunki zakupu i odpowiedź email → chat |
 | Test `assets.spec.ts` | 2 PASS: obrazki `<img>` strony głównej i oba motywy; głównie logo, nie wszystkie grafiki serwisu |
 
 To izolowane bazy i jawne koszty testowe. Nie dowodzi to produkcyjnej rentowności, fizycznego passkey, wszystkich przewoźników ani nadania przesyłki. Raportów zawierających dane formularzy nie publikujemy.
@@ -52,10 +53,16 @@ Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 
 
 `configurator-current.json`: **6 PASS** (130 s): nawigacja/motywy, pięć rodzin i 178 kolorów PLA, ustawienia, rzeczywiste wyceny, sterowanie WebGL (powiększenie potwierdzone zmianą obrazu), zaawansowane wartości i powrót, błędy połączenia oraz wybór/usuwanie STL/3MF. Awarię sieci wstrzyknięto celowo; wyceny pochodziły z rzeczywistego API. Kolory sprawdzono w UI/stanie, nie jako 178 osobnych wycen/pomiarów pigmentu. To nadal nie jest pełna wizualna kontrola wszystkich ekranów.
 
+## Tożsamość slicera
+
+SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji i snapshotu. Worker sprawdza tożsamość, checkout odrzuca brakujący/niezgodny hash. Zmiana plików wymaga restartu API/workerów; granice mechanizmu opisuje [kolejka](slicer-queue.md).
+
+Świeży build PASS (pozostaje wcześniejsze ostrzeżenie wygenerowanego mostka C++). `runtime-fingerprint-current.json`: **1 PASS / 8,3 s** — świeży automatyczny checkout, brakujący/zmieniony hash → 409, przywrócony → 200, rzeczywiste partie 1/10/1000 i rachunek. Zmiany snapshotu wyłącznie w izolowanej bazie testowej. Test nie podmienia instalacji Bambu. Przegląd Sol xhigh: bez blokera w tym zakresie; współbieżność 7/10, dowody 8/10, zakres wizualny bez zmian 10/10, pozostałe kategorie 8–9/10. Nie oznacza to zakończenia całego celu.
+
 ## Otwarte
 
-- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA „Przesuń, aby ukończyć układankę”. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
+- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA (obecnie „Wybierz w tej kolejności”). Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów; trwała procedura odtworzenia korpusu.
-- Fingerprint rzeczywistego runtime Bambu, rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
+- Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.

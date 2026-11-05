@@ -42,3 +42,9 @@ Build Rust, fmt, Clippy all-targets, 16 testów jednostkowych API/storage oraz s
 ## Przygotowanie do slicera
 
 Nowe STL mają normalne zgodne z kolejnością wierzchołków. Starsze uploady są poprawiane w prywatnej kopii slicera: kontrola binarnego formatu/rozmiaru/liczb, normalne i przesunięcie na Z=0. Oryginał i GLB nie zmieniają się. Bambu wykonuje `--orient 1 --ensure-on-bed --arrange 1 --allow-rotations`; ograniczenia stołu i finalny wynik slicera pozostają wiążące. Zmiana profilu `orient1-fit2` unieważnia poprzednie wyceny.
+
+## Tożsamość runtime
+
+Zadanie i snapshot wyceny zawierają SHA-256 plików `AppRun` oraz `bin/bambu-studio` z `/opt/bambustudio-bin`. Hash wchodzi do klucza deduplikacji; worker i checkout odrzucają inną lub brakującą tożsamość. Starsze wyceny wymagają przeliczenia. Hash jest liczony raz na proces, metadane sprawdzane przy użyciu oraz przed/po slicingu.
+
+Po wymianie tych plików zrestartuj API i osobne workery. Wykryta zmiana blokuje kolejne kontrole w procesie do restartu, także po przywróceniu pliku. Kontrole już w toku nie są atomową blokadą wdrożenia. Mechanizm nie obejmuje bibliotek współdzielonych/pozostałych zasobów i nie zastępuje niezmiennego wdrożenia ani ochrony przed celową podmianą podczas wykonania.

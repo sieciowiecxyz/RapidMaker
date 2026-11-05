@@ -23,6 +23,8 @@ After each implementation step, request a GPT-6-Sol xhigh review across correctn
 - Real auth/security/mail, checkout/shipping sandbox, partial/full refunds and selected desktop/mobile reviewed; report records exact scope. No production-profitability or all-assets claim.
 - Geometry21 PASS; slicer7 PASS plus native real model; build0errors/0warnings. Audits:Rust0 vulnerabilities/warnings; one underlying low development deepmerge advisory without upstream patch.
 - Sol xhigh reviews identify no blocker for targeted fixes but remain below10/10 for full scope. Keep full goal active.
-- Next: complete downloads when available, resolve corpus acceptance/policy for resource-bound models without hiding failures, fingerprint runtime, verify production cost inputs, full asset and remaining E2E coverage.
+- Next: complete downloads when available, resolve corpus acceptance/policy for resource-bound models without hiding failures, verify production cost inputs, full asset and remaining E2E coverage.
 - Pricing checkpoint:6 Rust tests PASS with five fixed invoice oracles; real slicer q1/2/10/100/1000 physical and batch-aggregation checks PASS. API q1/10/1000 full-component oracle1 PASS7.9s. This is arithmetic under explicit fixture costs, not proven production profitability.
 - Configurator6 PASS130s (real local API, injected network faults only), including178 PLA shades/UI state, five families, advanced controls, desktop/mobile WebGL zoom pixels. Sol reviews preserve limits of evidence; full asset/auth/concurrency scope remains separate.
+
+- Runtime checkpoint: launcher+ELF SHA-256 persisted/deduplicated and checked by worker/cart. Fresh build and API regression1 PASS8.3s (fresh/missing/wrong/restored identity plus batch money oracles). Shared libraries/assets and in-flight update races remain outside this guard; restart after changes. Manual quote/iCloud/Stripe/email→chat journey1 PASS176.7s.

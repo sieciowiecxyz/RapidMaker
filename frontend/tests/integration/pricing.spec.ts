@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const fixture = (name: string) => resolve('../backend/crates/geometry/tests/fixtures', name);
@@ -85,6 +86,56 @@ test('real batch prices follow measured plates and fixture costs for 1, 10 and 1
       )
       .toMatch(/^(succeeded|failed)$/);
     expect(job.status, job.message ?? `Slicer batch quantity=${quantity}`).toBe('succeeded');
+    if (quantity === 1) {
+      const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+      expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
+      expect(job.result.id).toMatch(/^[a-f0-9-]{36}$/);
+      const sql = (query: string) =>
+        execFileSync(
+          'podman',
+          [
+            'exec',
+            process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+            'psql',
+            '-U',
+            'rapidmaker',
+            '-d',
+            database,
+            '-At',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-c',
+            query,
+          ],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        ).trim();
+      const id = job.result.id;
+      const digest = sql(`SELECT request->>'slicer_runtime_sha256' FROM quotes WHERE id='${id}'`);
+      expect(digest).toMatch(/^[a-f0-9]{64}$/);
+      const checkout = () =>
+        request.post('/api/checkout/quote', {
+          headers,
+          data: {
+            parts: [{ id: model.id, analysis_id: model.id, quantity, quote_id: id }],
+            delivery: 'pickup',
+          },
+        });
+      const fresh = await checkout();
+      expect(fresh.status()).toBe(200);
+      expect((await fresh.json()).print_grosze).toBeGreaterThan(0);
+      // Only alter the disposable test database, never the installed slicer or developer data.
+      for (const expression of [
+        "request - 'slicer_runtime_sha256'",
+        `jsonb_set(request, '{slicer_runtime_sha256}', '"${'0'.repeat(64)}"')`,
+      ]) {
+        sql(`UPDATE quotes SET request=${expression} WHERE id='${id}'`);
+        expect((await checkout()).status()).toBe(409);
+      }
+      sql(
+        `UPDATE quotes SET request=jsonb_set(request, '{slicer_runtime_sha256}', '"${digest}"') WHERE id='${id}'`,
+      );
+      expect((await checkout()).status()).toBe(200);
+    }
     const { measurement, price, plates } = job.result;
     expect(job.result).toMatchObject({ quantity, currency: 'PLN', options, model_id: model.id });
     expect(measurement.quantity).toBe(quantity);
