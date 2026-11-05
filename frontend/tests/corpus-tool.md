@@ -23,8 +23,8 @@ From the repository root, with the ignored local corpus prepared:
 
 ```sh
 E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" \
-E2E_REPORT_NAME=corpus-ui-final \
-python frontend/tests/run-integration.py corpus-ui.spec.ts showcase.spec.ts
+E2E_REPORT_NAME=corpus-ui-all41 \
+python frontend/tests/run-integration.py corpus-ui.spec.ts
 ```
 
-Requires cases5,9,22,25 exactly once, with matching paths/hashes and original files within the25 MiB UI limit. Uses the actual form, private GLB, large rendered meshes/rotation, two widths/themes, server-price display and explicit size-based manual handling. It is opt-in; normal `core` does not silently read third-party models. Pixel probes are not golden image baselines. The runner fixes the owned browser locale to UTF-8 so Unicode paths reach Chromium's FileList.
+Requires the41 accepted unique cases, including5/9/22/25, with matching paths/hashes. Four deep tests retain pricing/manual/privacy checks. Every other file exercises actual form rendering or explicit size/resource rejection. Rendered models get four normal scene captures and pixel/interactivity checks (rotation in4 deep cases, zoom in21 others). A rejected file is not counted as a successful quote; the API pipeline report remains separate. Oversized input must show the25 MiB form limit without an upload POST. Resource responses are checked against a repeated identical owner HTTP request when Chromium cannot retain the browser response body, then matched to the actual settled UI error and disabled checkout after print settings are completed. It is opt-in; normal `core` does not silently read third-party models. Pixel probes are not golden image baselines. The runner fixes the owned browser locale to UTF-8 so Unicode paths reach Chromium's FileList.

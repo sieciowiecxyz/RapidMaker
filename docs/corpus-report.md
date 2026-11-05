@@ -156,3 +156,19 @@ Pierwszy przebieg2 PASS/2 FAIL ujawnił brak UTF-8 w ograniczonym środowisku Ch
 Na źródle `3afb0b8` obejrzano komplet36 scen z `corpus-ui-final` w czterech zestawieniach (1440/390px × jasny/ciemny); lista źródeł i zestawienia: prywatne `frontend/tests/artifacts/visual-overview/sources.json` i zestawienia `models-*.png` w tym samym katalogu. Każde źródło występuje raz. Wcześniej cztery reprezentatywne ujęcia obejrzano osobno. Zestawienia są przeskalowane do przeglądu kompozycji, nie zastępują kontroli każdego piksela ani wszystkich stron serwisu. Nie stwierdzono nowej usterki układu w tym zakresie. Nie zmieniano oryginalnych zrzutów ani kodu produktu i nie uruchamiano ponownie testów.
 
 Historyczną blokadę CAPTCHA zamknięto zmianą zakresu: użytkownik zaakceptował41 modeli i zrezygnował z dalszego pobierania.11 odrzuceń zasobowych i oceny poniżej10/10 pozostają jawne; zamknięcie pobierania nie zmienia wyników testów ani nie oznacza ukończenia pozostałych prac. Dalsze dopuszczanie dużych plików wymaga oceny budżetu/polityki, nie pomijania walidacji.
+
+## Wszystkie41 plików przez formularz
+
+`corpus-ui-all41-final.json`: **41 PASS/235,0s**, bez pominięć/flaky. To test obsługi formularza, nie41 poprawnych wycen:
+
+| Obserwowane zachowanie UI | Liczba |
+| --- | ---: |
+| Rzeczywisty podgląd po uploadzie | 25 |
+| Komunikat o limicie backendu | 9 |
+| Odrzucenie rozmiaru przez formularz25 MiB, bez POST | 7 |
+
+Wszystkie25 podglądów: metadane właściciela, jego GLB, ARIA/nazwa, trójkąty, niepuste piksele, obrót w4 głębokich przypadkach i zoom w21 pozostałych, oba motywy i rozmiary1440/390.100 normalnych ujęć obejrzano jako cztery przeskalowane zestawienia; lista źródeł w prywatnym `frontend/tests/artifacts/visual-all41/sources.json`. To przegląd kompozycji, nie każdego piksela. Cztery dotychczasowe głębokie przypadki zachowują kontrolę dostępu, dokładnej kwoty serwera w UI i powodu wyceny ręcznej.
+
+Pierwszy przebieg30 PASS/11 FAIL ujawnił ograniczenia testu: Chromium usuwał odpowiedzi dużych POST z cache diagnostycznego; rozproszone części2/18 miały widoczne5/58 pikseli, poniżej arbitralnego progu60. Kod/status odrzucenia sprawdza teraz ponowne wysłanie tych samych bajtów klientem HTTP właściciela i porównanie z komunikatem widocznym w formularzu. Nie jest to bezpośredni odczyt kodu z pierwszej odpowiedzi przeglądarki. Dla rzadkich geometrii wystarczy niepusty obraz, dodatkowo potwierdzony rzeczywistym GLB, trójkątami i zmianą po zoomie; nie deklarujemy minimalnej powierzchni na ekranie.
+
+Po ostatnim wzmocnieniu asercji `corpus-ui-rejections-settled.json`: **9 PASS/5,4s** — komplet ustawień, zakończone przeliczanie, odpowiadający błąd, brak ceny i wyłączone zamówienie. Pełne41 wykonano przed tym wzmocnieniem, a potem sprawdzono zmienione9 przypadków. Nie zmieniono kodu produktu, limitów ani oczekiwań API: osobny `corpus41-entry64` nadal ma30 PASS/11 FAIL. Oczekujemy decyzji użytkownika o dalszym traktowaniu tych ograniczeń.
