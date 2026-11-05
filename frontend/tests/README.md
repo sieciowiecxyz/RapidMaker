@@ -4,7 +4,7 @@ Pełny zestaw: `npm --prefix frontend run test:all`. Pierwszy krok buduje Rust i
 
 | Grupa | Komenda po buildzie | Co naprawdę sprawdza |
 | --- | --- | --- |
-| core | `python frontend/tests/run-all.py --group core --no-build` | Prawdziwe API/DB/parser/slicer, wszystkie opcje UI, modele, granice, ustawienia bezpieczeństwa; bez dostawców |
+| core | `python frontend/tests/run-all.py --group core --no-build` | Prawdziwe API/DB/parser/slicer, konfigurator, modele, współbieżne wyceny, motywy/zasoby i bezpieczeństwo; bez dostawców |
 | sandbox | `python frontend/tests/run-all.py --group sandbox --no-build` | Stripe test, Furgonetka sandbox, kurier/paczkomaty, panele/refundy/logistyka, porzucona płatność |
 | email | `python frontend/tests/run-all.py --group email --no-build` | Hasło/passkey + email, admin TOTP, oferta → płatność → warunki/email → odpowiedź chat |
 | registration | `python frontend/tests/run-all.py --group registration --no-build` | Osobne bazy dla pierwszego hasła i pierwszego passkey, prawdziwe potwierdzenie emaila |
@@ -14,7 +14,7 @@ Runner tworzy i usuwa wyłącznie własną bazę rapidmaker_test_browser_*, plik
 
 Raporty JSON, screeny i diagnostyka są ignorowane przez Git i prywatne w tests/artifacts (0700; nowe pliki 0600). Nie publikuj surowych artefaktów: błędy narzędzi mogą zawierać stan formularza. Formularze z kodami/kluczami/kartą nie zapisują trace ani screenshotów; wybrane podsumowania i panele z syntetycznymi danymi mają prywatne zrzuty. Automatyczna kopia DOM wyłączona. Zrzuty/diagnostyka mają osobne katalogi grup w artifacts/integration, więc kolejna grupa nie usuwa poprzedniej. Podsumowanie grup: tests/artifacts/summary.json; opis pokrycia i wyników: docs/E2E-REPORT.md. Kod wyjścia: 0 = sprawdzone grupy bez ograniczeń, 1 = błąd, 2 = pominięcie lub jawna blokada dostawcy. Zaznaczenie provider-blocked nie jest potwierdzeniem wykonania podjazdu.
 
-Dla konkretnej regresji: `python frontend/tests/run-integration.py --local-accounts security.spec.ts`, albo `--sandbox --client-totp panels.spec.ts`. Emailowy auth wymaga `--sandbox auth.spec.ts`; rejestracja `--sandbox --registration registration.spec.ts` (E2E_REGISTRATION_METHOD=password/passkey). `--local-accounts` nie ładuje sekretów dostawców. Cennik i dopuszczenie trzech rodzin materiałów w fixture dotyczą wyłącznie nowej bazy testowej.
+Dla konkretnej regresji: `python frontend/tests/run-integration.py --local-accounts security.spec.ts`, albo `--sandbox --client-totp panels.spec.ts`. Emailowy auth wymaga `--sandbox auth.spec.ts`; rejestracja `--sandbox --registration registration.spec.ts` (E2E_REGISTRATION_METHOD=password/passkey). `--local-accounts` nie ładuje sekretów dostawców. Cennik i dopuszczenie profili w fixture dotyczą wyłącznie nowej bazy testowej. Negatywny test TOTP ma osobne konto, aby wcześniejsze logowanie nie zużyło jego kodu.
 
 Inwentaryzacja: `node frontend/tests/inventory-controls.mjs > docs/e2e-controls.md`. Lista szablonów nie jest wynikiem testu ani obietnicą wszystkich kombinacji. Wartości dynamiczne i wyłączone funkcje są opisane w docs/e2e-*-inventory.md. Usunięto stare flows.spec.ts i shipping.spec.ts zależne od nieistniejącego logowania demonstracyjnego; ich aktualne zachowania zastępują realne configurator/models/boundaries/checkout/shipping-checkout/panels/journey oraz kontrakty operations. Nie przywracamy fikcyjnych danych, żeby stare scenariusze przechodziły.
 

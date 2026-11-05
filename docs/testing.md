@@ -74,3 +74,7 @@ Rust: 27865 → 28140 (+275) linii kodu w backend/crates, bez pustych/komentarzy
 ## Motyw i zasoby publicznych widoków/paneli
 
 Po buildzie frontendu: `python frontend/tests/run-integration.py --local-accounts public-visual.spec.ts`. Bez Stripe/iCloud/Furgonetki; sesje i MFA z lokalnego API, osobna baza. Sprawdza14 wariantów tras w dwóch motywach i szerokościach, zapisuje56 prywatnych zrzutów. Zakres i ograniczenia: [raport](corpus-report.md#spójność-motywu-i-widoków).
+
+## Równoległe wyceny
+
+`python frontend/tests/run-integration.py concurrency.spec.ts`:4 sesje/8 żądań, realny slicer, deduplikacja i cache, dostęp do cudzych danych, gotowy checkout i kwoty. Bez dostawców. Należy też do `run-all.py --group core`. Jest to krótka próba asynchronicznego API, nie test maksymalnego obciążenia; progi czasu mogą być wrażliwe na zajęty komputer.

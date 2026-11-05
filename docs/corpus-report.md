@@ -55,6 +55,16 @@ Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 
 
 `configurator-current.json`: **6 PASS** (130 s): nawigacja/motywy, pięć rodzin i 178 kolorów PLA, ustawienia, rzeczywiste wyceny, sterowanie WebGL (powiększenie potwierdzone zmianą obrazu), zaawansowane wartości i powrót, błędy połączenia oraz wybór/usuwanie STL/3MF. Awarię sieci wstrzyknięto celowo; wyceny pochodziły z rzeczywistego API. Kolory sprawdzono w UI/stanie, nie jako 178 osobnych wycen/pomiarów pigmentu. To nadal nie jest pełna wizualna kontrola wszystkich ekranów.
 
+## Równoległe wyceny i wspólny zestaw
+
+`concurrency.spec.ts`:4 niezależne sesje gości,8 równoległych żądań →4 zadania/4 snapshoty, po jednej próbie. Każdy dostaje własny model, ilość, pomiary i kwotę. Powtórzenie gotowej wyceny zwraca ten sam wynik bez ponownego slicingu. Katalog odpowiada przed upływem2s także po zaobserwowaniu aktywnego zadania; przyjęcie żądań mieści się w5s. To próba lokalna, nie SLA ani test dużego obciążenia.
+
+Cudze metadane/GLB/status zadania/próba wyceny dają404. Po ukończeniu wszystkich zadań checkout z **pasującym cudzym modelem, ilością i wyceną** daje409; własny200 z dokładną kwotą snapshotu. Liczniki SQL obejmują tylko modele tego testu; UUID sprawdzany przed użyciem w zapytaniu. `concurrent-quotes-current.json`:1 PASS3,4s.
+
+Nowe testy współbieżności i wyglądu należą do grupy `core`. Pierwszy wspólny przebieg26 PASS/1 FAIL ujawnił współdzielenie konta TOTP przez testy wyglądu i negatywny test logowania. Osobne konto fixture usuwa tę zależność; ochrona przed ponownym użyciem kodu pozostaje. Ponowiony `core.json`:**27 PASS /0 FAIL /0 skipped /0 flaky**,195,9s. Następnie doprecyzowano zakres SQL/atak checkoutu w samym teście współbieżności i potwierdzono go osobno; całego zestawu po tej zmianie asercji nie powtarzano.
+
+Regresja limitu używa teraz1 000 002 rzeczywiście różnych wierzchołków, zamiast powtarzanych zer. HTTP422 i objaśnienie w UI:1 PASS2,8s, także PASS w core. Brak zmian w produkcyjnym auth, limitach czy stylu. Sol xhigh: bez blokera, oceny8–9/10. Ten etap nie sprawdza restartu workera, wyczerpania kolejki ani dostawców.
+
 ## Spójność motywu i widoków
 
 Odtworzono błąd: jasny motyw wybrany na stronie głównej znikał po bezpośrednim wejściu na logowanie. Wspólny `lib/theme.ts` przywraca preferencję przy starcie aplikacji i panelu admina; oba przełączniki zapisują ten sam klucz. Brak dostępu do browser storage nie blokuje zmiany motywu. Bez zmian CSS, palety i fontów autora: Workspace używa Manrope, storefront/admin.html ma nagłówki Oxanium.
@@ -75,7 +85,7 @@ SHA-256 launchera i programu Bambu jest częścią zadania, klucza deduplikacji 
 
 ## Otwarte
 
-- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA (obecnie „Wybierz w tej kolejności”). Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
+- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA wymagającą ręcznego rozwiązania. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów.
 - Pełna tożsamość środowiska Bambu (biblioteki i zasoby poza dwoma plikami), rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.

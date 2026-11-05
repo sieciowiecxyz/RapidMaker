@@ -212,10 +212,18 @@ test('multiple clients receive isolated results while costly conversions are bou
 test('geometry resource limits explain a rejection without calling the model malformed', async ({
   page,
 }) => {
-  // A 16 MiB STL remains below upload bytes, but exceeds the expanded vertex budget.
+  // Below upload bytes, but contains more than one million distinct vertices.
   const triangles = 333334;
   const data = Buffer.alloc(84 + 50 * triangles);
   data.writeUInt32LE(triangles, 80);
+  for (let index = 0; index < triangles; index++) {
+    const start = 84 + index * 50 + 12;
+    for (let corner = 0; corner < 3; corner++) {
+      data.writeFloatLE(index * 2, start + corner * 12);
+      data.writeFloatLE(corner === 1 ? 1 : 0, start + corner * 12 + 4);
+      data.writeFloatLE(corner === 2 ? 1 : 0, start + corner * 12 + 8);
+    }
+  }
   await page.goto('/wycena');
   const uploaded = page.waitForResponse(
     (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',

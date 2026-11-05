@@ -7,7 +7,7 @@ test('real login rejects wrong password, TOTP and recovery without granting acce
   page,
 }) => {
   test.skip(!process.env.RAPIDMAKER_TEST_ACCOUNTS, 'Requires isolated accounts');
-  const account = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+  const account = accounts().find((a) => a.email === 'browser-security-negative@example.invalid')!;
   await page.goto('/logowanie?next=https%3A%2F%2Fexample.invalid');
   await page.getByLabel('Adres email', { exact: true }).fill(account.email);
   await page.getByLabel('Hasło', { exact: true }).fill('Wrong-password-123!');
