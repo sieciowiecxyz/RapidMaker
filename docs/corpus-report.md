@@ -64,6 +64,10 @@ Dowody: notifications13 PASS, storage7 szybkich PASS (18 bazodanowych pominięty
 
 `refund-mail-journey.json`: **1 PASS/211,1s**,0 FAIL/skipped/flaky. Rzeczywiste iCloud MFA → oferta/email → Stripe test płatność → dokumenty email → częściowy zwrot500 groszy i idempotentny retry → klient API500 + odebrany nowy email z dokładnym5.00 PLN/ref → odpowiedź email widoczna raz w chat. Tylko void@sieciowiec.xyz; brak mocków dostawców i dowodu SMTP exactly-once. Sol xhigh wykrył ryzyko cofnięcia sukcesu przez pełną kolejkę w pierwszym projekcie; przeprojektowano trwałe przekazanie i ponownie sprawdzono. Końcowy review bez nowego blokera, oceny zakresu7–9/N/A, nie10/10 całego celu.
 
+## Usunięte pozostałości makiety
+
+`frontend/src/lib/mock.ts`: **345 linii usuniętych,0 dodanych**. Analiza importów i zależności usunęła wyłącznie nieosiągalne fikcyjne auth/zamówienia/chat/refundy/wycenę. Wszystkie zachowane instrukcje są niezmienione; lokalny koszyk, snapshoty rachunku, opcje i modele pokazowe pozostają. `mock-pruning-smoke.json`:3 PASS38,1s0skip/flaky — rzeczywisty API/slicer/Stripe odbiór, nawigacja/motywy/przykłady, pięć rodzin i koło PLA. Svelte-check0/0, build/Prettier/diff-check PASS. Sol xhigh potwierdził brak aktywnych odwołań do usuniętych eksportów; oceny zakresu9/10, prostota10, współbieżność N/A. Nie jest to ocena całego produktu ani nowy pełny przebieg core.
+
 ## Rzeczywisty korpus — baza64 MiB
 
 `corpus41-entry64`: 41 przypadków,262,2s, bez pominięć i flaky. Porównanie z `corpus41-total64`: przypadek9 uzyskuje automatyczną cenę, brak innych zmian wyników/klasyfikacji. Wcześniejsze poprawki uratowały przypadki5,22 i25.

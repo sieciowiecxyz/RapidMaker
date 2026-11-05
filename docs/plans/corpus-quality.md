@@ -48,6 +48,8 @@ Branch `codex/corpus-quality`; commands, artifacts, detailed scope and prior res
 3. Keep invalid metadata/topology and over-complex meshes rejected; no guessed namespace repair or validator bypass.
 4. Run actual API/UI regression, report changed outcomes and review with Sol xhigh. No frontend redesign.
 
+- **Code size:**removed345unreachablemocklines only, retainedstatements unchanged; real3smokePASS38.1s, build/check0/0 andSolreview no blockingfinding (scope9/simple10/concurrencyN/A).
+
 ## Next
 
 1. Resolve remaining resource-bound models within safe resource policy; keep exclusions and unsupported assemblies explicit.

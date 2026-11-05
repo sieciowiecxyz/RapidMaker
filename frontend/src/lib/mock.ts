@@ -2,9 +2,6 @@ import type {
   PrintSettings,
   PrintOptionsCatalog,
   Cart,
-  ChatMessage,
-  CheckoutInput,
-  CheckoutResult,
   Contact,
   DeliveryMethod,
   DeliveryOption,
@@ -18,7 +15,6 @@ import type {
   PrintModel,
   Profile,
   Quote,
-  QuoteOptions,
   Session,
   SystemSettings,
   SandboxPayment,
@@ -459,162 +455,14 @@ function invalidate() {
 }
 const fingerprint = () =>
   JSON.stringify([state.cart.models, state.cart.delivery, state.cart.postalCode, state.revision]);
-const round = (n: number) => Math.round(n * 100) / 100;
-function validateOptions(options: QuoteOptions) {
-  const material = state.materials.find((item) => item.id === options.materialId);
-  if (
-    !material?.compatible ||
-    !material.colors.some((item) => item.name === options.color && item.inStock)
-  )
-    throw new Error('Wybierz dostępny materiał i kolor.');
-  if (!Number.isInteger(options.quantity) || options.quantity < 1 || options.quantity > 1000)
-    throw new Error('Wybierz od 1 do 1000 sztuk.');
-  return material;
-}
-const qualityFactor = (quality: QuoteOptions['quality']) =>
-  quality === 'draft' ? 0.85 : quality === 'fine' ? 1.25 : 1;
-function makeQuote(): Quote {
-  const lines = state.cart.models.map((item) => {
-    const material = validateOptions(item.options);
-    const unitPrice = round(
-      24 *
-        material.priceMultiplier *
-        qualityFactor(item.options.quality) *
-        (0.7 + item.advanced.wallCount * 0.06 + item.advanced.infill * 0.006),
-    );
-    return {
-      modelId: item.id,
-      name: item.name,
-      quantity: item.options.quantity,
-      unitPrice,
-      total: round(unitPrice * item.options.quantity),
-    };
-  });
-  const count = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const packages = 0; // Packing is calculated by the Rust checkout API.
-  const manual =
-    count > 50 ||
-    state.cart.models.some((item) => {
-      const a = item.advanced;
-      return (
-        item.notes.trim().length > 0 ||
-        a.orientation !== 'auto' ||
-        a.supports !== 'auto' ||
-        a.finish !== 'standard' ||
-        a.fit !== 'normal' ||
-        a.insertCount > 0 ||
-        a.turnaround !== 'standard' ||
-        !!a.drawing
-      );
-    });
-  const subtotal = Math.max(
-    state.settings.minimumPrice,
-    round(state.settings.setupFee + lines.reduce((sum, line) => sum + line.total, 0)),
-  );
-  const delivery = 0; // No fabricated carrier price; API adapter marks missing rates pending.
-  return {
-    id: id(),
-    version: state.revision,
-    fingerprint: fingerprint(),
-    total: round(subtotal + delivery),
-    unitPrice: round(subtotal / Math.max(1, count)),
-    leadTime: manual ? 'Po potwierdzeniu wymagań' : '2–3 dni robocze',
-    subtotal,
-    delivery,
-    packages: state.cart.delivery === 'pickup' ? 0 : packages,
-    lines,
-    manual,
-    reason: manual
-      ? 'Duża partia lub indywidualne wymagania. Obsługa przygotuje ofertę i potwierdzi dostawę.'
-      : undefined,
-  };
-}
 
 export async function getPrintOptions(): Promise<PrintOptionsCatalog> {
   await wait(true);
   return clone(printCatalog);
 }
-export async function getMaterials(): Promise<Material[]> {
-  await wait(true);
-  return state.scenario === 'empty' ? [] : clone(state.materials);
-}
 export async function getDemoModel(): Promise<DemoModel> {
   await wait(true);
   return demoModel();
-}
-export async function getQuote(options: QuoteOptions): Promise<Quote> {
-  await wait();
-  const material = validateOptions(options);
-  const total = round(
-    state.settings.setupFee +
-      24 * material.priceMultiplier * options.quantity * qualityFactor(options.quality),
-  );
-  return {
-    id: id(),
-    version: state.revision,
-    fingerprint: JSON.stringify(options),
-    total,
-    unitPrice: total / options.quantity,
-    leadTime: '2–3 dni robocze',
-    subtotal: total,
-    delivery: 0,
-    packages: 1,
-    lines: [],
-    manual: false,
-  };
-}
-export async function getSession(): Promise<Session | null> {
-  await wait();
-  return clone(state.session);
-}
-export async function getDemoAccounts(): Promise<{ email: string; role: Session['role'] }[]> {
-  return [
-    { email: 'client@rapidmaker.test', role: 'client' },
-    { email: 'admin@rapidmaker.test', role: 'admin' },
-  ];
-}
-export async function requestLogin(email: string, register = false): Promise<EmailChallenge> {
-  await wait();
-  email = email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Podaj poprawny adres email.');
-  if (!register && !state.users.some((user) => user.email === email))
-    throw new Error('Nie masz jeszcze konta demo. Wybierz utworzenie konta.');
-  state.challenge = { id: id(), email, isNew: !state.users.some((user) => user.email === email) };
-  save();
-  return clone(state.challenge);
-}
-export async function confirmLogin(challengeId: string, expired = false): Promise<Session> {
-  await wait();
-  const challenge = state.challenge;
-  if (expired || !challenge || challenge.id !== challengeId) {
-    state.challenge = null;
-    save();
-    throw new Error('Link wygasł. Poproś o nowy link demonstracyjny.');
-  }
-  let user = state.users.find((item) => item.email === challenge.email);
-  if (!user) {
-    user = {
-      id: id(),
-      email: challenge.email,
-      name: challenge.email.split('@')[0],
-      role: 'client',
-    };
-    state.users.push(user);
-    state.profiles[user.id] = profile(user.email);
-  }
-  state.session = user;
-  state.challenge = null;
-  state.orders
-    .filter((order) => !order.ownerId && order.contact.email.toLowerCase() === user.email)
-    .forEach((order) => (order.ownerId = user.id));
-  save();
-  return clone(user);
-}
-export async function logout() {
-  await wait();
-  state.session = null;
-  state.challenge = null;
-  save();
 }
 export async function getCart(): Promise<Cart> {
   await wait(true);
@@ -708,14 +556,6 @@ export function saveQuote(quote: Quote, cart: Cart): Quote {
   save();
   return clone(state.cart.quote);
 }
-export async function quoteCart(): Promise<Quote> {
-  await wait();
-  if (!state.cart.models.length) throw new Error('Dodaj co najmniej jeden model.');
-  const quote = makeQuote();
-  state.cart.quote = quote;
-  save();
-  return clone(quote);
-}
 function payment(order: Order, scenario: PaymentScenario) {
   if (scenario === 'reprice')
     throw new Error('Zmianę ceny sprawdzisz przy tworzeniu nowego zamówienia.');
@@ -788,46 +628,6 @@ export function applyCheckoutStatus(sessionId: string, status: StripeStatus): Or
   }
   return visibleOrder(order);
 }
-export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
-  await wait();
-  const quote = state.cart.quote;
-  if (
-    !quote ||
-    quote.id !== input.quoteId ||
-    quote.version !== input.version ||
-    quote.fingerprint !== fingerprint()
-  )
-    throw new Error('Wycena jest nieaktualna. Wróć do konfiguratora i przelicz cenę.');
-  if (!input.contact.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contact.email))
-    throw new Error('Uzupełnij imię i nazwisko oraz poprawny email.');
-  if (
-    state.cart.delivery !== 'pickup' &&
-    ((state.cart.delivery === 'courier' && !input.contact.street.trim()) ||
-      !input.contact.city.trim() ||
-      !/^\d{2}-\d{3}$/.test(input.contact.postalCode))
-  )
-    throw new Error('Uzupełnij adres dostawy i kod pocztowy w formacie 00-000.');
-  if (state.cart.delivery === 'locker' && !input.contact.pickupPoint.trim())
-    throw new Error('Wybierz punkt odbioru.');
-  const existing = state.orders.find((order) => order.quote.id === quote.id);
-  if (existing)
-    return { order: clone(findOrder(existing.id, true)), quote: clone(quote), repriced: false };
-  if (input.scenario === 'reprice') {
-    state.revision++;
-    const updated = makeQuote();
-    updated.total = round(updated.total + 5);
-    updated.subtotal = round(updated.subtotal + 5);
-    state.cart.quote = updated;
-    save();
-    return { order: null, quote: clone(updated), repriced: true };
-  }
-  const order = createOrder(quote, input.contact, input.requestOnly);
-  if (input.requestOnly) order.quote.manual = true;
-  if (!quote.manual && !input.requestOnly) payment(order, input.scenario);
-  state.orders.unshift(order);
-  save();
-  return { order: clone(order), quote: clone(quote), repriced: false };
-}
 export async function retryPayment(orderId: string, scenario: PaymentScenario): Promise<Order> {
   await wait();
   const order = findOrder(orderId, true);
@@ -842,151 +642,6 @@ function visibleOrder(order: Order): Order {
   const result = clone(order);
   if (state.session?.role !== 'admin') result.notes = '';
   return result;
-}
-export async function getOrders(): Promise<Order[]> {
-  await wait(true);
-  const user = session();
-  return state.scenario === 'empty'
-    ? []
-    : state.orders
-        .filter((order) => user.role === 'admin' || order.ownerId === user.id)
-        .map(visibleOrder);
-}
-export async function getOrder(orderId: string): Promise<Order> {
-  await wait(true);
-  return visibleOrder(findOrder(orderId));
-}
-export async function reorder(orderId: string): Promise<Cart> {
-  await wait();
-  const order = findOrder(orderId);
-  state.cart = {
-    models: order.models.map((item) => ({ ...clone(item), id: id() })),
-    delivery: order.delivery,
-    postalCode: order.contact.postalCode,
-    quote: null,
-  };
-  save();
-  try {
-    localStorage.setItem('rapidmaker.storefront.checkout-ready', '1');
-  } catch {
-    /* Optional draft restore. */
-  }
-  return clone(state.cart);
-}
-export async function sendMessage(orderId: string, text: string): Promise<Order> {
-  await wait();
-  const user = session();
-  const order = findOrder(orderId);
-  text = text.trim();
-  if (!text) throw new Error('Wpisz wiadomość.');
-  if (text.length > 4000) throw new Error('Wiadomość może mieć maksymalnie 4000 znaków.');
-  const message: ChatMessage = { id: id(), sender: user.role, text, createdAt: now(), read: false };
-  order.messages.push(message);
-  order.needsAttention = user.role === 'client';
-  save();
-  return visibleOrder(order);
-}
-export async function markMessagesRead(orderId: string): Promise<Order> {
-  await wait();
-  const user = session();
-  const order = findOrder(orderId);
-  order.messages
-    .filter((message) => message.sender !== user.role)
-    .forEach((message) => (message.read = true));
-  save();
-  return visibleOrder(order);
-}
-export async function getProfile(): Promise<Profile> {
-  await wait(true);
-  return clone(state.profiles[session().id]);
-}
-export async function updateProfile(value: Profile): Promise<Profile> {
-  await wait();
-  const user = session();
-  if (value.contact.email.toLowerCase() !== user.email)
-    throw new Error('W demonstracji adres logowania pozostaje bez zmian.');
-  state.profiles[user.id] = clone(value);
-  user.name = value.contact.name || user.name;
-  save();
-  return clone(value);
-}
-export async function deleteAccount(): Promise<void> {
-  await wait();
-  const user = session();
-  if (user.role === 'admin') throw new Error('Konta administratora demo nie można usunąć.');
-  state.users = state.users.filter((item) => item.id !== user.id);
-  delete state.profiles[user.id];
-  state.orders
-    .filter((order) => order.ownerId === user.id)
-    .forEach((order) => (order.ownerId = null));
-  state.session = null;
-  save();
-}
-export async function updateOrder(
-  orderId: string,
-  patch: Partial<Pick<Order, 'status' | 'leadTime' | 'notes' | 'needsAttention'>>,
-): Promise<Order> {
-  await wait();
-  admin();
-  const order = findOrder(orderId);
-  if (
-    patch.status &&
-    ['preparing', 'printing', 'shipped', 'ready', 'completed'].includes(patch.status) &&
-    order.payment !== 'paid'
-  )
-    throw new Error('Realizację można rozpocząć dopiero po opłaceniu zamówienia.');
-  Object.assign(order, patch);
-  history(
-    order,
-    patch.status ? `Zmieniono status: ${patch.status}` : 'Zaktualizowano dane produkcji',
-  );
-  return clone(order);
-}
-export async function sendOffer(orderId: string, total: number, reason: string): Promise<Order> {
-  await wait();
-  admin();
-  if (!reason.trim() || !Number.isFinite(total) || total <= 0)
-    throw new Error('Podaj cenę większą od zera i powód zmiany.');
-  const order = findOrder(orderId);
-  if (order.sandboxPayment) throw new Error('Ta operacja nie jest podłączona do sandboxa.');
-  if (['paid', 'refunded'].includes(order.payment) || order.status === 'cancelled')
-    throw new Error('Nową ofertę można przygotować dla aktywnego, nieopłaconego zlecenia.');
-  if (total < order.quote.delivery)
-    throw new Error('Cena całkowita nie może być niższa od dostawy.');
-  order.quote.total = round(total);
-  order.quote.subtotal = round(total - order.quote.delivery);
-  order.quote.manual = false;
-  order.quote.version++;
-  order.offerReason = reason.trim();
-  order.status = 'awaiting_payment';
-  order.needsAttention = false;
-  history(order, `Wysłano ofertę demo: ${total.toFixed(2)} zł. ${reason}`);
-  return clone(order);
-}
-export async function refundOrder(orderId: string): Promise<Order> {
-  await wait();
-  admin();
-  const order = findOrder(orderId);
-  if (order.sandboxPayment) throw new Error('Ta operacja nie jest podłączona do sandboxa.');
-  if (order.payment !== 'paid') throw new Error('Zwrócić można tylko opłacone zamówienie.');
-  order.payment = 'refunded';
-  order.status = 'cancelled';
-  history(order, 'Symulacja zwrotu płatności');
-  return clone(order);
-}
-export async function createShippingLabel(orderId: string): Promise<Order> {
-  await wait();
-  admin();
-  const order = findOrder(orderId);
-  if (order.sandboxPayment) throw new Error('Ta operacja nie jest podłączona do sandboxa.');
-  if (order.delivery === 'pickup') throw new Error('Odbiór osobisty nie wymaga etykiety.');
-  if (order.payment !== 'paid') throw new Error('Najpierw potwierdź opłacenie zamówienia.');
-  if (!order.label) {
-    order.label = `ETYKIETA-DEMO-${order.number}`;
-    order.tracking = `DEMO-PL-${order.number}`;
-    history(order, 'Utworzono przykładową etykietę wysyłkową');
-  }
-  return clone(order);
 }
 export async function updateMaterial(
   materialId: string,
