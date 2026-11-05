@@ -894,7 +894,40 @@ mod tests {
                     .sum::<u32>(),
                 quantity
             );
+            assert_eq!(
+                result.plates,
+                result.batches.iter().map(|b| b.repeat_count).sum::<u32>()
+            );
+            assert_eq!(
+                result.time_seconds,
+                result
+                    .batches
+                    .iter()
+                    .map(|b| b.time_seconds * u64::from(b.repeat_count))
+                    .sum::<u64>()
+            );
+            let batch_grams = result
+                .batches
+                .iter()
+                .map(|b| b.filament_grams * f64::from(b.repeat_count))
+                .sum::<f64>();
+            assert!((result.filament_grams - batch_grams).abs() <= 1e-6 * batch_grams.max(1.0));
             assert!(result.plates >= 1 && result.plates <= quantity);
+            // Even without spacing, a256×256mm bed holds at most163 footprints
+            // of solid20mm cubes. This is an upper bound, not a nesting optimum.
+            let max_per_plate = 256 * 256 / (20 * 20);
+            assert!(result.plates >= quantity.div_ceil(max_per_plate));
+            assert!(
+                result
+                    .batches
+                    .iter()
+                    .all(|b| b.copies_per_plate <= max_per_plate)
+            );
+            let mass_ratio = result.filament_grams / (single.filament_grams * f64::from(quantity));
+            assert!(
+                (0.9..=1.1).contains(&mass_ratio),
+                "Batch mass must scale with physical copies"
+            );
             if quantity > 1 {
                 assert!(result.time_seconds < single.time_seconds * u64::from(quantity));
             }
@@ -928,6 +961,9 @@ mod tests {
         );
         assert!(fine_strong.time_seconds > draft.time_seconds);
         assert!(fine_strong.filament_grams > draft.filament_grams);
+        // Solid20mm cube:8cm³ × trusted PLA density1.26g/cm³ ≈10.08g.
+        // Allow toolpath/first-layer differences while detecting a grams/milligrams mix-up.
+        assert!((8.0..=13.0).contains(&fine_strong.filament_grams));
         let petg = slice(&model, "GFG02").await.unwrap();
         assert!(petg.time_seconds > 60 && petg.filament_grams > 1.0);
     }

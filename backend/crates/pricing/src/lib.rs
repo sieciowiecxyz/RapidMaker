@@ -225,6 +225,77 @@ mod tests {
     }
 
     #[test]
+    fn hand_calculated_invoices_preserve_units_rounding_and_margin() {
+        // Net rates: setup10 PLN, plate1 PLN, machine2 PLN/h, power150W at
+        // 1.20 PLN/kWh; loss5%, sales margin20% (not markup), VAT fixture23%.
+        // Expected invoice lines below are fixed arithmetic examples, not another calculator.
+        for (seconds, mg, plates, cost_per_kg, minimum, expected) in [
+            (
+                3600,
+                100_000,
+                1,
+                8000,
+                0,
+                [800, 200, 18, 100, 1000, 106, 2224, 2780, 640, 3420],
+            ),
+            (
+                1,
+                1,
+                1,
+                8000,
+                0,
+                [1, 1, 1, 100, 1000, 56, 1159, 1449, 334, 1783],
+            ),
+            (
+                1800,
+                50_000,
+                2,
+                6000,
+                0,
+                [300, 100, 9, 200, 1000, 81, 1690, 2113, 486, 2599],
+            ),
+            (
+                3_600_000,
+                100_000_000,
+                10,
+                8000,
+                0,
+                [
+                    800000, 200000, 18000, 1000, 1000, 51000, 1071000, 1338750, 307913, 1646663,
+                ],
+            ),
+            (
+                1,
+                1,
+                1,
+                8000,
+                5000,
+                [1, 1, 1, 100, 1000, 56, 1159, 5000, 1150, 6150],
+            ),
+        ] {
+            let mut rates = rates();
+            rates.minimum_net_grosze = minimum;
+            let p = calculate(seconds, mg, plates, cost_per_kg, &rates).unwrap();
+            assert_eq!(
+                [
+                    p.filament_grosze,
+                    p.machine_grosze,
+                    p.energy_grosze,
+                    p.handling_grosze,
+                    p.setup_grosze,
+                    p.loss_grosze,
+                    p.cost_net_grosze,
+                    p.net_grosze,
+                    p.vat_grosze,
+                    p.gross_grosze
+                ],
+                expected,
+                "Invoice for {seconds}s / {mg}mg / {plates} plates"
+            );
+        }
+    }
+
+    #[test]
     fn measured_costs_scale_without_repeating_order_setup() {
         let rates = rates();
         let one = calculate(3600, 100_000, 1, 8000, &rates).unwrap();

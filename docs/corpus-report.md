@@ -36,10 +36,26 @@ Przed poprawkami było 19 PASS / 22 FAIL: 13 cen, 4 ręczne, 2 prawidłowe 413, 
 
 To izolowane bazy i jawne koszty testowe. Nie dowodzi to produkcyjnej rentowności, fizycznego passkey, wszystkich przewoźników ani nadania przesyłki. Raportów zawierających dane formularzy nie publikujemy.
 
+## Rachunek, partie i konfigurator
+
+- Rust pricing: **6 PASS**, w tym pięć stałych, ręcznie obliczonych przykładów kosztów, zaokrągleń, marży i minimum zamówienia.
+- Prawdziwy slicer: partie 1/2/10/100/1000 PASS (2 ściany, 15% wypełnienia). Testy sprawdzają sumy płyt, czasu i masy, fizyczne ograniczenie pola stołu oraz masę pełnej kostki 20 mm przy 100% wypełnienia (około 9,96 g wobec 10,08 g wynikających z objętości i gęstości profilu). Artefakt prywatny: `slicer-quantity-physical.log`.
+- `batch-pricing-oracle.json`: **1 PASS**, trzy wyceny API z jawnego fixture (PLA, standard, 3 ściany, 20% wypełnienia), niezależne kontrole każdej składowej rachunku:
+
+| Sztuki | Płyty | Filament | Brutto |
+| ---: | ---: | ---: | ---: |
+| 1 | 1 | 4,476 g | 29,97 zł |
+| 10 | 1 | 43,906 g | 40,18 zł |
+| 1000 | 40 | 4385,116 g | 1608,21 zł |
+
+Koszty: 100 zł netto/kg, 2 zł/h maszyny, 150 W i 1,20 zł/kWh, 5 zł/płytę, 10 zł przygotowania, 5% straty, 30% marży, minimum 20 zł netto, testowy VAT 23%. Potwierdzono powiązanie kosztu z pomiarami, jednorazowe przygotowanie i malejącą cenę jednostkową. Są to **stawki testowe**, nie weryfikacja rzeczywistych zakupów i rentowności.
+
+`configurator-current.json`: **6 PASS** (130 s): nawigacja/motywy, pięć rodzin i 178 kolorów PLA, ustawienia, rzeczywiste wyceny, sterowanie WebGL (powiększenie potwierdzone zmianą obrazu), zaawansowane wartości i powrót, błędy połączenia oraz wybór/usuwanie STL/3MF. Awarię sieci wstrzyknięto celowo; wyceny pochodziły z rzeczywistego API. Kolory sprawdzono w UI/stanie, nie jako 178 osobnych wycen/pomiarów pigmentu. To nadal nie jest pełna wizualna kontrola wszystkich ekranów.
+
 ## Otwarte
 
-- Pozostałe 59 pobrań: zalogowana przeglądarka nie zwraca plików; oczekujemy informacji o ręcznym pobraniu.
+- Pozostałe 59 pobrań: MakerWorld wyświetla CAPTCHA „Przesuń, aby ukończyć układankę”. Weryfikacja została przekazana użytkownikowi; nie obchodzimy jej.
 - Świadoma polityka obsługi dużych modeli zamiast bezwarunkowego zwiększania limitów; trwała procedura odtworzenia korpusu.
-- Fingerprint rzeczywistego runtime Bambu, niezależna kontrola kosztów i ilości, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E.
+- Fingerprint rzeczywistego runtime Bambu, rzeczywiste koszty zakupu/energii, wszystkie grafiki/ekrany, współbieżność i pozostałe E2E. Kontrola rachunku i ilości dla opisanych fixture jest wykonana.
 - `cargo audit`: 0 podatności/ostrzeżeń. `npm audit`: trzy wpisy low pochodzące z jednego `deepmerge` w narzędziach deweloperskich; [brak opublikowanej poprawki](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). Nie jest to dowód podatności przepływu uploadu.
 - Przeglądy Sol xhigh pozostają poniżej 10/10. Cel nie jest zakończony.
