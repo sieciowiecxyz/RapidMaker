@@ -131,8 +131,18 @@ export type StripeStatus = {
   total_grosze: number;
   livemode: false;
   quote_id: string;
-  checkout_status: 'open' | 'complete' | 'expired' | 'processing';
-  url: string;
+  checkout_status:
+    | 'open'
+    | 'complete'
+    | 'expired'
+    | 'processing'
+    | 'requires_payment_method'
+    | 'requires_confirmation'
+    | 'requires_action'
+    | 'requires_capture'
+    | 'succeeded'
+    | 'canceled';
+  url: string | null;
 };
 export type DeliveryOption = {
   id: DeliveryMethod;

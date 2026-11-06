@@ -29,7 +29,7 @@ if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABL
 suites = {
     'storage': [],
     'core': ['--local-accounts', 'models.spec.ts', 'model-removal.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'manual-publication.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
-    'sandbox': ['--sandbox', '--client-totp', 'guest-claim.spec.ts', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
+    'sandbox': ['--sandbox', '--client-totp', 'payment-resume.spec.ts', 'guest-claim.spec.ts', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],
     'registration-passkey': ['--sandbox', '--registration', 'registration.spec.ts'],

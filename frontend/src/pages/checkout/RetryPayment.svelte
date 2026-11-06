@@ -36,20 +36,27 @@
         if (saved.payment_intent_id !== intentId || saved.total_grosze !== amountGrosze)
           throw new Error('Dane płatności różnią się od zamówienia.');
         if (!config.publishable_key) throw new Error('Stripe jest chwilowo niedostępny.');
-        stripe = await loadStripe(config.publishable_key, { locale: 'pl' });
+        stripe = await loadStripe(config.publishable_key, {
+          locale: 'pl',
+          developerTools: { assistant: { enabled: false } },
+        });
         if (disposed) return;
         if (!stripe) throw new Error('Nie udało się wczytać Stripe. Odśwież stronę.');
+        const theme = getComputedStyle(document.documentElement);
         elements = stripe.elements({
           clientSecret: saved.client_secret,
           locale: 'pl',
           appearance: {
-            theme: 'night',
+            theme: document.documentElement.dataset.theme === 'light' ? 'stripe' : 'night',
             variables: {
-              colorPrimary: '#a8edbc',
-              colorBackground: '#1b231f',
-              colorText: '#e0e5e2',
-              colorDanger: '#ffb5a5',
-              borderRadius: '6px',
+              colorPrimary: theme.getPropertyValue('--color-primary').trim() || '#b5ee4b',
+              colorBackground: theme.getPropertyValue('--color-control').trim() || '#141d15',
+              colorText: theme.getPropertyValue('--color-text').trim() || '#edf4e9',
+              colorDanger: theme.getPropertyValue('--color-danger').trim() || '#ffc2b8',
+              borderRadius:
+                theme.getPropertyValue('--control-radius').trim() ||
+                theme.getPropertyValue('--radius-sm').trim() ||
+                '3px',
             },
           },
         });

@@ -51,10 +51,10 @@
       >{money(current.total_grosze / 100)}</strong
     >
   </div>
-  {#if !paid && current.checkout_status === 'open' && payment.url.startsWith('https://checkout.stripe.com/')}
-    <a class="button primary" href={payment.url}>Wróć do płatności →</a>
+  {#if !paid && current.checkout_status === 'open' && current.url?.startsWith('https://checkout.stripe.com/')}
+    <a class="button primary" href={current.url}>Wróć do płatności →</a>
   {/if}
-  {#if !paid && current.checkout_status === 'open' && intentId.startsWith('pi_')}
+  {#if !paid && intentId.startsWith('pi_') && ['open', 'requires_payment_method', 'requires_confirmation', 'requires_action'].includes(current.checkout_status)}
     <RetryPayment
       {intentId}
       amountGrosze={current.total_grosze}
