@@ -16,6 +16,26 @@ pub struct OrderInput<'a> {
     pub guest_updates: bool,
 }
 impl Storage {
+    /// Read-only recovery requires the exact original draft price lines and held snapshots.
+    async fn recover_line_identity(&self, order: &mut Value) -> Result<(), StorageError> {
+        if !order["lines"]
+            .as_array()
+            .is_some_and(|lines| lines.iter().any(|l| l["line_id"].is_null()))
+        {
+            return Ok(());
+        }
+        let draft: Option<(Value, Value)> = sqlx::query_as("SELECT d.input,d.quote->'lines' FROM payment_attempts p JOIN checkout_drafts d ON d.id=p.draft_id WHERE p.id=$1 AND jsonb_typeof(d.quote->'lines')='array'")
+            .bind(order["payment_attempt_id"].as_str()).fetch_optional(&self.pool).await?;
+        if let Some((input, lines)) = draft.filter(|(_, lines)| *lines == order["lines"]) {
+            let files = self
+                .order_files(order["id"].as_str().unwrap_or_default(), 0)
+                .await?;
+            if let Some(lines) = crate::checkout::canonical_lines(&lines, &input, &files) {
+                order["lines"] = lines;
+            }
+        }
+        Ok(())
+    }
     pub async fn poll_order_payment(&self, id: &str, now: i64) -> Result<bool, StorageError> {
         Ok(sqlx::query("UPDATE orders SET payment_checked_at=$2 WHERE id=$1 AND status='awaiting_payment' AND payment_checked_at<=$2-15")
             .bind(id).bind(now).execute(&self.pool).await?.rows_affected()==1)
@@ -115,8 +135,12 @@ impl Storage {
                 .as_secs() as i64,
         )
         .await?;
-        Ok(sqlx::query_scalar("SELECT (to_jsonb(o)-'owner_hash'-'user_id')||jsonb_build_object('payment_state',p.state,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.id=$1 AND (o.user_id=$2 OR (o.user_id IS NULL AND o.owner_hash=$3 AND o.created_at>extract(epoch from now())::bigint-86400))")
-            .bind(id).bind(user).bind(owner).fetch_optional(&self.pool).await?)
+        let mut order: Option<Value> = sqlx::query_scalar("SELECT (to_jsonb(o)-'owner_hash'-'user_id')||jsonb_build_object('payment_state',p.state,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'manual_offer',mq.offer) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id WHERE o.id=$1 AND (o.user_id=$2 OR (o.user_id IS NULL AND o.owner_hash=$3 AND o.created_at>extract(epoch from now())::bigint-86400))")
+            .bind(id).bind(user).bind(owner).fetch_optional(&self.pool).await?;
+        if let Some(value) = &mut order {
+            self.recover_line_identity(value).await?;
+        }
+        Ok(order)
     }
     pub async fn admin_orders(&self) -> Result<Vec<Value>, StorageError> {
         self.manual_expire(
@@ -125,11 +149,15 @@ impl Storage {
                 .as_secs() as i64,
         )
         .await?;
-        Ok(sqlx::query_scalar(
+        let mut orders: Vec<Value> = sqlx::query_scalar(
             "SELECT (to_jsonb(o)-'owner_hash')||jsonb_build_object('payment_state',p.state,'refunded_grosze',(SELECT COALESCE(SUM(r.amount_grosze),0) FROM payment_refunds r WHERE r.order_id=o.id AND r.state='succeeded'),'manual_offer',mq.offer,'production',pr.value,'invoice_draft',d.value) FROM orders o LEFT JOIN payment_attempts p ON p.id=o.payment_attempt_id LEFT JOIN manual_quote_views mq ON mq.order_id=o.id LEFT JOIN order_production pr ON pr.order_id=o.id LEFT JOIN invoice_drafts d ON d.order_id=o.id ORDER BY o.created_at DESC LIMIT 100",
         )
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        for order in &mut orders {
+            self.recover_line_identity(order).await?;
+        }
+        Ok(orders)
     }
     pub async fn order_paid(
         &self,

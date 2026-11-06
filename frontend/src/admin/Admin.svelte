@@ -187,7 +187,9 @@
   function enrichFiles(o: Order, data: OrderFile[]) {
     o.files = data;
     for (const m of o.models) {
-      const matching = data.filter((f) => f.model_id === m.id);
+      const matching = data.filter(
+        (f) => f.model_id === (m.modelId || m.id) && (!m.quoteId || f.quote_id === m.quoteId),
+      );
       const f = matching[0];
       if (!f) continue;
       m.name = f.filename;

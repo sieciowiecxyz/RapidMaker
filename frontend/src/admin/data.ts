@@ -15,6 +15,8 @@ export const stages = [
 export type Stage = (typeof stages)[number];
 export type Model = {
   id: string;
+  quoteId?: string;
+  modelId?: string;
   name: string;
   material: string;
   color: string;
@@ -43,6 +45,7 @@ export type Message = {
   created_at: number;
 };
 export type OrderFile = {
+  quote_id?: string;
   model_id: string;
   filename: string;
   available: boolean;
@@ -111,6 +114,8 @@ export type ServerOrder = {
   };
   lines: {
     model_id: string;
+    line_id?: string;
+    quote_id?: string;
     quantity: number;
     unit_grosze?: number | null;
     total_grosze?: number | null;
@@ -216,14 +221,17 @@ export function orderFromServer(row: ServerOrder): Order {
         .filter(Boolean)
         .join(', '),
     models: row.lines.map((l) => ({
-      id: l.model_id,
+      id: l.line_id || l.model_id,
+      modelId: l.model_id,
+      quoteId: l.quote_id,
       name: l.filename || 'Model ' + l.model_id,
       material: '—',
       color: '—',
       qty: l.quantity,
       price: l.unit_grosze == null ? null : l.unit_grosze / 100,
       amount: l.total_grosze == null ? null : l.total_grosze / 100,
-      done: row.production?.progress.find((p) => p.model_id === l.model_id)?.done ?? 0,
+      done:
+        row.production?.progress.find((p) => p.model_id === (l.line_id || l.model_id))?.done ?? 0,
       quality: '—',
       strength: '—',
     })),

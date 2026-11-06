@@ -461,6 +461,19 @@ mod tests {
         );
         assert_eq!(a.unwrap().unwrap().id, id);
         assert_eq!(b.unwrap().unwrap().id, id);
+        // Manual payment drafts intentionally have SQL NULL quote: identity recovery must skip them.
+        let after_payment = db.order(&id, Some(&user), None).await.unwrap().unwrap();
+        assert_eq!(after_payment["lines"], original["lines"]);
+        let admin_orders = db.admin_orders().await.unwrap();
+        let listed = admin_orders.iter().find(|order| order["id"] == id).unwrap();
+        assert_eq!(listed["lines"], original["lines"]);
+        let stored_lines: Value = sqlx::query_scalar("SELECT lines FROM orders WHERE id=$1")
+            .bind(&id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(stored_lines, original["lines"]);
+
         let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM payment_attempts WHERE id=$1")
             .bind(&id)
             .fetch_one(&db.pool)
@@ -519,6 +532,16 @@ mod tests {
         assert_eq!(
             db.manual_offer(&id).await.unwrap().unwrap()["state"],
             "paid"
+        );
+        let paid_order = db.order(&id, Some(&user), None).await.unwrap().unwrap();
+        assert_eq!(paid_order["status"], "paid");
+        assert_eq!(paid_order["lines"], original["lines"]);
+        assert!(
+            db.admin_orders()
+                .await
+                .unwrap()
+                .iter()
+                .any(|order| order["id"] == id && order["lines"] == original["lines"])
         );
         let receipts: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM email_outbox WHERE kind='payment_received' AND user_id=$1",

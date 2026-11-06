@@ -88,7 +88,9 @@ fn date(value: &str) -> bool {
 fn quantities(lines: &Value) -> Option<HashMap<String, u32>> {
     let mut quantities = HashMap::new();
     for line in lines.as_array()? {
-        let id = line["model_id"].as_str()?;
+        let id = line["line_id"]
+            .as_str()
+            .or_else(|| line["model_id"].as_str())?;
         let qty = u32::try_from(line["quantity"].as_u64()?).ok()?;
         let total = quantities.entry(id.to_owned()).or_insert(0u32);
         *total = total.checked_add(qty)?;
@@ -324,6 +326,28 @@ mod tests {
         assert!(validate_production(&p, &lines).is_err());
         p.qc_passed = false;
         assert!(validate_production(&p, &lines).is_ok());
+    }
+    #[test]
+    fn production_tracks_configurations_of_one_upload_separately() {
+        let lines = json!([
+            {"line_id":"black","model_id":"upload","quantity":2},
+            {"line_id":"red","model_id":"upload","quantity":1}]);
+        let mut p = default_production("paid");
+        p.stage = "packing".into();
+        p.qc_passed = true;
+        p.progress = vec![
+            Progress {
+                model_id: "black".into(),
+                done: 2,
+            },
+            Progress {
+                model_id: "red".into(),
+                done: 1,
+            },
+        ];
+        assert!(validate_production(&p, &lines).is_ok());
+        p.progress[0].done = 3;
+        assert!(validate_production(&p, &lines).is_err());
     }
     #[test]
     fn invoice_is_only_a_bounded_draft_with_the_real_order_total() {

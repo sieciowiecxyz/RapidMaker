@@ -20,7 +20,7 @@ Opis: aktualne kryteria i następna praca; szczegóły dowodów w [raporcie](../
 | C2 Kontrola ręcznej ścieżki | `corpus12-manual-geometry.json`: 12 PASS / 68,7 s po wzmocnieniu testu; surowe pozycje GLB uzasadniają wymiary/powód i wykluczają błędną ręczną wycenę części mieszczącej się w P1P. Nie przypisujemy tej nowej kontroli wcześniejszemu przebiegowi 41 |
 | C3 Obrazy/UI | UI41: 37 PASS / 4 FAIL przez błąd zakresu zmiennej w teście; poprawiony zakres 4 PASS w osobnym przebiegu. 36 modeli × 4 warianty = 144 ujęcia obejrzane na 6 zestawieniach; 5 odmów sprawdzonych. Źródło pozostałych 37 scenariuszy identyczne; nie jest to pojedynczy czysty przebieg 41 |
 | C4 Konta/zakup | Core 45 PASS / 1 SKIP, duże usuwanie osobno 1 PASS. Rzeczywisty auth/email/manualny zakup/refund/chat: 2 PASS; pełny sandbox: 9 PASS; rejestracja hasło/passkey po 1 PASS; niezależny odczyt płatności/3 zwrotów Stripe: 1 PASS. Osobne zakresy i raporty, bez ich sumowania w jeden przebieg |
-| C5 Zamknięcie | Otwarte: złożony zakup gościa → konto/claim, wznowienie istniejącej płatności po opuszczeniu strony, mapa kontrolek i zwykły runtime localhost. Oceny etapów nie są oceną całego celu |
+| C5 Zamknięcie | Zakup gościa → konto/claim i historia przeszły nowy E2E po poprawce powiązań pozycji/pliku/wyceny. Nadal otwarte: RetryPayment po opuszczeniu płatności, mapa kontrolek i zwykły runtime localhost. Dwie konfiguracje jednego uploadu sprawdzone jednostkowo/adapterami, bez osobnego pełnego UI/Stripe E2E |
 
 Większe modele: [plan i ograniczenia](large-models.md). Wdrożone: bezstratny kompaktowy/spatial GLB, jawny podgląd uproszczony modelu 19 z pełnym STL, chronione usuwanie modeli oraz wcześniejsza odmowa zbyt dużego zespołu 41. Profil large nie został włączony w .env użytkownika. Pełna semantyczna poprawność modelu 41 nie jest potwierdzona.
 
@@ -28,7 +28,7 @@ Większe modele: [plan i ograniczenia](large-models.md). Wdrożone: bezstratny k
 
 1. Obrazy korpusu sprawdzone w powyższym zakresie. Małe rozproszone zespoły wymagają zoomu, szczególnie w ciemnym motywie; bez twierdzenia o zgodności kontrastu lub fizycznym telefonie. Dalsza mapa kontrolek nie jest zastąpiona samym korpusem.
 2. Core sprawdzony na oddzielnej bazie w opisanym zakresie; stare raporty zachowane, bieżący ma unikalną nazwę core-current. Oddzielne duże usuwanie również przeszło. Nie powtarzać całego zestawu bez nowego powodu.
-3. Rzeczywiste auth/email/zakup/panele/dostawa i rejestracja mają nowe dowody w raporcie. Uzupełnić wykryte luki złożone: opłacony zakup gościa → dobrowolne konto/claim/późniejszy login oraz RetryPayment → ten sam PaymentIntent. Bez ponawiania całego sandboxa bez powodu.
+3. Rzeczywiste auth/email/zakup/panele/dostawa i rejestracja mają nowe dowody w raporcie. Zakup gościa → konto/claim/późniejszy login ma już nowy dowód. Pozostaje RetryPayment → ten sam PaymentIntent. Bez ponawiania całego sandboxa bez powodu.
 4. Uzupełnić mapę wymaganie → test/dowód → ograniczenie. Zwykły localhost:18430 nadal obsługuje main f5bdb5e i starszy proces API z 3 listopada (nowy endpoint limitów 404), a raporty dotyczą gałęzi roboczej i izolacji. Przed aktualizacją runtime sprawdzić istniejącą bazę/konfigurację i zabezpieczyć dane; nie nadpisywać zmian użytkownika w głównym checkoutcie. Nie deklarować każdego stanu/SVG lub fizycznego telefonu na podstawie viewportu.
 
 ## Komendy
@@ -40,3 +40,5 @@ python frontend/tests/run-all.py --group core --no-build
 ```
 
 Runtime i runner wymagają lokalnej konfiguracji zgodnie z backend/README.md; sekrety pozostają poza raportami. Starsze checkpointy są w historii Git df8760d i w raporcie; zachowano prywatne wyniki i modele.
+
+Bieżąca poprawka kontraktu: zamówienie zapisuje line_id (pozycja), model_id (upload), quote_id (konfiguracja), bez zmiany cen i lokalnych kluczy checkoutu. Nowy guest-claim dodany do sandboxa. Dowody po poprawce: guest-claim-fixed-final 1 PASS/22,9 s, multi-model pricing 1 PASS/5,0 s, ręczne zamówienie/panele/Stripe 1 PASS/39,2 s, 22 izolowane DB/API PASS. Nie przypisujemy tych zmian wcześniejszemu pełnemu core/sandboxowi; zakres dobrano do zmiany.

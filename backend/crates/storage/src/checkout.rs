@@ -56,6 +56,47 @@ pub struct StripeEvent {
     pub lease_token: String,
     pub attempts: i32,
 }
+/// Resolve browser line keys only through server-held quote/model snapshots.
+pub(crate) fn canonical_lines(lines: &Value, input: &Value, files: &[Value]) -> Option<Value> {
+    let parts = input["parts"].as_array()?;
+    let lines = lines.as_array()?;
+    if lines.len() != parts.len() || lines.len() != files.len() || lines.is_empty() {
+        return None;
+    }
+    let mut keys = std::collections::HashSet::new();
+    let mut quotes = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for line in lines {
+        let key = line["model_id"].as_str()?;
+        if key.is_empty() || !keys.insert(key) {
+            return None;
+        }
+        let mut matches = parts.iter().filter(|p| p["id"] == key);
+        let part = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        let quote = part["quote_id"].as_str()?;
+        if !quotes.insert(quote) {
+            return None;
+        }
+        let file = files.iter().find(|f| f["quote_id"] == quote)?;
+        if file["model_id"].as_str().is_none()
+            || part["analysis_id"] != file["model_id"]
+            || part["quantity"] != file["quantity"]
+            || line["quantity"] != file["quantity"]
+        {
+            return None;
+        }
+        let mut canonical = line.clone();
+        canonical["line_id"] = json!(key);
+        canonical["model_id"] = file["model_id"].clone();
+        canonical["quote_id"] = json!(quote);
+        result.push(canonical);
+    }
+    Some(Value::Array(result))
+}
+
 fn draft(row: PgRow) -> Result<CheckoutDraft, StorageError> {
     Ok(CheckoutDraft {
         id: row.try_get("id")?,
@@ -300,14 +341,18 @@ impl Storage {
             .as_str()
             .filter(|s| s.len() <= 254 && s.contains('@') && !s.chars().any(char::is_control))
             .ok_or("invalid checkout email")?;
-        let lines = &quote["lines"];
+        let files: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('quote_id',f.quote_id,'model_id',f.model_id,'quantity',q.request->'quantity') FROM order_files f JOIN quotes q ON q.id=f.quote_id WHERE f.order_id=$1")
+            .bind(input.id).fetch_all(&mut *tx).await?;
+        let Some(lines) = canonical_lines(&quote["lines"], &draft_input, &files) else {
+            return Ok(None);
+        };
         if contact.to_string().len() > 8192 || lines.to_string().len() > 65536 {
             return Err("order snapshot too large".into());
         }
         let row=sqlx::query("INSERT INTO payment_attempts(id,draft_id,owner_hash,client_key_hash,fingerprint,state,provider_kind,amount_grosze,idempotency_key,provider_request,next_attempt,created_at,updated_at,offer_id) VALUES($1,$2,$3,$4,$5,'creating',$6,$7,$8,$9,$10,$10,$10,$11) RETURNING *")
             .bind(input.id).bind(input.draft_id).bind(input.owner_hash).bind(input.client_key_hash).bind(input.fingerprint).bind(input.provider_kind).bind(amount).bind(format!("rapidmaker:{}",input.id)).bind(input.provider_request).bind(now).bind(input.offer_id).fetch_one(&mut *tx).await?;
         sqlx::query("INSERT INTO orders(id,owner_hash,user_id,contact,lines,amount_grosze,provider_kind,provider_id,payment_attempt_id,guest_updates,created_at,fulfillment) VALUES($1,$2,$3,$4,$5,$6,$7,NULL,$1,$8,$9,$10)")
-            .bind(input.id).bind(input.owner_hash).bind(user.as_deref()).bind(contact).bind(lines).bind(amount).bind(input.provider_kind).bind(quote["guest_updates"].as_bool().unwrap_or(true)).bind(now).bind(&fulfillment).execute(&mut *tx).await?;
+            .bind(input.id).bind(input.owner_hash).bind(user.as_deref()).bind(contact).bind(&lines).bind(amount).bind(input.provider_kind).bind(quote["guest_updates"].as_bool().unwrap_or(true)).bind(now).bind(&fulfillment).execute(&mut *tx).await?;
         sqlx::query("UPDATE orders SET legal_version=$2,legal_accepted_at=$3,production_days=$4 WHERE id=$1")
             .bind(input.id).bind(input.legal_version).bind(now).bind(input.production_days).execute(&mut *tx).await?;
         enqueue(
@@ -654,6 +699,36 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn canonical_identity_keeps_two_configurations_and_prices() {
+        let input = json!({"parts":[
+            {"id":"local-a","analysis_id":"model","quote_id":"black","quantity":2},
+            {"id":"local-b","analysis_id":"model","quote_id":"red","quantity":1}]});
+        let lines = json!([
+            {"model_id":"local-a","quantity":2,"unit_grosze":100,"total_grosze":200},
+            {"model_id":"local-b","quantity":1,"unit_grosze":120,"total_grosze":120}]);
+        let files = vec![
+            json!({"model_id":"model","quote_id":"red","quantity":1}),
+            json!({"model_id":"model","quote_id":"black","quantity":2}),
+        ];
+        let result = canonical_lines(&lines, &input, &files).unwrap();
+        assert_eq!(result[0]["model_id"], "model");
+        assert_eq!(result[1]["model_id"], "model");
+        assert_eq!(result[0]["quote_id"], "black");
+        assert_eq!(result[1]["quote_id"], "red");
+        for i in 0..2 {
+            assert_eq!(result[i]["line_id"], lines[i]["model_id"]);
+            assert_eq!(result[i]["total_grosze"], lines[i]["total_grosze"]);
+            assert_eq!(result[i]["unit_grosze"], lines[i]["unit_grosze"]);
+        }
+        let mut forged = input.clone();
+        forged["parts"][0]["analysis_id"] = json!("other-model");
+        assert!(canonical_lines(&lines, &forged, &files).is_none());
+        forged = input.clone();
+        forged["parts"][1]["quote_id"] = json!("black");
+        assert!(canonical_lines(&lines, &forged, &files).is_none());
+        assert_eq!(lines[0]["model_id"], "local-a");
+    }
     #[tokio::test]
     #[ignore = "requires isolated TEST_DATABASE_URL"]
     async fn checkout_is_atomic_owned_idempotent_and_recovers_leases() {
@@ -690,7 +765,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap_or(json!({"version":"checkout-test"}));
-        db.save_quote(&quoteid,&json!({"purchase_net_grosze_per_kg":5000,"rates":policy,"owner_hash":owner,"model_id":model.id,"model_sha256":model.sha256,"expires_at":20000,"material_id":material,"color_code":"test"}),&json!({})).await.unwrap();
+        db.save_quote(&quoteid,&json!({"purchase_net_grosze_per_kg":5000,"rates":policy,"owner_hash":owner,"model_id":model.id,"model_sha256":model.sha256,"quantity":1,"expires_at":20000,"material_id":material,"color_code":"test"}),&json!({})).await.unwrap();
         let draft = db
             .checkout_create(&owner, None, &json!({"parts":[]}), 10000)
             .await
@@ -701,7 +776,7 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        let update = json!({"parts":[],"delivery":"courier"});
+        let update = json!({"parts":[{"id":"local-line","analysis_id":model.id,"quote_id":quoteid,"quantity":1}],"delivery":"courier"});
         let (a, b) = tokio::join!(
             db.checkout_update(&draft.id, &owner, 1, &update, 10001),
             db.checkout_update(&draft.id, &owner, 1, &update, 10001)
@@ -710,7 +785,7 @@ mod tests {
             usize::from(a.unwrap().is_some()) + usize::from(b.unwrap().is_some()),
             1
         );
-        let quote = json!({"offers":[{"id":"pickup","name":"Selected carrier","total_grosze":2500},{"id":"other","name":"Other carrier","total_grosze":2500}],"packing":{"parcels":[{"weight_g":500,"dimensions_mm":[100,200,300]}]},"packaging_grosze":250,"quote_ids":[quoteid],"contact":{"email":"checkout@example.invalid"},"lines":[],"guest_updates":true});
+        let quote = json!({"offers":[{"id":"pickup","name":"Selected carrier","total_grosze":2500},{"id":"other","name":"Other carrier","total_grosze":2500}],"packing":{"parcels":[{"weight_g":500,"dimensions_mm":[100,200,300]}]},"packaging_grosze":250,"quote_ids":[quoteid],"contact":{"email":"checkout@example.invalid"},"lines":[{"model_id":"local-line","quantity":1,"unit_grosze":2250,"total_grosze":2250}],"guest_updates":true});
         let saved = db
             .checkout_quote(&draft.id, &owner, 2, &quote, 10600, 10002)
             .await
@@ -755,6 +830,46 @@ mod tests {
             db.checkout_prepare(&input, 10003)
         );
         assert_eq!(first.unwrap().unwrap().id, second.unwrap().unwrap().id);
+        let persisted: Value = sqlx::query_scalar("SELECT lines FROM orders WHERE id=$1")
+            .bind(&id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(persisted[0]["model_id"], model.id);
+        assert_eq!(persisted[0]["line_id"], "local-line");
+        assert_eq!(persisted[0]["quote_id"], quoteid);
+        assert_eq!(
+            persisted[0]["total_grosze"],
+            quote["lines"][0]["total_grosze"]
+        );
+        // A pre-fix paid row is recovered for reads only, without rewriting its money or JSON.
+        sqlx::query("UPDATE orders SET lines=$2 WHERE id=$1")
+            .bind(&id)
+            .bind(&quote["lines"])
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        let recovered_order = db
+            .admin_orders()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|o| o["id"] == id)
+            .unwrap();
+        assert_eq!(recovered_order["lines"], persisted);
+        let unchanged: Value = sqlx::query_scalar("SELECT lines FROM orders WHERE id=$1")
+            .bind(&id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(unchanged, quote["lines"]);
+        sqlx::query("UPDATE orders SET lines=$2 WHERE id=$1")
+            .bind(&id)
+            .bind(&persisted)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
         assert!(
             db.checkout_update(&draft.id, &owner, 3, &json!({}), 10004)
                 .await
@@ -906,7 +1021,7 @@ mod tests {
         );
         for (rejected_after_unknown, offset) in [(false, 0), (true, 100)] {
             let draft = db
-                .checkout_create(&owner, None, &json!({}), 12000 + offset)
+                .checkout_create(&owner, None, &update, 12000 + offset)
                 .await
                 .unwrap();
             let quoted = db
@@ -1001,7 +1116,7 @@ mod tests {
                 .unwrap()
         );
         let delayed_draft = db
-            .checkout_create(&owner, None, &json!({"delivery":"courier"}), 13000)
+            .checkout_create(&owner, None, &update, 13000)
             .await
             .unwrap();
         let delayed_quote = db

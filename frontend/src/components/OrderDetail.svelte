@@ -185,8 +185,7 @@
               <details class="configuration">
                 <summary>Parametry wydruku</summary>
                 <ul class="print-settings">
-                  {#if order.serverStatus}{#if order.files?.filter((f) => f.model_id === model.id).length === 1 && model.advanced.wallCount > 0}<li
-                      >
+                  {#if order.serverStatus}{#if model.advanced.wallCount > 0}<li>
                         Jakość: {{ draft: 'robocza', standard: 'standardowa', fine: 'dokładna' }[
                           model.options.quality
                         ]}

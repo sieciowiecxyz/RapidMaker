@@ -20,6 +20,8 @@ type RawOrder = {
   };
   lines: {
     model_id: string;
+    line_id?: string;
+    quote_id?: string;
     quantity: number;
     unit_grosze?: number | null;
     total_grosze?: number | null;
@@ -33,6 +35,7 @@ type RawOrder = {
   };
 };
 type FileRecord = {
+  quote_id?: string;
   model_id: string;
   filename: string;
   available: boolean;
@@ -116,12 +119,17 @@ function checkedAmount(value: number) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error('Nieprawidłowa kwota zamówienia.');
   return value;
 }
+function matchingFiles(line: RawOrder['lines'][number], files: FileRecord[]) {
+  return files.filter(
+    (f) => f.model_id === line.model_id && (!line.quote_id || f.quote_id === line.quote_id),
+  );
+}
 function model(line: RawOrder['lines'][number], files: FileRecord[]): PrintModel {
-  const matches = files.filter((f) => f.model_id === line.model_id),
+  const matches = matchingFiles(line, files),
     file = matches.length === 1 ? matches[0] : undefined;
   const name = matches[0]?.filename || line.filename || 'Model ' + line.model_id;
   return {
-    id: line.model_id,
+    id: line.line_id || line.model_id,
     name,
     materialName: file?.material_name || undefined,
     colorName: file?.color_name || undefined,
@@ -212,9 +220,8 @@ function convert(
       lines: raw.lines
         .filter((line) => line.unit_grosze != null && line.total_grosze != null)
         .map((line) => ({
-          modelId: line.model_id,
-          name:
-            files.find((f) => f.model_id === line.model_id)?.filename || 'Model ' + line.model_id,
+          modelId: line.line_id || line.model_id,
+          name: matchingFiles(line, files)[0]?.filename || 'Model ' + line.model_id,
           quantity: line.quantity,
           unitPrice: checkedAmount(line.unit_grosze!) / 100,
           total: checkedAmount(line.total_grosze!) / 100,
