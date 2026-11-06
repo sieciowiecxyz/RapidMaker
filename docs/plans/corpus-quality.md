@@ -60,3 +60,5 @@ M2 usuwania wdrożony:10 realnych E2E/22DB+API/3 zwykłe scenariusze PASS w osob
 29 odzyskany bezstratną zmianą kolejności trójkątów GLB (29,2→24,2MB), bez zmiany kanonicznego STL/capów/stylu. Pełne porównanie1 993 410 faces, realna cena i4widoki UI zweryfikowane; bieżące dowody/pozostałe19/41 w zwięzłym planie dużych modeli. Nie zastępuje to pełnego korpusu lub końcowego audytu celu.
 
 Model 19: backend ma awaryjny podgląd uproszczony, pełny STL i ręczną ścieżkę ceny ponad 500 mm. Rzeczywiste API i kontrola masy/własności sprawdzone; finalne dowody UI/review w [planie dużych modeli](large-models.md). Nie utożsamiamy metryki uproszczenia z gwarancją geometrii ani ręcznej ścieżki z automatyczną ceną. Dalej model 41 i audyt całego celu.
+
+Model 41: niezależny licznik wykazał przekroczenie limitu całego zespołu; wcześniejszy timeout zastąpiono kontrolowanym 422. 3 rzeczywiste API (41 odmowa/19 przyjęty/20 cena), UI odmowy i 8 standardowych scenariuszy PASS. Nie liczymy odmowy jako obsługi modelu; pełna walidacja przyjętych plików pozostaje. Następne: aktualny pełny korpus i audyt wymagań całego celu.

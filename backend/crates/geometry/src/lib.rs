@@ -9,6 +9,7 @@ mod glb;
 pub use glb::write_glb;
 mod preview;
 mod step;
+mod three_mf_budget;
 mod three_mf_mirrors;
 
 const MAX_CANONICAL_STL_BYTES: usize = 50 * 1024 * 1024;
@@ -692,6 +693,7 @@ fn geometry_package<'a>(
     let mut source =
         zip::ZipArchive::new(Cursor::new(input)).map_err(|_| PreviewError::MalformedInput)?;
     check_timeout(started, limits)?;
+    let mut budget = None;
     // Reject bad small actual roots before normalizing potentially large secondary parts.
     if canonical_root_relationship(&mut source).is_some()
         && let Ok(mut root) = source.by_name("3D/3dmodel.model")
@@ -706,11 +708,12 @@ fn geometry_package<'a>(
         if bytes.len() <= 64 * 1024 {
             let xml = std::str::from_utf8(&bytes).map_err(|_| PreviewError::MalformedInput)?;
             let (normalized, _) = three_mf_mirrors::normalize(xml, limits, started)?;
-            lib3mf::parser::parse_model_from_reader(
+            let root = lib3mf::parser::parse_model_from_reader(
                 Cursor::new(normalized.as_deref().unwrap_or(xml).as_bytes()),
                 ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
             )
             .map_err(classify_three_mf_error)?;
+            budget = three_mf_budget::Budget::new(root);
         }
         check_timeout(started, limits)?;
     }
@@ -731,6 +734,19 @@ fn geometry_package<'a>(
                 .read_to_string(&mut xml)
                 .map_err(|_| PreviewError::MalformedInput)?;
             let (normalized, saved) = three_mf_mirrors::normalize(&xml, limits, started)?;
+            let path = entry.name().map_err(|_| PreviewError::UnsafeContainer)?;
+            if budget.as_mut().is_some_and(|budget| {
+                budget
+                    .add(
+                        &path,
+                        normalized.as_deref().unwrap_or(&xml),
+                        limits,
+                        started,
+                    )
+                    .is_none()
+            }) {
+                budget = None;
+            }
             mirrors.insert(
                 entry
                     .name()
@@ -743,6 +759,13 @@ fn geometry_package<'a>(
             }
             check_timeout(started, limits)?;
         }
+    }
+    if budget
+        .as_ref()
+        .and_then(|budget| budget.exceeds(limits.max_triangles))
+        == Some(true)
+    {
+        return Err(PreviewError::TooManyTriangles);
     }
     if replacements.is_empty() {
         return Ok((Cow::Borrowed(input), mirrors));

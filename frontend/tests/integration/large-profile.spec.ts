@@ -95,6 +95,34 @@ function corpusSource(caseNumber: number) {
 
 test.describe('opt-in large model API profile', () => {
   test.skip(process.env.RAPIDMAKER_LARGE_MODELS !== '1', 'Requires explicit --large-models');
+
+  test('corpus 41: oversized assembled geometry rejects clearly and releases the worker', async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const { path, bytes } = corpusSource(41);
+    const started = Date.now();
+    const rejected = await request.post('/api/models', {
+      headers: { ...headers, 'x-model-filename': encodeURIComponent(basename(path)) },
+      data: bytes,
+      timeout: 90_000,
+    });
+    expect(rejected.status()).toBe(422);
+    expect(await rejected.json()).toMatchObject({ code: 'model_resource_limit' });
+    const accepted = await request.post('/api/models', {
+      headers: { ...headers, 'x-model-filename': 'cube_20mm.stl' },
+      data: readFileSync(resolve('../backend/crates/geometry/tests/fixtures/cube_20mm.stl')),
+    });
+    expect(accepted.status()).toBe(201);
+    expect((await request.get((await accepted.json()).preview_url)).status()).toBe(200);
+    test
+      .info()
+      .annotations.push({
+        type: 'assembly-budget-rejection',
+        description: `case41 exceeds assembled triangle budget; typed422 followed by valid upload; ${Date.now() - started}ms total, rejection is not supported geometry or a price`,
+      });
+  });
+
   for (const expected of expectedCases) {
     test(`corpus ${expected.case}: large canonical STL and bounded private GLB preserve full geometry`, async ({
       request,
@@ -227,12 +255,10 @@ test.describe('opt-in large model API profile', () => {
           code: 'manual_quote_required',
           reason: 'size_limit',
         });
-        test
-          .info()
-          .annotations.push({
-            type: 'approximate-display-only',
-            description: `${expected.triangles} full canonical faces, bounded approximate preview; legacy mass unavailable; dimensions above 500mm require manual price`,
-          });
+        test.info().annotations.push({
+          type: 'approximate-display-only',
+          description: `${expected.triangles} full canonical faces, bounded approximate preview; legacy mass unavailable; dimensions above 500mm require manual price`,
+        });
       }
 
       if (expected.case === 29) {

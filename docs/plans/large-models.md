@@ -23,7 +23,7 @@ Opis: aktualne granice, dowody i następne kroki; szczegóły w [raporcie](../co
 Całe zadanie150s/lease180s; dwie duże partie mogą nie zmieścić się w deadline. Kwoty20modeli/256MiB na właściciela i1000/8GiB globalnie obejmują oryginał/STL/GLB. Lokalny STL nadal25MiB/1Mtri; błąd metadata API daje awaryjne25MiB. Wierzchołki renderera mogą zająć144MB +72MB pozycji tymczasowych +GLB/kopia trim/GPU; viewport390px nie dowodzi działania fizycznego telefonu.
 
 ## Etapy
-1. **Diagnoza — wykonana:** dziewięć dużych przypadków zmierzonych w izolacji, źródłaSHA.14/21/37 mają potwierdzoną wadę topologii,32 niepoprawny pakiet; nie obchodzimy walidatora.41 nadal zatrzymuje pełna walidacja SDK przy25CPU; przyczyna SIGKILL nieoznaczona jako OOM.
+1. **Diagnoza — wykonana:** dziewięć dużych przypadków zmierzonych w izolacji, źródłaSHA.14/21/37 mają potwierdzoną wadę topologii,32 niepoprawny pakiet; nie obchodzimy walidatora.41 wcześniej kończył się przy 25 CPU; niezależny licznik wykazał przekroczenie budżetu zespołu, obecnie odrzucane przed drogą walidacją (szczegóły poniżej). Nie potwierdzono pełnej poprawności semantycznej.
 2. **Konwersja — częściowo:** kompaktowe u16 i backendowy profil;29 odzyskany przestrzenną kolejnością samych trójkątów, bez zmiany f32/winding/liczności, bez mutacji STL. Dotychczasowy pasujący zapis pozostaje bajtowo identyczny. Sort tylko po porażce obu dotychczasowych zapisów; minimalny rozmiar referencjonowanych pozycji+indeksów pomija niemożliwe próby. Nadal64bloki/64KiBJSON/25MiBGLB.
 3. **API/UI — częściowo:**8/20/29/40 mają rzeczywisty upload/privateGLB/render/zoom w1440/390 i obu motywach.20/29 również rzeczywisty slicer/koszyk/cenę UI na jawnych stawkach fixture; nie jest to dowód produkcyjnej rentowności. Dla29 dokładnie porównano każdy bit wszystkich1 993 410 zorientowanych trójkątów z kanonicznym STL, także powtórzenia.
 4. **Usuwanie — wykonane w sprawdzonym zakresie:**10E2E17,5s/22DB+API/3zwykłe scenariusze20,9s. Chronione DELETE:204 po fizycznym usunięciu,404 cudzy/brak,409 runninglease/livehold; dokładnyOrigin/CSRF, trwały mark/lockkolejki, retry po błędzie. Sprzątane spóźnione zaakceptowane odpowiedzi i błędy advanced po201. Token gościa przy koncie dotyczy tylko nieprzejętego rekordu, bez niejawnego claimu. Nieznana odpowiedź/zamknięta strona nadal24hretencji; retry ID w pamięci strony.
@@ -36,7 +36,7 @@ Całe zadanie150s/lease180s; dwie duże partie mogą nie zmieścić się w deadl
 
 ## Następne kroki
 1. Model 19: bezpieczny podgląd uproszczony wdrożony; szczegóły i weryfikacja poniżej. Pełny model pozostaje źródłem produkcji, wymiarów i oceny ręcznej.
-2. Model 41: ustalić ważność i koszt pełnej walidacji SDK bez wyłączania kontroli bezpieczeństwa; ewentualny inny profil diagnostyczny wyraźnie oddzielić od runtime/defaultu.
+2. Model 41: niezależnie potwierdzono przekroczenie budżetu zespołu; kontrola przed SDK wdrożona, końcowe wyniki poniżej. Nie oznacza to obsługi modelu ani potwierdzenia pełnej poprawności pakietu.
 3. Dokończyć dowody nowych cen/ilości/zasobów i audyt całego celu. Weryfikować wybrane zmiany, bez powtarzania zielonych zestawów bez powodu.
 
 Historyczny szczegółowy plan i poprzednie przebiegi: `cf060a3:docs/plans/large-models.md`; surowych modeli/raportów nie usunięto. Komendy:
@@ -64,3 +64,17 @@ Prywatny eksperyment przed integracją: 15,6 s / 468 MiB RAM, 81 części zachow
 Końcowe kontrole: `approx-glb-parser.json` 25 PASS / 1,6 s; `approx19-standard-models.json` 8 PASS / 7,7 s. Rust/frontend build i końcowy Clippy PASS; 4 testy modułu preview po poprawce PASS. Początkowe błędy testów API/UI są zachowane i opisane w raporcie. Cache kompilatora po ENOSPC: usunięto tylko stare zamknięte katalogi incremental pod blokadą; prywatny zapis w cache-cleanup.json, bez plików użytkownika lub sekretów.
 
 Końcowy review Sol xhigh: bez kolejnego konkretnego blokera. Oceny /10: poprawność 8, bezpieczeństwo 9, kwoty 8, zasoby 8, błędy 8, współbieżność 8, dowody 9, prostota 7, utrzymanie 7, zgodność wizualna 9. To zakres modelu 19, bez deklaracji pełnego 10/10 lub testów obciążeniowych. Reviewer nie powtarzał testów.
+
+## Model 41 — wcześniejsze sprawdzenie budżetu zespołu
+
+Niezależny licznik XML i grafu build/components, z kontrolą SHA, wykazał 16 instancji siatek: 6 257 906 trójkątów, STL 312 895 384 B. Wszystkie 14 wpisów build ma printable=1. Największa pojedyncza siatka ma tylko 955 064 trójkąty — limit przekracza cały zespół. Archiwum rozpakowuje się do 522 098 543 B. Licznik nie potwierdza pełnej poprawności semantycznej/topologicznej. Prywatny pomiar: 8,605 s / 8,602 CPU / 27 908 KiB, bez sieci/sekretów, w osobnym profilu diagnostycznym; nie jest pomiarem produktu.
+
+`geometry/three_mf_budget.rs` tworzy ograniczoną wskazówkę z istniejącego, sprawdzonego małego root XML i już odczytywanych części. Liczy tylko osiągalne siatki, z wielokrotnością instancji; pomija nieużywane obiekty. Rozpoznaje przestrzenie nazw i używa wspólnego resolvera ścieżek. Limit metadanych 4096 obiektów/referencji, głębokość 64, obliczenia nasycane. Niejasny graf/nazwy/cykl/DTD wyłączają wskazówkę. Każdy kandydat mieszczący się w limicie nadal przechodzi cały dotychczasowy walidator. Jedynie udowodnione przekroczenie daje wcześniej TooManyTriangles; błąd budżetu może poprzedzać wykrycie innej wady pakietu.
+
+Pierwszy rzeczywisty test wykazał nadal 503 po 25,2 s: poprawne referencje tekstowe &amp; w metadanych wyłączały wskazówkę. Dodano obsługę pięciu predefiniowanych i poprawnych liczbowych referencji tekstowych oraz test regresji; DTD/niestandardowe encje nadal wracają do walidatora. Oczekiwania testu pozostawiono: jawne 422 i działający kolejny upload, bez uznawania 503 za sukces.
+
+Kontrole po poprawce: 50 testów geometrii PASS / 1 wcześniej opcjonalny ignored, Clippy geometry all-targets, format i build aplikacji PASS. `budget41-api-fixed.json`: 3 PASS / 103,9 s — model 41 daje 422 model_resource_limit i następny poprawny upload działa (13,4 s razem); model 19 zachowuje pełny STL/podgląd/ochronę masy/ścieżkę ręczną (37,1 s), model 20 przechodzi slicer i niezależny rachunek ceny (52,7 s). `budget41-ui.json`: 1 PASS / 27,6 s — rzeczywisty formularz, ten sam jawny błąd, brak udawanego podglądu lub ceny, działające kontrolki; test potwierdza też odrzucenie osobnym zapytaniem HTTP. Limity, zależności, .env i wygląd pozostają bez zmian; model 41 nadal wykracza poza profil large.
+
+Review Sol xhigh po poprawce encji: brak konkretnego blokera. Oceny /10: poprawność 8, bezpieczeństwo 9, kwoty N/A, zasoby 8, błędy 9, współbieżność 9, dowody 9, prostota 7, utrzymanie 7, wygląd N/A. Dodatkowy skan XML ma koszt: dwa przyjęte duże przypadki mieszczą się w limicie, bez gwarancji dla dowolnego pliku/sprzętu. Reviewer nie uruchamiał testów ponownie; nie jest to ocena całego celu.
+
+Regresja zwykłego profilu po kontroli zespołu: `budget41-standard-models.json` 8 PASS / 7,6 s — wszystkie formaty, odrzucenia, retencja, izolacja klientów/admission i upload ponad dawnym limitem 25 MiB.
