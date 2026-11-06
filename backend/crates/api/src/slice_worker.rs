@@ -16,13 +16,17 @@ impl SliceWorker {
         let (stop, mut receiver) = watch::channel(false);
         let task = tokio::spawn(async move {
             let mut cleanup = tokio::time::Instant::now() - Duration::from_secs(60);
+            let mut model_cleanup_cursor = super::files::ModelCleanupCursor::default();
             loop {
                 if *receiver.borrow() {
                     break;
                 }
                 if cleanup.elapsed() >= Duration::from_secs(60) {
-                    if super::files::cleanup_models(&db).await.is_err() {
-                        tracing::error!(event = "model_cleanup_failed", reason = "database");
+                    if super::files::cleanup_models(&db, &mut model_cleanup_cursor)
+                        .await
+                        .is_err()
+                    {
+                        tracing::error!(event = "model_cleanup_failed", reason = "storage");
                     }
                     cleanup = tokio::time::Instant::now();
                 }

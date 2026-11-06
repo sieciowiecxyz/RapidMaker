@@ -13,9 +13,9 @@ use rapidmaker_storage::{ModelCommitUncertain, ModelRemoval, Storage, StoredMode
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, DirBuilder, OpenOptions},
+    fs::{self, DirBuilder, File, OpenOptions, ReadDir},
     io::{SeekFrom, Write},
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
+    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -201,7 +201,31 @@ impl Drop for PendingDirectory {
     }
 }
 
-pub(super) async fn cleanup_models(storage: &Storage) -> Result<(), Error> {
+#[derive(Default)]
+pub(super) struct ModelCleanupCursor {
+    scan: Option<(PathBuf, u64, u64, ReadDir)>,
+}
+
+// A fresh open is essential: duplicated FDs share an advisory filesystem lock.
+fn lock_model_root(root: &Path) -> std::io::Result<Option<File>> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(root)?;
+    if file.metadata()?.permissions().mode() & 0o077 != 0 {
+        return Err(std::io::Error::other("model root is not private"));
+    }
+    match file.try_lock() {
+        Ok(()) => Ok(Some(file)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(error)) => Err(error),
+    }
+}
+
+pub(super) async fn cleanup_models(
+    storage: &Storage,
+    cursor: &mut ModelCleanupCursor,
+) -> Result<(), Error> {
     let state = FileState {
         storage: Some(storage.clone()),
         profile: ModelProfile::from_env()
@@ -213,7 +237,105 @@ pub(super) async fn cleanup_models(storage: &Storage) -> Result<(), Error> {
             )
         })?,
     };
-    cleanup(&state, now()?).await
+    let timestamp = now()?;
+    cleanup(&state, timestamp).await?;
+    cleanup_orphans(&state, timestamp, cursor).await
+}
+
+async fn cleanup_orphans(
+    state: &FileState,
+    timestamp: i64,
+    cursor: &mut ModelCleanupCursor,
+) -> Result<(), Error> {
+    let unavailable = || {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Nie można posprzątać magazynu modeli.",
+        )
+    };
+    let Some(root) = lock_model_root(&state.root).map_err(|_| unavailable())? else {
+        return Ok(());
+    };
+    let identity = root.metadata().map_err(|_| unavailable())?;
+    if !cursor.scan.as_ref().is_some_and(|(path, dev, ino, _)| {
+        path == &state.root && *dev == identity.dev() && *ino == identity.ino()
+    }) {
+        cursor.scan = Some((
+            state.root.clone(),
+            identity.dev(),
+            identity.ino(),
+            fs::read_dir(&state.root).map_err(|_| unavailable())?,
+        ));
+    }
+    let scan = &mut cursor.scan.as_mut().unwrap().3;
+    let mut candidates = Vec::new();
+    let mut finished = false;
+    // Count every entry, including junk and protected directories, for fair bounded work.
+    for _ in 0..64 {
+        let Some(entry) = scan.next() else {
+            finished = true;
+            break;
+        };
+        let entry = entry.map_err(|_| unavailable())?;
+        let Some(id) = entry
+            .file_name()
+            .to_str()
+            .filter(|id| valid_id(id))
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        let metadata = match fs::symlink_metadata(entry.path()) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(unavailable()),
+        };
+        if !metadata.is_dir() {
+            continue;
+        }
+        let modified = metadata.modified().map_err(|_| unavailable())?;
+        let Some(cutoff) = u64::try_from(timestamp)
+            .ok()
+            .and_then(|now| now.checked_sub(86400))
+            .and_then(|age| UNIX_EPOCH.checked_add(Duration::from_secs(age)))
+        else {
+            continue;
+        };
+        if modified <= cutoff {
+            candidates.push(id);
+        }
+    }
+    if finished {
+        cursor.scan = None;
+    }
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    // Only this read-only future is cancellable, never a model writer/COMMIT.
+    let eligible = tokio::time::timeout(
+        Duration::from_secs(5),
+        database(state)?.orphan_model_ids(&candidates, timestamp),
+    )
+    .await
+    .map_err(|_| unavailable())?
+    .map_err(|_| unavailable())?;
+    let mut removed = false;
+    for id in eligible {
+        match fs::remove_dir_all(state.root.join(&id)) {
+            Ok(()) => {
+                removed = true;
+                tracing::info!(event = "model_orphan_removed", model_id = %id);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {
+                tracing::error!(event = "model_orphan_cleanup_failed", model_id = %id, reason = "filesystem")
+            }
+        }
+    }
+    if removed {
+        root.sync_all().map_err(|_| unavailable())?;
+    }
+    Ok(())
 }
 
 async fn cleanup(state: &FileState, timestamp: i64) -> Result<(), Error> {
@@ -374,6 +496,20 @@ async fn upload(
     } else {
         (format!("{:x}", Sha256::digest(token.as_bytes())), None)
     };
+    // Declared before PendingDirectory so rollback removes files before unlocking.
+    let _root_lock = lock_model_root(&state.root)
+        .map_err(|_| {
+            error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Nie można zapisać modelu.",
+            )
+        })?
+        .ok_or_else(|| {
+            error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Trwa przesyłanie modelu. Spróbuj za chwilę.",
+            )
+        })?;
     let id = Uuid::new_v4().to_string();
     let directory = state.root.join(&id);
     DirBuilder::new()
@@ -482,7 +618,7 @@ async fn upload(
         .map_err(|failure| {
             if failure.is::<ModelCommitUncertain>() {
                 // A committed row may already reference these files. Without a row,
-                // the orphan directory needs manual reconciliation in this POC.
+                // the worker reconciles the aged directory under both locks.
                 pending.0 = None;
                 tracing::error!(event="model_commit_uncertain", model_id=%record.id, reason="prepared files retained for reconciliation");
             }
@@ -1005,3 +1141,7 @@ mod tests {
         assert!(!valid_id("../model"));
     }
 }
+
+#[cfg(test)]
+#[path = "files_orphan_tests.rs"]
+mod orphan_tests;

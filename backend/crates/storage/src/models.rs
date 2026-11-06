@@ -143,6 +143,47 @@ impl Storage {
         row.map(stored_model).transpose()
     }
 
+    /// Disk candidates only. All physical upload writers must hold the root lock.
+    /// The lock statement and presence query need separate READ COMMITTED snapshots:
+    /// an earlier uncertain COMMIT may have completed immediately before this lock.
+    pub async fn orphan_model_ids(
+        &self,
+        ids: &[String],
+        now: i64,
+    ) -> Result<Vec<String>, StorageError> {
+        if ids.len() > 64
+            || ids
+                .iter()
+                .any(|id| !uuid::Uuid::parse_str(id).is_ok_and(|uuid| uuid.to_string() == *id))
+        {
+            return Err("invalid orphan candidates".into());
+        }
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED, READ ONLY")
+            .execute(&mut *tx)
+            .await?;
+        let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(72617069646)")
+            .fetch_one(&mut *tx)
+            .await?;
+        if !locked {
+            return Ok(Vec::new());
+        }
+        let eligible = sqlx::query_scalar(
+            "SELECT DISTINCT candidate FROM unnest($1::text[]) AS candidate
+            WHERE NOT EXISTS (SELECT 1 FROM private_models m WHERE m.id=candidate)
+            AND NOT EXISTS (SELECT 1 FROM slicer_jobs j WHERE j.model_id=candidate
+                AND j.status IN ('queued','running') AND (j.expires_at>$2 OR j.lease_until>$2))
+            AND NOT EXISTS (SELECT 1 FROM order_files f WHERE f.model_id=candidate
+                AND (f.retain_until IS NULL OR f.retain_until>$2))",
+        )
+        .bind(ids)
+        .bind(now)
+        .fetch_all(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(eligible)
+    }
+
     pub async fn expired_model_ids(&self, now: i64) -> Result<Vec<String>, StorageError> {
         let mut tx = self.queue_transaction().await?;
         let ids = sqlx::query_scalar("UPDATE private_models m SET deletion_started=true WHERE expires_at<=$1 AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.model_id=m.id AND j.status IN ('queued','running') AND (j.expires_at>$1 OR j.lease_until>$1)) AND NOT EXISTS(SELECT 1 FROM order_files f WHERE f.model_id=m.id AND (f.retain_until IS NULL OR f.retain_until>$1)) RETURNING id")

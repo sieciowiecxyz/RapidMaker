@@ -35,6 +35,8 @@ targets = [
     ('rapidmaker-storage', ['--lib'], 'storage', None),
     ('rapidmaker-api', ['--lib'], 'catalog',
      'quotes::tests::postgres_customer_catalog_ignores_stock_and_keeps_operator_profiles'),
+    ('rapidmaker-api', ['--lib'], 'orphans',
+     'files::orphan_tests::aged_orphans_are_fenced_bounded_and_fail_closed'),
     ('rapidmaker-api', ['--test', 'access'], 'access',
      'clients_guests_and_admins_cannot_cross_resource_boundaries'),
 ]
