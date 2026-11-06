@@ -72,15 +72,20 @@ fn main() -> ExitCode {
     match result {
         Ok(output) => {
             let analysis = &output.analysis;
+            let preview = output.approximation.map_or_else(String::new, |preview| format!(
+                ",\"preview_source_triangles\":{},\"preview_display_triangles\":{},\"preview_reported_error_mm\":{},\"preview_max_error_mm\":{}",
+                preview.source_triangles, preview.display_triangles, preview.reported_error_mm, preview.max_error_mm,
+            ));
             println!(
-                "{{\"status\":\"ok\",\"vertex_count\":{},\"triangle_count\":{},\"dimensions_mm\":{:?},\"bounds_min_mm\":{:?},\"bounds_max_mm\":{:?},\"glb_bytes\":{},\"elapsed_ms\":{}}}",
+                "{{\"status\":\"ok\",\"vertex_count\":{},\"triangle_count\":{},\"dimensions_mm\":{:?},\"bounds_min_mm\":{:?},\"bounds_max_mm\":{:?},\"glb_bytes\":{},\"elapsed_ms\":{}{}}}",
                 analysis.vertex_count,
                 analysis.triangle_count,
                 analysis.dimensions_mm,
                 analysis.bounds_min_mm,
                 analysis.bounds_max_mm,
                 output.glb.len(),
-                started.elapsed().as_millis()
+                started.elapsed().as_millis(),
+                preview,
             );
             drop(output);
             ExitCode::SUCCESS

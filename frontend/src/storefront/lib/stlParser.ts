@@ -1,5 +1,9 @@
 import type { PartMesh } from './partMesh';
-export type StlMesh = PartMesh & { triangleCount: number; dimensions: [number, number, number] };
+export type StlMesh = PartMesh & {
+  triangleCount: number;
+  dimensions: [number, number, number];
+  approximation?: { sourceTriangles: number; reportedErrorMm: number };
+};
 const MAX_TRIANGLES = 1_000_000;
 export const MAX_PREVIEW_TRIANGLES = Math.floor((50 * 1024 * 1024 - 84) / 50);
 export const MAX_GLB_PREVIEW_TRIANGLES = 2_000_000;

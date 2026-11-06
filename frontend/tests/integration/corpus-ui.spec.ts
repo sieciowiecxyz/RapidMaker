@@ -132,7 +132,9 @@ for (const item of selected) {
       `Model z pliku ${name}. Obróć przeciągając myszą. Kolor: Czarny.`,
       { timeout: 90_000 },
     );
-    await expect(scene.locator('.scene-caption')).toContainText('trójkątów');
+    await expect(scene.locator('.scene-caption')).toContainText(
+      item.case === 19 ? 'Uproszczony podgląd' : 'trójkątów',
+    );
     const caption = await scene.locator('.scene-caption').innerText();
     const count = caption.split('trójkątów')[0].replace(/\D/g, '');
     expect(
@@ -229,6 +231,15 @@ for (const item of selected) {
         );
       }
     }
+    if (largeCase && item.case === 19) {
+      await page.locator('input[name=material][value=pla]').check();
+      await page.locator('input[name=color][value=black]').check();
+      await page.locator('input[name=quality][value=standard]').check();
+      await page.locator('input[name=strength][value=standard]').check();
+      await expect(page.locator('.manual-heading')).toHaveText('Wymagana ręczna wycena');
+      await expect(page.locator('.estimate-lines')).toContainText('model przekracza 500 mm');
+      await expect(page.locator('.price')).toHaveCount(0);
+    }
     info.annotations.push({
       type: 'ui-render',
       description: `Deep GUI mesh/privacy checks and four frames; ${item.case === 9 ? 'server price checked' : 'explicit manual quote above 500 mm'}`,
@@ -241,6 +252,7 @@ for (const item of selected) {
 const clientCapMiB = process.env.RAPIDMAKER_LARGE_MODELS === '1' ? 96 : 32;
 const largeTriangleCounts: Record<number, number> = {
   8: 1_567_758,
+  19: 3_861_000,
   20: 1_487_438,
   29: 1_993_410,
   40: 1_677_324,
@@ -372,7 +384,9 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       `Model z pliku ${name}. Obróć przeciągając myszą. Kolor: Czarny.`,
       { timeout: 90_000 },
     );
-    await expect(scene.locator('.scene-caption')).toContainText('trójkątów');
+    await expect(scene.locator('.scene-caption')).toContainText(
+      item.case === 19 ? 'Uproszczony podgląd' : 'trójkątów',
+    );
     const renderedTriangles = Number(
       (await scene.locator('.scene-caption').innerText()).split('trójkątów')[0].replace(/\D/g, ''),
     );
@@ -418,7 +432,16 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         description: JSON.stringify({ sourceTriangles, renderedTriangles, zeroArea }),
       });
       if (largeCase) {
-        expect(sourceTriangles).toBe(largeTriangleCounts[item.case]);
+        if (item.case === 19) {
+          const approximation = gltf.nodes[0].extras.rapidmakerPreview;
+          expect(approximation.source_triangles).toBe(largeTriangleCounts[item.case]);
+          expect(approximation.display_triangles).toBe(sourceTriangles);
+          expect(sourceTriangles).toBeLessThan(approximation.source_triangles);
+          expect(approximation.max_error_mm).toBe(0.05);
+          expect(approximation.reported_error_mm).toBeLessThanOrEqual(0.05);
+        } else {
+          expect(sourceTriangles).toBe(largeTriangleCounts[item.case]);
+        }
         expect(renderedTriangles).toBeGreaterThan(1_048_574);
         expect(renderedTriangles).toBeLessThanOrEqual(2_000_000);
       } else {
@@ -499,6 +522,15 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         type: 'large-ui-price',
         description: `case${item.case} UI equals server cart ${priced.print_grosze} grosze; real slicer; explicit fixture costs`,
       });
+    }
+    if (largeCase && item.case === 19) {
+      await page.locator('input[name=material][value=pla]').check();
+      await page.locator('input[name=color][value=black]').check();
+      await page.locator('input[name=quality][value=standard]').check();
+      await page.locator('input[name=strength][value=standard]').check();
+      await expect(page.locator('.manual-heading')).toHaveText('Wymagana ręczna wycena');
+      await expect(page.locator('.estimate-lines')).toContainText('model przekracza 500 mm');
+      await expect(page.locator('.price')).toHaveCount(0);
     }
     info.annotations.push({
       type: 'ui-render',

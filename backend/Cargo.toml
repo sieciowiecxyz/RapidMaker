@@ -45,3 +45,6 @@ opt-level = 2
 
 [profile.dev.package.quick-xml]
 opt-level = 2
+
+[profile.dev.package.meshopt]
+opt-level = 2

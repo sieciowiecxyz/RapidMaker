@@ -4,8 +4,14 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, resolve, sep } from 'node:path';
 
 type CorpusCase = { case: number; file: string; sha256: string; size_bytes: number };
-const expectedCases = [
+const expectedCases: {
+  case: number;
+  triangles: number;
+  dimensions: number[];
+  approximate?: boolean;
+}[] = [
   { case: 8, triangles: 1_567_758, dimensions: [100, 190, 58] },
+  { case: 19, triangles: 3_861_000, dimensions: [829.883, 760.353, 214.511], approximate: true },
   { case: 20, triangles: 1_487_438, dimensions: [106.84888, 115.00562, 129] },
   { case: 29, triangles: 1_993_410, dimensions: [54.999817, 55.22171, 65.87768] },
   { case: 40, triangles: 1_677_324, dimensions: [80.94293, 77.361206, 100] },
@@ -138,9 +144,12 @@ test.describe('opt-in large model API profile', () => {
       expect(glb.readUInt32LE(24 + jsonLength)).toBe(0x004e4942);
       expect(glb.readUInt32LE(20 + jsonLength) + jsonLength + 28).toBe(glb.length);
       expect(gltf.buffers).toEqual([{ byteLength: glb.length - jsonLength - 28 }]);
-      expect(gltf.nodes).toEqual([
-        { mesh: 0, scale: [0.001, 0.001, 0.001], rotation: [-0.70710678, 0, 0, 0.70710678] },
-      ]);
+      expect(gltf.nodes).toHaveLength(1);
+      expect(gltf.nodes[0]).toMatchObject({
+        mesh: 0,
+        scale: [0.001, 0.001, 0.001],
+        rotation: [-0.70710678, 0, 0, 0.70710678],
+      });
       expect(gltf.scene).toBe(0);
       expect(gltf.scenes).toEqual([{ nodes: [0] }]);
       expect(gltf.meshes).toHaveLength(1);
@@ -153,7 +162,20 @@ test.describe('opt-in large model API profile', () => {
         expect(indices.count % 3).toBe(0);
         indexCount += indices.count;
       }
-      expect(indexCount).toBe(expected.triangles * 3);
+      if (expected.approximate) {
+        const approximation = gltf.nodes[0].extras.rapidmakerPreview;
+        expect(approximation.source_triangles).toBe(expected.triangles);
+        expect(approximation.display_triangles).toBe(indexCount / 3);
+        expect(indexCount).toBeGreaterThan(0);
+        expect(indexCount).toBeLessThan(expected.triangles * 3);
+        expect(indexCount / 3).toBeLessThanOrEqual(2_000_000);
+        expect(approximation.max_error_mm).toBe(0.05);
+        expect(approximation.reported_error_mm).toBeGreaterThanOrEqual(0);
+        expect(approximation.reported_error_mm).toBeLessThanOrEqual(0.05);
+      } else {
+        expect(indexCount).toBe(expected.triangles * 3);
+        expect(gltf.nodes[0].extras).toBeUndefined();
+      }
 
       const root = realpathSync(modelRoot);
       const canonicalPath = realpathSync(resolve(root, model.id, 'canonical.stl'));
@@ -178,14 +200,47 @@ test.describe('opt-in large model API profile', () => {
           1e-3,
         );
 
-      if (expected.case === 29) {
-        assertExactOrientedFaces(canonical, glb, expected.triangles);
+      if (expected.approximate) {
+        const analysis = await request.post('/api/models/analyze', {
+          headers: { ...headers, 'x-model-filename': 'large.3mf' },
+          data: bytes,
+          timeout: 90_000,
+        });
+        expect(analysis.status()).toBe(200);
+        const fullAnalysis = await analysis.json();
+        expect(fullAnalysis.weight_g).toBeNull();
+        expect(fullAnalysis.weight_source).toBe('unavailable');
+        expect(fullAnalysis.reason).toContain('Podgląd jest uproszczony');
+        const catalog = await (await request.get('/api/catalog/materials')).json();
+        const material = catalog.materials.find((item: { id: string }) => item.id === 'GFA00');
+        const quote = await request.post('/api/quotes/estimate', {
+          headers: { Origin: headers.Origin },
+          data: {
+            model_id: model.id,
+            material_id: material.id,
+            color_code: material.colors[0].code,
+            options: { quantity: 1, quality: 'standard', wall_loops: 3, infill_percent: 20 },
+          },
+        });
+        expect(quote.status()).toBe(422);
+        expect(await quote.json()).toMatchObject({
+          code: 'manual_quote_required',
+          reason: 'size_limit',
+        });
         test
           .info()
           .annotations.push({
-            type: 'exact-oriented-faces',
-            description: `${expected.triangles} full raw-f32 oriented triangles match the canonical STL, including multiplicity`,
+            type: 'approximate-display-only',
+            description: `${expected.triangles} full canonical faces, bounded approximate preview; legacy mass unavailable; dimensions above 500mm require manual price`,
           });
+      }
+
+      if (expected.case === 29) {
+        assertExactOrientedFaces(canonical, glb, expected.triangles);
+        test.info().annotations.push({
+          type: 'exact-oriented-faces',
+          description: `${expected.triangles} full raw-f32 oriented triangles match the canonical STL, including multiplicity`,
+        });
       }
 
       if ([20, 29].includes(expected.case))

@@ -183,6 +183,20 @@ function parseCanonicalGlb(buffer: ArrayBuffer): StlMesh {
     });
   }
   if (offset !== binaryLength) fail();
+  const preview = node.extras?.rapidmakerPreview;
+  if (
+    preview !== undefined &&
+    (!object(preview) ||
+      !Number.isSafeInteger(preview.source_triangles) ||
+      preview.source_triangles > 4_194_302 ||
+      preview.source_triangles <= totalIndices / 3 ||
+      preview.display_triangles !== totalIndices / 3 ||
+      preview.max_error_mm !== 0.05 ||
+      !Number.isFinite(preview.reported_error_mm) ||
+      preview.reported_error_mm < 0 ||
+      preview.reported_error_mm > preview.max_error_mm)
+  )
+    fail();
   // Only flattened triangles are allocated; chunk-local positions stay in the bounded input.
   const triangles = new Float32Array(totalIndices * 3);
   let target = 0;
@@ -199,5 +213,11 @@ function parseCanonicalGlb(buffer: ArrayBuffer): StlMesh {
         );
     }
   }
-  return meshFromPositions(triangles, MAX_GLB_PREVIEW_TRIANGLES);
+  const mesh = meshFromPositions(triangles, MAX_GLB_PREVIEW_TRIANGLES);
+  if (preview !== undefined)
+    mesh.approximation = {
+      sourceTriangles: preview.source_triangles,
+      reportedErrorMm: preview.reported_error_mm,
+    };
+  return mesh;
 }

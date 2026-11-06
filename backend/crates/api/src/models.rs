@@ -489,14 +489,21 @@ fn analyze_file(filename: &str, profile: ModelProfile) -> Result<ModelAnalysis, 
             + f64::from(output.analysis.bounds_max_mm[axis]))
             / 2.0
     });
-    let weight_g =
-        solid_volume(&output.glb, center).map(|mm3| (mm3 / 1000.0 * 2.0).ceil().max(1.0));
+    // A simplified display mesh is never a source for shipping mass.
+    let weight_g = output
+        .approximation
+        .is_none()
+        .then(|| solid_volume(&output.glb, center))
+        .flatten()
+        .map(|mm3| (mm3 / 1000.0 * 2.0).ceil().max(1.0));
     Ok(ModelAnalysis {
         id: String::new(), dimensions_mm, weight_g,
         geometry_source: "parsed_model".into(),
         weight_source: if weight_g.is_some() { "solid_upper_bound" } else { "unavailable" }.into(),
         reason: Some(if weight_g.is_some() {
             "Wymiary odczytane z modelu. Masa do dostawy oszacowana zachowawczo jak dla pełnej bryły przy 2 g/cm³; to nie wynik slicera. STL przyjmujemy w mm."
+        } else if output.approximation.is_some() {
+            "Wymiary odczytane z pełnego modelu. Podgląd jest uproszczony i nie służy do obliczania masy. Masa i dostawa wymagają danych slicera lub oceny. STL przyjmujemy w mm."
         } else {
             "Wymiary odczytane z modelu, ale siatka nie jest zamkniętą, zgodnie zorientowaną bryłą. Masa i dostawa wymagają oceny. STL przyjmujemy w mm."
         }.into()),

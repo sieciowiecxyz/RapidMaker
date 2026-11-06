@@ -35,7 +35,7 @@ Całe zadanie150s/lease180s; dwie duże partie mogą nie zmieścić się w deadl
 - `spatial-default-models.json`:8PASS7,9s; geometry42PASS/1opcjonalnyignored; app/example build, Clippygeometry/APIall-targets, fmt/diff PASS. `spatial29-final-exact-api.json`: 1 PASS, 46,1 s na końcowym kodzie — pełne porównanie geometrii i wycena 4178 gr.
 
 ## Następne kroki
-1. Model 19: wybrać ograniczoną reprezentację podglądu po zmierzeniu pamięci/CPU/kodu; pełny zapis nie zmieści się w25MiB przez samą kolejność. Nie gubić geometrii dla produkcji ani maskować błędów ceną.
+1. Model 19: bezpieczny podgląd uproszczony wdrożony; szczegóły i weryfikacja poniżej. Pełny model pozostaje źródłem produkcji, wymiarów i oceny ręcznej.
 2. Model 41: ustalić ważność i koszt pełnej walidacji SDK bez wyłączania kontroli bezpieczeństwa; ewentualny inny profil diagnostyczny wyraźnie oddzielić od runtime/defaultu.
 3. Dokończyć dowody nowych cen/ilości/zasobów i audyt całego celu. Weryfikować wybrane zmiany, bez powtarzania zielonych zestawów bez powodu.
 
@@ -46,3 +46,21 @@ E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPO
 ```
 
 Review Sol xhigh: brak konkretnego blokera tej zmiany. Oceny /10: poprawność 9, bezpieczeństwo 9, kwoty 9, zasoby 8, błędy 9, współbieżność 9, dowody 9, prostota 8, utrzymanie 8, zgodność wizualna 9. Review bez ponownego uruchamiania testów; nie jest oceną całego celu.
+
+## Model 19 — podgląd uproszczony
+
+Pełny model ma 3 861 000 trójkątów. Sam zapis bezstratny przekracza limit GLB, a renderer przyjmuje do 2 mln trójkątów. Dodano `meshopt 0.6.2`: tylko podgląd, po nieudanej próbie bezstratnej albo przekroczeniu limitu renderera. Profile i limity zasobów pozostają bez zmian.
+
+- Slicer dostaje pełny kanoniczny STL; algorytm nie modyfikuje źródłowej siatki.
+- Cel: do 1,7 mln trójkątów (dla mniejszych wejść 75% liczby źródłowej); dopuszczony wynik do 2 mln i 25 MiB. Nie podnosimy tolerancji, żeby wymusić sukces.
+- Metryka błędu biblioteki: najwyżej 0,05 mm. To **nie jest gwarancja maksymalnej odległości powierzchni**. Granice otwartych siatek są blokowane; kotwice części i ekstremów oraz kontrola spójności/braku znikających lub połączonych części chronią wynik.
+- GLB oznacza uproszczenie, liczbę źródłowych/wyświetlanych trójkątów i zmierzony błąd. UI pokazuje uproszczenie i obie liczby w dotychczasowym podpisie, bez zmiany stylu.
+- Legacy analiza nie oblicza masy z uproszczonego GLB: zwraca brak masy. Model 19 przekracza 500 mm, więc cena wymaga oceny ręcznej; nie udajemy automatycznej wyceny.
+
+Dowody: `approx19-api-final.json` — 1 PASS / 31,4 s: rzeczywisty upload, prywatny GLB, pełny STL 193 050 084 B / 3 861 000 trójkątów, oryginał SHA, wymiary, właściciel, brak masy z uproszczenia i 422 `manual_quote_required/size_limit`. Wynik ma 1 812 626 trójkątów, metryka 0,049854316 mm. Pierwszy test API zatrzymało stare oczekiwanie węzła bez metadanych; poprawiono test i dodano kontrolę metadanych. `approx19-ui-confirmed.json`: 1 PASS / 44,6 s — rzeczywisty upload, niezależny odczyt GLB kontra liczba renderowanych trójkątów, piksele/zoom, 1440/390 px, oba motywy oraz ręczna wycena po wyborze wszystkich opcji. Cztery obrazy zapisano; desktop ciemny i mobile jasny obejrzano. To emulowane szerokości, nie pomiar telefonu.
+
+Prywatny eksperyment przed integracją: 15,6 s / 468 MiB RAM, 81 części zachowanych; nie zastępuje pomiaru pełnego procesu API. Nowy test mniejszej siatki łapie wcześniej pomijany fallback poniżej 1,7 mln trójkątów. Pozostaje model 41 i pełny audyt celu.
+
+Końcowe kontrole: `approx-glb-parser.json` 25 PASS / 1,6 s; `approx19-standard-models.json` 8 PASS / 7,7 s. Rust/frontend build i końcowy Clippy PASS; 4 testy modułu preview po poprawce PASS. Początkowe błędy testów API/UI są zachowane i opisane w raporcie. Cache kompilatora po ENOSPC: usunięto tylko stare zamknięte katalogi incremental pod blokadą; prywatny zapis w cache-cleanup.json, bez plików użytkownika lub sekretów.
+
+Końcowy review Sol xhigh: bez kolejnego konkretnego blokera. Oceny /10: poprawność 8, bezpieczeństwo 9, kwoty 8, zasoby 8, błędy 8, współbieżność 8, dowody 9, prostota 7, utrzymanie 7, zgodność wizualna 9. To zakres modelu 19, bez deklaracji pełnego 10/10 lub testów obciążeniowych. Reviewer nie powtarzał testów.

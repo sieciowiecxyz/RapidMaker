@@ -58,3 +58,5 @@ Frontend dużego profilu:3rzeczywiste uploady/renderowanie w4wariantach; dodatko
 M2 usuwania wdrożony:10 realnych E2E/22DB+API/3 zwykłe scenariusze PASS w osobnych przebiegach. Zwalnianie kwoty, spóźnione odpowiedzi, Origin/CSRF i ochrona jobów/zamówień sprawdzone; ID retry tylko w pamięci strony, nieznane odpowiedzi nadal24h retencji. Review bez kolejnego blokera tej zmiany; oceny nie10/10. Dalej19/29/41 oraz nieudowodnione wymagania całego celu; nie zamykamy celu.
 
 29 odzyskany bezstratną zmianą kolejności trójkątów GLB (29,2→24,2MB), bez zmiany kanonicznego STL/capów/stylu. Pełne porównanie1 993 410 faces, realna cena i4widoki UI zweryfikowane; bieżące dowody/pozostałe19/41 w zwięzłym planie dużych modeli. Nie zastępuje to pełnego korpusu lub końcowego audytu celu.
+
+Model 19: backend ma awaryjny podgląd uproszczony, pełny STL i ręczną ścieżkę ceny ponad 500 mm. Rzeczywiste API i kontrola masy/własności sprawdzone; finalne dowody UI/review w [planie dużych modeli](large-models.md). Nie utożsamiamy metryki uproszczenia z gwarancją geometrii ani ręcznej ścieżki z automatyczną ceną. Dalej model 41 i audyt całego celu.

@@ -15,6 +15,7 @@
   let canvas = $state<HTMLCanvasElement>();
   let error = $state('');
   let loading = $state(true);
+  let approximate = $state(false);
   let turn = (_angle: number) => {};
   $effect(() => {
     const element = canvas,
@@ -36,6 +37,7 @@
       }
     }, 30_000);
     loading = true;
+    approximate = false;
     error = '';
     const fail = () => {
       if (active) {
@@ -52,6 +54,7 @@
         renderer = createPartViewer(element);
         if (!renderer) return fail();
         renderer.setPart('order', event.data.mesh);
+        approximate = !!event.data.mesh.approximation;
         const state: ViewerState = {
           yaw: -0.45,
           pitch: 0.62,
@@ -152,10 +155,10 @@
     {#if loading}<p role="status">Wczytywanie podglądu…</p>{:else if error}<p role="status">
         {error}
       </p>{:else}<div class="preview-tools">
-        <span>{name}</span><button
-          type="button"
-          aria-label="Obróć model w lewo"
-          onclick={() => turn(-0.4)}>←</button
+        <span
+          >{name}{#if approximate}
+            · Uproszczony podgląd{/if}</span
+        ><button type="button" aria-label="Obróć model w lewo" onclick={() => turn(-0.4)}>←</button
         ><button type="button" aria-label="Obróć model w prawo" onclick={() => turn(0.4)}>→</button>
       </div>{/if}
   </div>

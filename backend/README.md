@@ -190,3 +190,5 @@ Domyślny `MODEL_PROFILE=standard` zachowuje dotychczasowe limity. Kod ma osobny
 `DELETE /api/models/{id}` usuwa własny plik roboczy (204), odrzuca cudzy/brakujący (404) lub używany przez aktywny slicer/zamówienie (409). Wymaga dokładnego Origin, a dla kont także CSRF. Fizyczne pliki znikają przed zwolnieniem kwoty; błąd można ponowić. Usuwanie pliku roboczego nie jest usuwaniem konta ani plików opłaconego zamówienia.
 
 Zbyt duży GLB może otrzymać bezstratny przestrzenny układ trójkątów; dotychczasowy pasujący zapis/STL nie zmienia się. Model29 mieści się dzięki temu w25MiB i ma test uploadu/renderowania/wyceny. Nadal lokalny profil opt-in;19/41 pozostają otwarte. Diagnostyka: `large_model_probe PLIK --bounded-preview` testuje25MiB bez zmiany limitów API.
+
+Duże modele: bezstratny GLB jest pierwszym wyborem. Awaryjny `geometry/preview.rs` upraszcza sam podgląd (`meshopt`, metryka do 0,05 mm, nie gwarancja odległości powierzchni), zachowuje pełny STL i odrzuca wynik niespełniający limitów/ochrony części. Uproszczony podgląd nie służy do masy; ponad 500 mm wymaga wyceny ręcznej. [Plan i dowody](../docs/plans/large-models.md).

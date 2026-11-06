@@ -7,7 +7,7 @@ use std::{
 use lib3mf::{Model as ThreeMfModel, ParserConfig, SpecConformance};
 mod glb;
 pub use glb::write_glb;
-use glb::write_glb_bounded;
+mod preview;
 mod step;
 mod three_mf_mirrors;
 
@@ -93,6 +93,16 @@ pub struct PreviewAnalysis {
 pub struct PreviewOutput {
     pub glb: Vec<u8>,
     pub analysis: PreviewAnalysis,
+    pub approximation: Option<PreviewApproximation>,
+}
+
+/// Preview-only simplification. Error is meshoptimizer's metric, not a Hausdorff bound.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreviewApproximation {
+    pub source_triangles: usize,
+    pub display_triangles: usize,
+    pub reported_error_mm: f32,
+    pub max_error_mm: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -250,6 +260,15 @@ pub fn source_to_production(
             .and_then(|n| n.checked_add(84))
             .filter(|n| *n <= limits.max_output_stl_bytes && *n <= u32::MAX as usize)
             .ok_or(PreviewError::OutputTooLarge)?;
+        // Build a display mesh before allocating the full canonical STL. Only this
+        // preview may be simplified; the source scene below remains untouched.
+        let (glb, _) = preview::write(
+            &scene,
+            &analysis,
+            limits.max_output_glb_bytes.min(25 * 1024 * 1024),
+            r#","scale":[0.001,0.001,0.001],"rotation":[-0.70710678,0,0,0.70710678]"#,
+        )?;
+        check_timeout(started, limits)?;
         let count =
             u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
         let mut output = Vec::with_capacity(output_len);
@@ -273,14 +292,6 @@ pub fn source_to_production(
             }
             output.extend_from_slice(&[0; 2]);
         }
-        // Convert CAD millimetres/Z-up into glTF metres/Y-up at the node, without
-        // changing the canonical millimetre mesh used by the slicer.
-        let glb = write_glb_bounded(
-            &scene,
-            &analysis,
-            limits.max_output_glb_bytes.min(25 * 1024 * 1024),
-            r#","scale":[0.001,0.001,0.001],"rotation":[-0.70710678,0,0,0.70710678]"#,
-        )?;
         check_timeout(started, limits)?;
         Ok(ProductionOutput {
             stl: output,
@@ -326,12 +337,16 @@ fn build_preview_output(
     limits: &ConversionLimits,
 ) -> Result<PreviewOutput, PreviewError> {
     let mut analysis = analyze_scene(&scene, source_format, limits)?;
-    let glb = write_glb_bounded(&scene, &analysis, limits.max_output_glb_bytes, "")?;
+    let (glb, approximation) = preview::write(&scene, &analysis, limits.max_output_glb_bytes, "")?;
     if glb.len() > limits.max_output_glb_bytes {
         return Err(PreviewError::OutputTooLarge);
     }
     analysis.output_glb_bytes = glb.len();
-    Ok(PreviewOutput { glb, analysis })
+    Ok(PreviewOutput {
+        glb,
+        analysis,
+        approximation,
+    })
 }
 
 fn scene_from_source(

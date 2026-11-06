@@ -299,3 +299,31 @@ test('mesh builder rejects invalid or unbounded triangle limit arguments', () =>
     );
   expect(meshFromPositions(positions, 1).triangleCount).toBe(1);
 });
+
+test('approximation metadata is explicit and matches actual bounded geometry', () => {
+  const fixture = single();
+  const node = fixture.json.nodes[0] as Record<string, unknown>;
+  const metadata = {
+    source_triangles: 100,
+    display_triangles: 1,
+    reported_error_mm: 0.03,
+    max_error_mm: 0.05,
+  };
+  node.extras = { rapidmakerPreview: metadata };
+  const mesh = parsePreviewGlb(encode(fixture.json, fixture.binary));
+  expect(mesh.approximation).toEqual({ sourceTriangles: 100, reportedErrorMm: 0.03 });
+  for (const changed of [
+    { source_triangles: 1 },
+    { source_triangles: 4_194_303 },
+    { source_triangles: '100' },
+    { display_triangles: 2 },
+    { max_error_mm: 1 },
+    { reported_error_mm: -0.01 },
+    { reported_error_mm: 0.051 },
+    { reported_error_mm: '0.03' },
+    { reported_error_mm: null },
+  ]) {
+    node.extras = { rapidmakerPreview: { ...metadata, ...changed } };
+    rejects(encode(fixture.json, fixture.binary));
+  }
+});
