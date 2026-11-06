@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use percent_encoding::{NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
-use rapidmaker_storage::{ModelRemoval, Storage, StoredModel};
+use rapidmaker_storage::{ModelCommitUncertain, ModelRemoval, Storage, StoredModel};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -443,7 +443,13 @@ async fn upload(
     let preview_bytes = fs::metadata(directory.join("preview.glb"))
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak podglądu modelu."))?
         .len();
-    for path in [&mesh, &directory.join("preview.glb"), &directory] {
+    // Persist contents, then the child directory, then its entry in the storage root.
+    for path in [
+        &mesh,
+        &directory.join("preview.glb"),
+        &directory,
+        &state.root,
+    ] {
         fs::File::open(path)
             .and_then(|file| file.sync_all())
             .map_err(|_| {
@@ -473,7 +479,13 @@ async fn upload(
             state.profile.stl_bytes(),
         )
         .await
-        .map_err(|_| {
+        .map_err(|failure| {
+            if failure.is::<ModelCommitUncertain>() {
+                // A committed row may already reference these files. Without a row,
+                // the orphan directory needs manual reconciliation in this POC.
+                pending.0 = None;
+                tracing::error!(event="model_commit_uncertain", model_id=%record.id, reason="prepared files retained for reconciliation");
+            }
             error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "Nie można zachować modelu.",

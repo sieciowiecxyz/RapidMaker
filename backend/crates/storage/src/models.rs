@@ -1,6 +1,18 @@
 use super::{Storage, StorageError};
 use sqlx::Row;
 
+/// COMMIT failed to acknowledge success; prepared files must remain available.
+#[derive(Debug)]
+pub struct ModelCommitUncertain;
+
+impl std::fmt::Display for ModelCommitUncertain {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("model commit outcome uncertain")
+    }
+}
+
+impl std::error::Error for ModelCommitUncertain {}
+
 /// Paths are derived from server UUIDs, never stored or supplied by clients.
 pub struct StoredModel {
     pub id: String,
@@ -109,7 +121,8 @@ impl Storage {
             .bind(&model.id).bind(&model.owner_hash).bind(&model.filename).bind(&model.extension)
             .bind(model.source_bytes).bind(model.mesh_bytes).bind(&model.sha256)
             .bind(model.dimensions_mm.as_slice()).bind(model.expires_at).bind(&model.user_id).bind(model.preview_bytes).execute(&mut *tx).await?;
-        tx.commit().await?;
+        // Even an error may follow a successful server-side commit (lost ACK).
+        tx.commit().await.map_err(|_| ModelCommitUncertain)?;
         Ok(true)
     }
 

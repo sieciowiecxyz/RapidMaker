@@ -9,6 +9,7 @@ import {
   readdirSync,
   realpathSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -19,7 +20,7 @@ const origin = 'http://localhost:18437';
 const source = readFileSync(resolve('../backend/crates/geometry/tests/fixtures/cube_20mm.stl'));
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('real directory and persistence failures clean partial uploads and allow recovery', async ({
+test('real upload failures clean known rollbacks, retain uncertain commits and allow recovery', async ({
   request,
   playwright,
 }, testInfo) => {
@@ -143,6 +144,33 @@ test('real directory and persistence failures clean partial uploads and allow re
   expect(snapshot(id)).toEqual(saved);
   await accessible(request, id);
 
+  // This fails at COMMIT, after INSERT succeeded. It is a known rollback in this
+  // fixture, not a lost network ACK; the API conservatively retains prepared files.
+  let commitStatus: number;
+  try {
+    sql(`CREATE FUNCTION browser_reject_commit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'isolated upload commit failure'; END $$;
+      CREATE CONSTRAINT TRIGGER browser_reject_commit AFTER INSERT ON private_models
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION browser_reject_commit();`);
+    const response = await upload();
+    commitStatus = response.status();
+    expect(await response.json()).toEqual({ message: 'Nie można zachować modelu.' });
+  } finally {
+    sql(
+      'DROP TRIGGER IF EXISTS browser_reject_commit ON private_models; DROP FUNCTION IF EXISTS browser_reject_commit();',
+    );
+  }
+  expect(commitStatus).toBe(503);
+  expect(count()).toBe(baselineCount);
+  const retained = directories().filter((directory) => !baselineDirectories.includes(directory));
+  expect(retained).toHaveLength(1);
+  const retainedId = retained[0];
+  expect(directories()).toEqual([...baselineDirectories, retainedId].sort());
+  const retainedFiles = snapshot(retainedId);
+  expect(retainedFiles).toEqual(saved);
+  expect(snapshot(id)).toEqual(saved);
+  await accessible(request, id);
+
   const recovered = await upload();
   expect(recovered.status()).toBe(201);
   const recoveryId = (await recovered.json()).id;
@@ -151,13 +179,22 @@ test('real directory and persistence failures clean partial uploads and allow re
   await accessible(request, recoveryId);
   await accessible(request, id);
   expect(snapshot(id)).toEqual(saved);
-  expect(directories()).toEqual([...baselineDirectories, recoveryId].sort());
+  expect(directories()).toEqual([...baselineDirectories, retainedId, recoveryId].sort());
   expect(count()).toBe(baselineCount + 1);
+  expect(snapshot(retainedId)).toEqual(retainedFiles);
+  // Only this run's identified orphan is removed, after the trigger was dropped,
+  // both requests completed, no writer holds the model lock and no row exists.
+  expect(sql('SELECT pg_try_advisory_xact_lock(72617069646)')).toBe('t');
+  expect(sql(`SELECT count(*) FROM private_models WHERE id='${retainedId}'`)).toBe('0');
+  rmSync(resolve(root, retainedId), { recursive: true });
+  expect(directories()).toEqual([...baselineDirectories, recoveryId].sort());
   await testInfo.attach('upload-failure-statuses', {
     body: JSON.stringify({
       baseline: 201,
       directory: directoryStatus,
       persistence: persistenceStatus,
+      commit: commitStatus,
+      commitOrphanRetained: true,
       recovery: 201,
       addedModelsAfterBaseline: 1,
     }),

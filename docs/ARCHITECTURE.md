@@ -24,6 +24,8 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 
 Prywatne pliki: `api/files.rs` wysyła asynchronicznie po 64 KiB, z limitem czterech aktywnych ciał odpowiedzi na proces (503 przy zajęciu). Uprawnienia poprzedzają otwarcie; jeden deskryptor sprawdza typ/długość i nie podąża za symlinkiem. Upload ma 60 s wyłącznie na odbiór body (408); konwersja i commit DB nie są przerywane tym timeoutem.
 
+Trwałość uploadu: pliki, katalog UUID i katalog nadrzędny są fsync przed insertem. `storage::ModelCommitUncertain` rozróżnia błąd COMMIT od błędu wcześniejszego inserta: API zachowuje przygotowane pliki przy niepewnym wyniku i zwraca 503. Niezarejestrowane katalogi wymagają w POC ręcznej weryfikacji; nie ma automatycznego uzgadniania po crashu.
+
 ## Nowa wycena a istniejący checkout
 
 `POST /api/models`: STL/STEP/3MF → prywatny oryginał, izolowana kanoniczna siatka STL i prywatny podgląd GLB bez ustawień/G-code. `POST /api/quotes/estimate` przyjmuje ID własnego modelu, materiał, kolor i opcje → trwałe zadanie PostgreSQL (202) → worker slicera → koszt i atomowy snapshot. `GET /api/quotes/jobs/{id}` zwraca status/wynik właścicielowi. Katalog: `GET /api/catalog/materials`. Deduplikacja w DB obejmuje model, ustawienia, profile, kolor i koszty; bez cache pomiarów w RAM. Brak ceny, zatwierdzenia albo poprawnego wyniku nie daje automatycznej oferty.
