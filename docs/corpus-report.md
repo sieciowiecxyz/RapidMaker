@@ -435,3 +435,11 @@ Nowy profile-drift.spec.ts: rzeczywisty upload, slicer i poprawny checkout, nast
 Review wykrył niespójność prezentacji: combine zachowuje dokładną sumę pozycji, ale cena jednostkowa jest zaokrąglana w górę. Checkout wyświetlał np. 3 × 0,21 zł obok sumy 0,62 zł. Teraz mnożenie pojawia się tylko, gdy kwota jednostkowa w groszach × ilość równa się dokładnej sumie; w przeciwnym razie wyświetlamy samą ilość. Bez zmian kwot backendu, stylów i układu Piotra.
 
 Nowy tests/e2e/checkout-line-prices.spec.ts renderuje prawdziwy checkout przez adapter API z kontrolowanymi fixture: 62 gr/3 → sama ilość, 63 gr/3 → mnożenie, 29 gr/1 → poprawne mnożenie mimo reprezentacji float. To kontrakt widoku, nie dowód cen dostawcy ani slicera. Worker: scoped Playwright 1 PASS/1,7 s, build (svelte-check 0 błędów/ostrzeżeń + Vite), scoped TypeScript, Prettier PASS. Main diff check PASS; Sol xhigh przejrzał źródło/test: zatwierdzone bez blokera.
+
+## 2026-11-07 — EPIPE a limit uploadu
+
+Proxy Vite błędnie zamieniało EPIPE dla każdego uploadu ponad 32 MiB na 413, chociaż lokalny profil large dopuszcza 96 MiB. Teraz fallback dotyczy wyłącznie długości przekraczającej oba obecne profile (>96 MiB). EPIPE samo nie dowodzi odrzucenia rozmiaru; dla mniejszych plików pozostaje zwykły błąd proxy. Rzeczywista odpowiedź 413 backendu jest przekazywana bez zmian.
+
+Nowy `npm --prefix frontend run test:proxy`: prawdziwy Vite + kontrolowany upstream TCP, porty tymczasowe, bufor 256 KiB. 48 MiB/EPIPE → 500, 97 MiB/EPIPE → 413, upstream 413 pozostaje identyczne. Worker wykonał negatywną kontrolę: stara konfiguracja FAIL, poprawiona PASS. Main uruchomił nowy skrypt: 1 PASS/0 FAIL, 0,24 s. Build/svelte-check (0 błędów/ostrzeżeń), Prettier i diff PASS. Sol xhigh: bez blokera; dodano skrypt i komendę w testing.md zgodnie z uwagą. Bez testu Axum/preview w tym zakresie i bez zmiany normalnego runtime.
+
+GitHub alert35 ponownie sprawdzony: dev deepmerge4.3.1 pochodzi z vite-plugin-svelte6.2.1; najnowszy7.3.1 nadal wymaga deepmerge, advisory GHSA-gcqx-w48m-w2h4 nie wskazuje poprawionej wersji. Nie wyciszano alertu ani nie wykonywano nieskutecznego upgrade Vite. Znane ograniczenie w security.md pozostaje.

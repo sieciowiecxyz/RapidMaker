@@ -11,14 +11,14 @@ export default defineConfig(({ mode }) => {
       target: `http://127.0.0.1:${apiPort}`,
       changeOrigin: false,
       configure(proxy) {
-        // Axum closes oversized uploads; preserve the 32 MiB contract if that
-        // produces EPIPE before Vite has forwarded the upstream 413 response.
+        // EPIPE alone does not prove a size rejection. Only infer 413 above
+        // both current upload profiles (32 MiB standard, 96 MiB large-model).
         proxy.on('error', (error, request, response) => {
           if (
             (error as NodeJS.ErrnoException).code !== 'EPIPE' ||
             request.method !== 'POST' ||
             request.url?.split('?')[0] !== '/api/models' ||
-            Number(request.headers['content-length']) <= 32 * 1024 * 1024 ||
+            Number(request.headers['content-length']) <= 96 * 1024 * 1024 ||
             !Number.isFinite(Number(request.headers['content-length'])) ||
             !('writeHead' in response) ||
             response.headersSent ||
@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
           response.writeHead(413, { 'Content-Type': 'application/json' }).end(
             JSON.stringify({
               code: 'model_file_too_large',
-              message: 'Plik modelu może mieć maksymalnie 32 MiB.',
+              message: 'Plik modelu może mieć maksymalnie 96 MiB.',
             }),
           );
         });
