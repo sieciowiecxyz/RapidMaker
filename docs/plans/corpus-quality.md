@@ -41,4 +41,4 @@ E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPO
 
 Używaj nowej nazwy raportu, by zachować wcześniejsze wyniki. Konfiguracja w backend/README.md; sekrety poza raportami. Pełne zestawy i testy providerów tylko celowo. Historia etapów, błędów harnessu i review jest w corpus-report.md; starsze checkpointy także w Git.
 
-Kryterium zakończenia pozostaje do doprecyzowania z właścicielem: wymagane w celu 10/10 nie zostało potwierdzone; brak nowej regresji i przejście testów nie zastępują tej oceny. Pytanie wysłane, goal pozostaje aktywny.
+Kryterium zakończenia pozostaje do doprecyzowania z właścicielem: wymagane w celu 10/10 nie zostało potwierdzone; brak nowej regresji i przejście testów nie zastępują tej oceny. Pytanie o kryterium końca pozostaje bez odpowiedzi od trzech kolejnych tur; ukończenie niepotwierdzone. Bieżący status celu jest w Goal. Nie rozszerzać zakresu tylko po to, aby zastąpić brak kryterium kolejnymi testami.
