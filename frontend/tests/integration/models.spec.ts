@@ -52,7 +52,16 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
       expect(model.dimensions_mm.every((v: number) => Number.isFinite(v) && v > 0)).toBe(true);
       const preview = await page.request.get(model.preview_url);
       expect(preview.status()).toBe(200);
-      expect((await preview.body()).subarray(0, 4).toString()).toBe('glTF');
+      const previewBytes = await preview.body();
+      expect(previewBytes.subarray(0, 4).toString()).toBe('glTF');
+      if (name === 'cube_20mm.stl') {
+        const document = JSON.parse(
+          previewBytes.subarray(20, 20 + previewBytes.readUInt32LE(12)).toString('utf8'),
+        );
+        expect(document.accessors[document.meshes[0].primitives[0].indices].componentType).toBe(
+          5123,
+        );
+      }
       expect(
         (await outsider.request.get(new URL(model.preview_url, page.url()).href)).status(),
       ).toBe(401);
@@ -239,7 +248,9 @@ test('geometry resource limits explain a rejection without calling the model mal
   ).toBeVisible();
 });
 
-test('non-manifold 3MF requires repair and the next valid upload recovers', async ({ page }, info) => {
+test('non-manifold 3MF requires repair and the next valid upload recovers', async ({
+  page,
+}, info) => {
   await page.goto('/wycena');
   const previewRequests: string[] = [];
   page.on('request', (request) => {
@@ -268,7 +279,9 @@ test('non-manifold 3MF requires repair and the next valid upload recovers', asyn
   // Exact safe JSON excludes native library diagnostics, object IDs and accepted model metadata.
   expect(await checked.json()).toEqual({ code: 'model_topology_invalid', message });
   await expect(page.getByRole('alert').filter({ hasText: message })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Konfiguruj non_manifold.3mf', exact: true })).toContainText('Błąd analizy modelu');
+  await expect(
+    page.getByRole('button', { name: 'Konfiguruj non_manifold.3mf', exact: true }),
+  ).toContainText('Błąd analizy modelu');
   await page.screenshot({ path: info.outputPath('topology-error.png'), fullPage: false });
   await expect
     .poll(() =>

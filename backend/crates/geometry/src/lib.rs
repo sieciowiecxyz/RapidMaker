@@ -5,6 +5,9 @@ use std::{
 };
 
 use lib3mf::{Model as ThreeMfModel, ParserConfig, SpecConformance};
+mod glb;
+pub use glb::write_glb;
+use glb::write_glb_bounded;
 mod step;
 mod three_mf_mirrors;
 
@@ -1187,89 +1190,6 @@ fn analyze_scene(
     })
 }
 
-pub fn write_glb(scene: &MeshScene, analysis: &PreviewAnalysis) -> Result<Vec<u8>, PreviewError> {
-    write_glb_bounded(scene, analysis, u32::MAX as usize, "")
-}
-
-fn write_glb_bounded(
-    scene: &MeshScene,
-    analysis: &PreviewAnalysis,
-    max_bytes: usize,
-    node_transform: &str,
-) -> Result<Vec<u8>, PreviewError> {
-    let positions_len = scene
-        .positions_mm
-        .len()
-        .checked_mul(12)
-        .ok_or(PreviewError::OutputTooLarge)?;
-    let indices_len = scene
-        .indices
-        .len()
-        .checked_mul(4)
-        .ok_or(PreviewError::OutputTooLarge)?;
-    let buffer_len = positions_len
-        .checked_add(indices_len)
-        .filter(|length| *length <= max_bytes)
-        .ok_or(PreviewError::OutputTooLarge)?;
-    let json = format!(
-        concat!(
-            "{{\"asset\":{{\"version\":\"2.0\",\"generator\":\"rapidmaker-geometry\"}},",
-            "\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0{node_transform}}}],",
-            "\"meshes\":[{{\"primitives\":[{{\"attributes\":{{\"POSITION\":0}},\"indices\":1}}]}}],",
-            "\"buffers\":[{{\"byteLength\":{buffer_len}}}],",
-            "\"bufferViews\":[",
-            "{{\"buffer\":0,\"byteOffset\":0,\"byteLength\":{positions_len},\"target\":34962}},",
-            "{{\"buffer\":0,\"byteOffset\":{index_offset},\"byteLength\":{indices_len},\"target\":34963}}",
-            "],",
-            "\"accessors\":[",
-            "{{\"bufferView\":0,\"componentType\":5126,\"count\":{vertex_count},\"type\":\"VEC3\",",
-            "\"min\":[{min_x},{min_y},{min_z}],\"max\":[{max_x},{max_y},{max_z}]}},",
-            "{{\"bufferView\":1,\"componentType\":5125,\"count\":{index_count},\"type\":\"SCALAR\"}}",
-            "]}}"
-        ),
-        node_transform = node_transform,
-        buffer_len = buffer_len,
-        positions_len = positions_len,
-        index_offset = positions_len,
-        indices_len = indices_len,
-        vertex_count = scene.positions_mm.len(),
-        index_count = scene.indices.len(),
-        min_x = gltf_number(analysis.bounds_min_mm[0]),
-        min_y = gltf_number(analysis.bounds_min_mm[1]),
-        min_z = gltf_number(analysis.bounds_min_mm[2]),
-        max_x = gltf_number(analysis.bounds_max_mm[0]),
-        max_y = gltf_number(analysis.bounds_max_mm[1]),
-        max_z = gltf_number(analysis.bounds_max_mm[2]),
-    );
-    let mut json_bytes = json.into_bytes();
-    pad_to_4(&mut json_bytes, b' ');
-
-    let total_len = json_bytes
-        .len()
-        .checked_add(28)
-        .and_then(|length| length.checked_add(buffer_len))
-        .filter(|length| *length <= max_bytes && *length <= u32::MAX as usize)
-        .ok_or(PreviewError::OutputTooLarge)?;
-    let mut glb = Vec::with_capacity(total_len);
-    glb.extend_from_slice(b"glTF");
-    glb.extend_from_slice(&2_u32.to_le_bytes());
-    glb.extend_from_slice(&(total_len as u32).to_le_bytes());
-    glb.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
-    glb.extend_from_slice(b"JSON");
-    glb.extend_from_slice(&json_bytes);
-    glb.extend_from_slice(&(buffer_len as u32).to_le_bytes());
-    glb.extend_from_slice(b"BIN\0");
-    for vertex in &scene.positions_mm {
-        for value in vertex {
-            glb.extend_from_slice(&value.to_le_bytes());
-        }
-    }
-    for index in &scene.indices {
-        glb.extend_from_slice(&index.to_le_bytes());
-    }
-    Ok(glb)
-}
-
 fn read_f32_le(input: &[u8], offset: usize) -> Result<f32, PreviewError> {
     let bytes = input
         .get(offset..offset + 4)
@@ -1302,7 +1222,7 @@ fn gltf_number(value: f32) -> String {
     if value == 0.0 {
         "0".to_string()
     } else {
-        value.to_string()
+        f64::from(value).to_string()
     }
 }
 

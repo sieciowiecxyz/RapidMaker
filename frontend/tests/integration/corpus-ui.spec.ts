@@ -208,7 +208,7 @@ for (const item of selected) {
           .poll(
             async () => {
               const after = await silhouette(page);
-              expect(after.reduce((sum, pixel) => sum + pixel, 0)).toBeGreaterThan(60);
+              expect(after.reduce<number>((sum, pixel) => sum + pixel, 0)).toBeGreaterThan(60);
               return after.filter((pixel, index) => pixel !== before[index]).length;
             },
             { message: 'Rotate changes the rendered mesh silhouette' },
@@ -365,24 +365,37 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
     expect(renderedTriangles).toBeGreaterThanOrEqual(1);
     if ([24, 39].includes(item.case)) {
       const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
-      const sourceTriangles = gltf.accessors[1].count / 3;
       const binary = 28 + glb.readUInt32LE(12);
-      const indexStart = binary + gltf.bufferViews[1].byteOffset;
-      let zeroArea = 0;
-      for (let i = 0; i < sourceTriangles; i++) {
-        const points = [0, 1, 2].map((corner) => {
-          const offset = binary + glb.readUInt32LE(indexStart + (i * 3 + corner) * 4) * 12;
-          return [0, 4, 8].map((axis) => glb.readFloatLE(offset + axis));
-        });
-        const [a, b, c] = points;
-        const u = b.map((value, axis) => value - a[axis]);
-        const v = c.map((value, axis) => value - a[axis]);
-        if (
-          u[1] * v[2] === u[2] * v[1] &&
-          u[2] * v[0] === u[0] * v[2] &&
-          u[0] * v[1] === u[1] * v[0]
-        )
-          zeroArea++;
+      let sourceTriangles = 0,
+        zeroArea = 0;
+      // Independent wire oracle supports legacy u32 and compact chunk-local u16 indices.
+      for (const primitive of gltf.meshes[0].primitives) {
+        const positions = gltf.accessors[primitive.attributes.POSITION];
+        const indices = gltf.accessors[primitive.indices];
+        const positionStart =
+          binary + gltf.bufferViews[positions.bufferView].byteOffset + (positions.byteOffset ?? 0);
+        const indexStart =
+          binary + gltf.bufferViews[indices.bufferView].byteOffset + (indices.byteOffset ?? 0);
+        expect([5123, 5125]).toContain(indices.componentType);
+        const indexBytes = indices.componentType === 5123 ? 2 : 4;
+        sourceTriangles += indices.count / 3;
+        for (let i = 0; i < indices.count / 3; i++) {
+          const points = [0, 1, 2].map((corner) => {
+            const address = indexStart + (i * 3 + corner) * indexBytes;
+            const index = indexBytes === 2 ? glb.readUInt16LE(address) : glb.readUInt32LE(address);
+            const offset = positionStart + index * 12;
+            return [0, 4, 8].map((axis) => glb.readFloatLE(offset + axis));
+          });
+          const [a, b, c] = points;
+          const u = b.map((value, axis) => value - a[axis]);
+          const v = c.map((value, axis) => value - a[axis]);
+          if (
+            u[1] * v[2] === u[2] * v[1] &&
+            u[2] * v[0] === u[0] * v[2] &&
+            u[0] * v[1] === u[1] * v[0]
+          )
+            zeroArea++;
+        }
       }
       // The canonical GLB retains zero-area faces; the viewer omits them.
       expect(renderedTriangles).toBe(sourceTriangles - zeroArea);

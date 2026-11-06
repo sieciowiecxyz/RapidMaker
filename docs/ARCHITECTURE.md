@@ -69,3 +69,5 @@ Operator: api/production.rs → storage/production.rs i migracja0021 przechowuj�
 Limit trójkątów backendu i prywatnego GLB wynika z zachowanego budżetu kanonicznego STL50 MiB: `(50*1024*1024-84)/50 = 1 048 574`. Jeden mln unikalnych wierzchołków oraz25 MiB GLB/2 GiB RAM/25s CPU/30s wall pozostają. Formatowy parser lokalnego STL zachowuje25 MiB/1 mln; wspólny builder podglądu i GLB dopuszczają nowy limit.
 
 Mały kanoniczny manifest3MF ma ograniczoną walidację wstępną (root/relacje≤64 KiB) przed normalizacją dużych części; jednoznaczny wybór OPC jest warunkiem optymalizacji. Inne ścieżki zachowują pełny dotychczasowy parser; walidacja pakietu zawsze pozostaje.
+
+Prywatny GLB: `geometry/src/glb.rs` wybiera mniejszy pełny zapis u32 lub do64 bloków u16 (≤65535 lokalnych wierzchołków/blok). Bez strat współrzędnych/siatki, z dokładnymi granicami accessorów. Frontend `storefront/lib/glbParser.ts` obsługuje oba kanoniczne warianty, sprawdza sumaryczne limity przed alokacją; pozycje bloków czyta bez kopii z DataView. Limity25 MiB GLB/1 048 574 trójkątów renderera i produkcyjnego STL pozostają. Zapis ten nie jest obsługą dowolnego glTF.

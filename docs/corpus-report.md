@@ -134,3 +134,25 @@ SIGTERM nie jest PASS. Ręczne `cancel-check.json`, `cancel-create-check.json`, 
 - Systemowe zależności Bambu, fizyczny passkey, większe obciążenie, rzeczywiste koszty firmy i produkcja nie są potwierdzone powyższymi testami.
 - Audyt: Cargo **0 podatności/1 notice** `pin-utils` unmaintained (async-imap 0.12.0); npm **3 low** z jednego niezałatanego upstream `deepmerge`, bez wyciszeń/forka. [security.md](security.md).
 - Końcowy audyt 10 kategorii pozostaje otwarty. Oceny małych zmian 7–9/8–9/N/A nie są oceną całego produktu ani wymaganym 10/10. Nie ma nowej deklaracji gotowości produkcyjnej lub zakończenia celu.
+
+## Bezstratny GLB — etap po diagnozie topologii
+
+`geometry/src/glb.rs` wybiera mniejszy zapis: dotychczasowy jeden blok u32 albo do64 bloków z lokalnymi indeksami u16. Bez zmiany współrzędnych f32, kolejności/liczby trójkątów, orientacji i siatki produkcyjnej; bez nowych zależności. Pełna długość z JSON/paddingiem jest sprawdzana przed alokacją wyjścia. Granice accessorów zapisujemy dokładnie jako f32→f64, bez skrótu dziesiętnego mogącego przesunąć min/max.
+
+Parser prywatnego GLB przyjmuje oba zapisy, sprawdza sumę trójkątów przed alokacją i nadal ogranicza plik do25 MiB. Wierzchołki powtórzone pomiędzy blokami są czytane z wejściowego DataView, bez osobnej kopii pozycji; limit źródłowych unikalnych wierzchołków backendu pozostaje1 mln. Nie zmieniono HTTP/STL/CPU/RAM ani budżetu trójkątów renderera.
+
+Pomiar diagnostyczny pięciu tych samych plików SHA, izolacja2 GiB/25s CPU/30s wall, bez sieci/sekretów/zapisu siatek. Pełna geometria, liczby i wymiary zgodne z poprzednim pomiarem. To rozmiar diagnostycznego GLB, **nie dowód zaakceptowania większego uploadu w HTTP**; probe nie dodaje produkcyjnego transformu metry/Y-up.
+
+| Model | GLB wcześniej, B | Teraz, B | Mniej | ≤25 MiB |
+| --- | ---: | ---: | ---: | --- |
+| 8 | 28,220,252 | 19,466,244 | 31.0% | tak |
+| 19 | 69,459,384 | 47,621,460 | 31.4% | nie |
+| 20 | 26,773,996 | 20,693,156 | 22.7% | tak |
+| 29 | 35,875,220 | 29,224,268 | 18.5% | nie |
+| 40 | 30,188,228 | 22,325,800 | 26.0% | tak |
+
+Wszystkie pięć konwersji zakończyło się poprawnie:0,343–13,625s wall, peakRSS148–450 MiB.19/29 nadal przekraczają budżet podglądu. Artefakt: `large-model-probe-compact/results.json` (hash programu/źródeł i metryki); bez zwiększenia limitów produkcyjnych.
+
+Walidacja: geometry38 PASS/1 opcjonalny ignored (w tym granica64→65 bloków, dokładne min/max i zachowanie geometrii); `compact-glb-contract.json`22 PASS/0,759s; finalne `compact-glb-models-final.json`6 PASS/5,6s po korekcie min/max — rzeczywiste STL/STEP/3MF, u16 z API, prywatność/retencja/odrzucenia i odzyskanie. `compact-glb-large-ui.json`2 PASS/44,0s dla24/39: niezależne liczenie wszystkich bloków i zerowych pól, render/zoom,1440/390, oba motywy. Te dwa przebiegi UI były przed samą korektą JSON min/max; geometria binarna bez zmian, korekta ma osobny test dekodowania gltf i finalną regresję API. Obejrzano zestaw8 ujęć; bez zmian UI. Backend/example/frontend build, Clippy geometry/API all-targets, fmt/Prettier/diff-check sprawdzone. Pełnego core/korpusu nie powtarzano.
+
+Zwolniono także zamknięte, starsze niż24h sesje incremental wyłącznie naszych pakietów/probe po uzyskaniu ich locków; nie usuwano źródeł, modeli, sekretów ani działających binariów. Wolne miejsce wzrosło z0,42 do6,08 GiB. Prywatny `cache-cleanup.json`.

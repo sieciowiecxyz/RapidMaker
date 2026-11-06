@@ -46,3 +46,5 @@ Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi
 4. Końcowy review GPT-6-Sol xhigh: poprawność, uprawnienia/bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody testowe, prostota, utrzymanie, zgodność wizualna/kontrakt. Naprawiać konkretne uwagi, bez wymuszania ocen. Cel otwarty przy nieudowodnionych wymaganiach lub ocenach poniżej żądanego poziomu.
 
 Bieżąca regresja uploadów: `topology-models-ui-final.json`,6 PASS/5,5s. Naprawiono klasyfikację topologii3MF bez akceptowania wadliwej siatki; duże14/21/37 mają potwierdzony problem krawędzi,41 nadal ograniczenie CPU w diagnostyce. Szczegóły w planie większych modeli.
+
+Etap bezstratnego kompaktowego GLB wdrożony; większy profil HTTP nadal oczekuje decyzji. Pięć diagnostycznych dużych modeli ma mniejsze podglądy, trzy mieszczą się w25 MiB. Nie uznajemy tego za nowe zaakceptowane uploady ani ceny. Szczegóły i aktualne testy: raport/plan dużych modeli.

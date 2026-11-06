@@ -20,7 +20,7 @@
 - Verify: `cargo build --offline --locked --manifest-path backend/Cargo.toml -p rapidmaker-geometry --example large_model_probe`; isolated runner saves private JSON, no API limit changes.
 
 ### 2. Complete the bounded conversion path
-- [ ] Pending
+- [ ] In progress: exact compact GLB implemented; expanded HTTP limits still disabled.
 - Changes: choose the smallest complete approach from measurements. Keep production mesh exact; preview reduction, if needed, must be explicit and independently tested. Keep ownership, quotas, archive/path checks, lease/retry and process isolation.
 - Acceptance: no geometry/settings omitted from the slicer; valid bounds/units/transforms; preview within browser budget; output bytes accounted for. Decide the deployment/default budget before enabling it in HTTP.
 - Verify: focused Rust fixtures for limits, repeated components, normals/units, malformed archives and preview-only reduction; exact full-mesh counts/bounds against independently measured inputs.
@@ -50,3 +50,8 @@
 - Rejection diagnosis resolved for14/21/37: exact existing `geometry_package` followed by identical SDK config rejects a non-manifold edge shared by4 triangles (maximum2). Private `sdk-rejection/normalized-results.json` retains SHA/source provenance; raw SDK results are separate and were not substituted for normalized evidence. Temporary diagnostic example removed after preserving source privately.
 - New `NonManifoldMesh` keeps the same rejection, maps upload worker exit67 toHTTP422 `model_topology_invalid` with a static repair message. No raw SDK text/object IDs are exposed; changed SDK wording falls back to generic rejection. Large diagnostic rerun14/21/37 confirms this typed result (9.040/22.522/20.447s), not accepted HTTP support.
 - Synthetic934B fixture:33 geometry tests PASS/1 optional ignored; API resource classifier1 PASS. `topology-models-ui-final.json`:6 PASS/5.5s, exact safe rejection, no accepted model/checkout/preview, then valid recovery. Initial test hit Chromium response-body eviction; browser status/UI plus same-browser-context identical-input HTTP check replaces inspector-body dependency. Error-row label now says analysis failed, no CSS/layout change; screenshot inspected. Backend/example/frontend builds, Clippy geometry/API all-targets, fmt/Prettier/diff-check PASS.
+
+- Lossless GLB step: up to64 local-u16 primitives, legacy u32 when smaller; exact positions/order/degenerates and bounded JSON/output. Five valid large diagnostics reduced bytes19–32%;8/20/40 fit25MiB,19/29 do not. Same counts/bounds; no HTTP support claim or cap increase. See corpus-report.md for byte table and source/binary provenance.
+- Geometry38 PASS/1 optional ignored; codec22 PASS; final API/models6 PASS; large UI24/39 two PASS with8 inspected captures. The UI run precedes the accessor min/max precision fix; final gltf-reader unit+API regression cover it. No UI redesign/new dependencies.
+
+- Final GPT-6-Sol xhigh read-only review: no blocker. Scores/10: correctness9, security9, money9, resources9, errors9, concurrency N/A, evidence9, simplicity8, maintainability8, visual compatibility9. Reviewer did not rerun tests. Full64-chunk test exercises planner/layout only; small fixtures independently round-trip, large24/39 actual API/UI. Whole goal remains open.
