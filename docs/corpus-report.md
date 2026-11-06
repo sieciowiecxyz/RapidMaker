@@ -309,3 +309,12 @@ Review Sol xhigh bez blokera; poprawność 9, bezpieczeństwo 9, kwoty 9, zasoby
 Cztery początkowe FAIL to błędy harnessu: brak zebranej natychmiastowej wyceny z cache, angielska etykieta koloru w API, body po nawigacji usunięte z inspektora oraz odczyt admina przez listę zamiast nieistniejącego endpointu szczegółów. Raporty current/rerun1/rerun2/rerun3 zachowano; rerun4 1 PASS / 20,9 s przed wzmocnieniem kontroli kwot. Nie zmieniano produktu, by dostosować go do testu.
 
 Review Sol xhigh wykrył brak przypisania kwoty do konkretnego wiersza; uzupełniono asercje i powtórzono tylko scenariusz. Finalnie bez blokera. Oceny dowodu tego testu: poprawność 9, bezpieczeństwo 6, kwoty 9, zasoby 5, błędy 4, współbieżność 2, dowody 9, prostota 7, utrzymanie 6, wygląd 4. Niskie oceny poza zakresem nie są nowymi dowodami błędów produktu: ten scenariusz nie bada obciążenia, obcych kont ani wyglądu. Nie zastępuje ich oddzielnych testów i nie jest oceną całego celu.
+
+
+## Mapa dowodów i wspólna przeglądarka runnerów
+
+Aktualne wymagania/testy/raporty/ograniczenia zebrano w [e2e-coverage.md](e2e-coverage.md); odświeżono numery źródeł 447 kontrolek oraz mapy limitów i produkcji. Usunięto nieaktualne blanketowe twierdzenie, że termin/postęp/notatki właściwego panelu admina są disabled — test panels potwierdza rzeczywisty zapis, starszy widok nadal ma ograniczenia.
+
+run-all i run-integration nie wybierają automatycznie systemowego Chromium; korzystają z tej samej przypiętej wersji co preflight, z zachowaniem jawnego override. Test statycznych ścieżek z symulacją obecnego systemowego Chromium oraz rzeczywisty start bundled PASS. `browser-default-consistency.json`: 1 PASS, bez skipped/flaky, rzeczywista izolowana aplikacja/Swagger, bez wywołań providerów. Poprzednie rzeczywiste raporty tego hosta nie zmieniają znaczenia: /usr/bin/chromium tu nie ma, więc już korzystały z bundled.
+
+Review Sol xhigh wskazał początkowo pozostawiony fallback drugiego runnera; usunięto i sprawdzono. Finalnie bez blokera; poprawność 9, zasoby 8, błędy 8, dowody 8, prostota 8, utrzymanie 8; bezpieczeństwo/kwoty/współbieżność/wygląd N/A dla tej zmiany. Nie ponawiano całego zestawu ani testów przez reviewera.

@@ -23,8 +23,10 @@ if not args.no_build and args.group != 'storage':
     for command in (['cargo', 'build', '--locked', '--manifest-path', 'backend/Cargo.toml'], ['npm', '--prefix', 'frontend', 'run', 'build']):
         subprocess.run(command, cwd=root, check=True)
 
-if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') and not Path('/usr/bin/chromium').is_file():
-    subprocess.run(['npx', 'playwright', 'install', 'chromium'], cwd=root / 'frontend', check=True)
+if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'):
+    executable = subprocess.check_output(['node', '-e', "console.log(require('@playwright/test').chromium.executablePath())"], cwd=root / 'frontend', text=True).strip()
+    if not Path(executable).is_file():
+        subprocess.run(['npx', 'playwright', 'install', 'chromium'], cwd=root / 'frontend', check=True)
 
 suites = {
     'storage': [],
@@ -43,8 +45,6 @@ for name in selected:
     env = os.environ.copy()
     env.update(E2E_REPORT_NAME=name, PLAYWRIGHT_JSON_OUTPUT_NAME=str(report), PLAYWRIGHT_NO_COPY_PROMPT='1')
     if name.startswith('registration-'): env['E2E_REGISTRATION_METHOD'] = name.removeprefix('registration-')
-    if 'PLAYWRIGHT_CHROMIUM_EXECUTABLE' not in env and Path('/usr/bin/chromium').is_file():
-        env['PLAYWRIGHT_CHROMIUM_EXECUTABLE'] = '/usr/bin/chromium'
     if name == 'storage':
         command = [sys.executable, 'frontend/tests/run-storage.py']
         cwd = root

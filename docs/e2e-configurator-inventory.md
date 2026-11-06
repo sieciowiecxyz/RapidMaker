@@ -1,6 +1,6 @@
 # Konfigurator — mapa kliknięć
 
-Stan: scenariusze zaprogramowane; wykonanie i wyniki zapisuje główny raport E2E. Poniższa lista nie jest deklaracją PASS. Główny inwentarz szablonów: [e2e-controls.md](e2e-controls.md).
+Stan: scenariusze zaprogramowane; wykonanie i granice wskazuje [mapa dowodów](e2e-coverage.md). Poniższa lista nie jest deklaracją PASS. Główny inwentarz szablonów: [e2e-controls.md](e2e-controls.md).
 
 Źródła: `frontend/src/storefront/Storefront.svelte`, `components/ProductionControls.svelte`, `components/PrintScene.svelte`, `pages/configure/{Configure,PrintChoices,AdvancedOptions}.svelte`. Testy: `frontend/tests/integration/configurator.spec.ts`.
 
@@ -11,7 +11,7 @@ Stan: scenariusze zaprogramowane; wykonanie i wyniki zapisuje główny raport E2
 | Kontakt telefon/email, mapa | Sprawdzamy docelowy protokół i adres; nie wykonujemy połączenia ani wysyłki | navigation |
 | Regulaminy i moje zamówienia | Przejście do rzeczywistej podstrony; gość trafia do logowania | navigation |
 | Wybierz plik, przeciągnij/upuść | Rzeczywisty plik STL, dragover/dragleave/drop, prywatny podgląd | navigation; models.spec.ts |
-| Błędny format, pusty plik, ponad 25 MiB, ponad 10 plików | Odrzucenie przed uploadem, czytelny komunikat | navigation |
+| Błędny format, pusty plik, ponad zadeklarowany limit, ponad 10 plików | Odrzucenie przed uploadem, czytelny komunikat; navigation sprawdza standard 32 MiB. Large 96 MiB osobno; fallback metadata 25 MiB | navigation; model-limits; models; lokalny smoke modelu 8 |
 | Przykład / wczytaj ponownie | Próbka oznaczona jako pokazowa; zastąpienie prawdziwych plików wymaga potwierdzenia; anulowanie zachowuje plik | navigation |
 | Wybór części, następna część, usuń | Ustawienia przypisane do właściwego pliku, zmiana aktywnej części, reload | all material colors |
 | Liczba sztuk | 0 i 1001 odrzucone; 1, 2, 1000 akceptowane w konfiguracji; nie uruchamiamy bez potrzeby slicera dla 1000 sztuk | all material colors; pricing.spec.ts |

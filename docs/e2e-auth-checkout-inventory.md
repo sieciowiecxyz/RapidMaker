@@ -1,6 +1,6 @@
 # E2E — logowanie, checkout i granice
 
-Mapa aktywnych działań, nie deklaracja PASS. Wykonane wyniki zbiera E2E-REPORT.md; pełne deklaracje kontrolek są w e2e-controls.md. Jedna grupa obejmuje kolejne wiersze/rekordy tej samej funkcji.
+Mapa aktywnych działań, nie deklaracja PASS. Bieżące dowody zbiera [e2e-coverage.md](e2e-coverage.md), historia w corpus-report.md; pełne deklaracje kontrolek są w e2e-controls.md. Jedna grupa obejmuje kolejne wiersze/rekordy tej samej funkcji.
 
 | Obszar | Akcje i wartości | Scenariusze |
 | --- | --- | --- |
@@ -11,8 +11,9 @@ Mapa aktywnych działań, nie deklaracja PASS. Wykonane wyniki zbiera E2E-REPORT
 | Dane zamówienia | Imię, email, telefon, adres Stripe dla kuriera; kod pocztowy dla paczkomatu; faktura on/off, firma/NIP, walidacja | checkout; shipping-checkout |
 | Dostawa | Pickup/kurier/paczkomat; najtańsza i pozostałe dostępne oferty; wybierz/zmień punkt; szukaj w innym miejscu; retry | shipping-checkout; delivery; kontrakty operations dla utraty odpowiedzi |
 | Podsumowanie | Parametry modelu, opakowania/paczki/zawartość, zmiana danych i powrót, etapy postępu, regulaminy | shipping-checkout; checkout; legal |
-| Płatność | Formularz Stripe, zamawiam i płacę, odrzucona karta, utrata odpowiedzi i retry z tą samą próbą, reload wyniku, fałszywy powrót, wznowienie/wygaśnięcie | shipping-checkout; checkout; abandonment; boundaries |
+| Płatność | Formularz Stripe, zamawiam i płacę, odrzucona karta, utrata odpowiedzi i retry z tą samą próbą, reload wyniku, fałszywy powrót, wznowienie/wygaśnięcie | shipping-checkout; checkout; payment-resume; abandonment; boundaries |
 | Ręczna wycena | Zgłoszenie z wymaganiami, kontakt i odbiór/faktura, admin cena/zakres/dostawa, email, oferta/pay | journey; panels; konfigurator; gość ma kontakt email bez wysyłania emaila z testu |
+| Zakup gościa → konto | Widoczny link po płatności, login/MFA, claim, historia, ponowienie i obce konta | guest-claim; prawdziwa płatność, bez automatycznego konta |
 | Dokumenty | Hub, oba dokumenty, pobranie TXT, powrót, kontakt email, brak checkboxa i nieaktualna wersja | legal; registration |
 | API/ochrona | Prawdziwe pakowanie 1000+7 sztuk; obce zasoby, role, CSRF/Origin, kwoty, prywatne GLB, usuwanie nieopłaconych plików, równoległość | boundaries; models; delivery; abandonment; panels |
 | Email | Kod, ręczna oferta, pełne warunki, kopia rozmowy, odpowiedź email → chat dokładnie raz | auth; registration; journey; tylko void@sieciowiec.xyz |

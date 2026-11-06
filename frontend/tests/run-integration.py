@@ -103,8 +103,6 @@ try:
     # Chromium otherwise drops Unicode file paths from FileList in this minimal environment.
     browser_env.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
     if large_models: browser_env["RAPIDMAKER_LARGE_MODELS"] = "1"
-    if "PLAYWRIGHT_CHROMIUM_EXECUTABLE" not in browser_env and Path("/usr/bin/chromium").is_file():
-        browser_env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"] = "/usr/bin/chromium"
     browser_env.update(RAPIDMAKER_TEST_DATABASE=name, RAPIDMAKER_TEST_MODEL_ROOT=str(folder / "models"), TEST_PG_CONTAINER=container)
     if sandbox or local_accounts:
         if client_totp: env["TEST_CLIENT_TOTP"] = "1"

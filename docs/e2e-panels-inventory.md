@@ -1,8 +1,8 @@
 # E2E — panele klienta i operatora
 
-Inwentaryzacja 2026-10-26. Źródła: `frontend/src/admin/{Admin,Finance,Refunds,Shipment}.svelte`, `pages/account/*.svelte`, współdzielone `OrderDetail`, `OrderChat`, `ManualOffer`. Powtarzalne przyciski dla kolejnych zamówień/kolorów są jedną grupą akcji, nie osobnym kontraktem. Nie oznacza to sprawdzenia wszystkich kombinacji danych.
+Mapa źródeł i testów; aktualizacja 2026-11-06. Źródła: `frontend/src/admin/{Admin,Finance,Refunds,Shipment}.svelte`, `pages/account/*.svelte`, współdzielone `OrderDetail`, `OrderChat`, `ManualOffer`. Powtarzalne przyciski dla kolejnych zamówień/kolorów są jedną grupą akcji, nie osobnym kontraktem. Nie oznacza to sprawdzenia wszystkich kombinacji danych.
 
-Testy rzeczywiste: `frontend/tests/integration/panels.spec.ts`. Wymagają `--sandbox --client-totp`, osobnej bazy/pliku fixture oraz Stripe test. Przygotowanie ręcznego zgłoszenia używa rzeczywistego API po uploadzie UI; publikacja, płatność i obsługa odbywają się przez interfejs. To nie są testy z podstawionymi odpowiedziami. Wykonane wyniki i ograniczenia: [E2E-REPORT.md](E2E-REPORT.md).
+Testy rzeczywiste: `frontend/tests/integration/panels.spec.ts`. Wymagają `--sandbox --client-totp`, osobnej bazy/pliku fixture oraz Stripe test. Przygotowanie ręcznego zgłoszenia używa rzeczywistego API po uploadzie UI; publikacja, płatność i obsługa odbywają się przez interfejs. To nie są testy z podstawionymi odpowiedziami. Wykonane wyniki i ograniczenia: [e2e-coverage.md](e2e-coverage.md); historia w corpus-report.md.
 
 ## Mapa akcji
 
@@ -18,6 +18,7 @@ Testy rzeczywiste: `frontend/tests/integration/panels.spec.ts`. Wymagają `--san
 | Admin — lista | Sprawdź kolejkę; Wszystkie / Wymaga reakcji / Nowe / W produkcji / Do wysłania; szukanie; wyczyszczenie frazy; wyczyszczenie filtrów; eksport CSV; dwa wejścia w szczegóły | `panels`: pięć filtrów, wyszukiwanie istniejące/puste, reset, CSV z pełnym UUID, wejście ikoną; równoważny link numeru i skrót kolejki w mapie globalnej |
 | Admin — drawer | Modele i wycena / Pliki / Dostawa / Rozliczenie / Wiadomości / Historia; zamknięcie przyciskiem/Escape | `panels`: wszystkie zakładki, oba zamknięcia |
 | Admin — status | Dropdown następnego etapu; Dalej w stopce; Dalej na karcie produkcji | `panels`: paid → in_production → ready → completed dla odbioru osobistego; stan potwierdza API klienta |
+| Admin — produkcja | Termin, notatka, ilość ukończonych sztuk, QC, etapy i cofnięcie | `panels`: zapis i odczyt API; prywatna notatka niewidoczna klientowi; chronione przejścia |
 | Admin — pliki | Podgląd, Pobierz oryginał | `panels`: prawdziwy GLB i download STL |
 | Admin — wiadomości | Wiersz rozmowy; textarea; Wyślij; Pokaż kolejne gdy kolejna strona istnieje | `panels`: wiersz, odczyt i wysyłka; fixture dodaje 52 historyczne wiadomości wyłącznie do własnego zamówienia w bazie rapidmaker_test_browser_*, następnie klik Pokaż kolejne pokazuje ostatnią wiadomość i dokładną liczbę bez dubli (bez fałszowania płatności i emaili) |
 | Admin — płatności | Wszystkie / Nieopłacone / Opłacone; szukanie; wyczyszczenie; Szczegóły rozliczenia | `panels`: wszystkie filtry, pusty wynik/reset i otwarcie właściwego zamówienia |
@@ -25,7 +26,7 @@ Testy rzeczywiste: `frontend/tests/integration/panels.spec.ts`. Wymagają `--san
 | Katalog | Szukanie; Dodaj materiał; ID/nazwa/gęstość/cena; edycja; dopuszczenie; Zapisz materiał; Dodaj kolor; kod/nazwa/RGBA; Kolor; Zapisz kolor | `panels`: nowy materiał testowy, edycja i reload, obie wartości checkboxa bez dopuszczania niezaufanego profilu, nowy kolor i edycja; nie zmienia normalnej bazy |
 | Cennik | Wersja; przygotowanie, obsługa płyty, drukarka, energia, moc, straty, marża, minimum, VAT; Zapisz | `panels`: wszystkie pola, odrzucenie marży 100%, poprawny zapis i reload + wartości w API |
 | Dostawa — odbiór | Odśwież i informacja o odbiorze bez nadania | `panels`: rzeczywisty odczyt; brak fikcyjnej przesyłki |
-| Dostawa — kurier | Dodaj/usuń paczkę, wymiary/masa, kontrola refundu, Zapisz, koszt, akceptacja, Zamów, zaznaczenie paczek, PDF, przekazanie, Podjazd → data/ponowny podjazd/propozycje/wybór/rezerwacja, Anuluj → potwierdzenie, ponowienie niepewnej operacji | `logistics.spec.ts`: osobny automatyczny checkout DHL, rzeczywista oferta i nadanie; scenariusze anulowania i przekazania. Wyniki oraz blokada DPD w raporcie. `operations.spec.ts` osobno sprawdza kontrakty niepewnych operacji; nie dowodzi nadania |
+| Dostawa — kurier | Dodaj/usuń paczkę, wymiary/masa, kontrola refundu, Zapisz, koszt, akceptacja, Zamów, zaznaczenie paczek, PDF, przekazanie, Podjazd → data/ponowny podjazd/propozycje/wybór/rezerwacja, Anuluj → potwierdzenie, ponowienie niepewnej operacji | `logistics.spec.ts`: osobny automatyczny checkout DHL, rzeczywista oferta i nadanie; scenariusze anulowania i przekazania. Bieżący sandbox potwierdził podjazd DHL; dawna blokada DPD jest odrębnym ograniczeniem w raporcie. `operations.spec.ts` osobno sprawdza kontrakty niepewnych operacji; nie dowodzi nadania |
 
 ## Alternatywne trasy workspace
 
@@ -33,7 +34,7 @@ Testy rzeczywiste: `frontend/tests/integration/panels.spec.ts`. Wymagają `--san
 
 ## Celowo niedostępne elementy
 
-`panels` sprawdza `disabled`, zamiast obchodzić zabezpieczenie: Zamów ponownie; Termin realizacji; Cena / szt.; Zmień plik; Wystaw fakturę. Pozostałe celowo niedostępne: postęp pojedynczych sztuk, notatki wewnętrzne i etykieta w starszym widoku szczegółów (logistyka działa w osobnym panelu). Nie wolno raportować ich jako działających funkcji biznesowych.
+`panels` sprawdza `disabled`, zamiast obchodzić zabezpieczenie: Zamów ponownie; Cena / szt.; Zmień plik; Wystaw fakturę. Starszy współdzielony widok szczegółów ma wyłączone pole terminu/notatek i etykietę; właściwy panel `/admin.html` zapisuje termin, postęp, notatki i QC, a nadawanie działa przez Shipment. Szkic faktury nie jest wystawioną fakturą; nie raportujemy wyłączonych funkcji jako działających.
 
 ## Granice uprawnień
 
