@@ -429,3 +429,9 @@ Sol xhigh przejrzał raport i źródła testów: dowodzą poprawnej ścieżki ze
 Nowy profile-drift.spec.ts: rzeczywisty upload, slicer i poprawny checkout, następnie zmiana profilu GFA00 wyłącznie w jednorazowej bazie. POST /api/checkout/intent zwraca 409 z komunikatem o nieaktualnej wycenie; brak payment_attempts i orders, szkic nieblokowany, snapshot wyceny niezmieniony. Hash przywracany w finally; ponowne przygotowanie checkoutu z tą samą wyceną daje 200. Regex nazwy bazy/current_database chronią zwykłą bazę.
 
 `E2E_REPORT_NAME=profile-drift-http-20261107-a python frontend/tests/run-integration.py --sandbox profile-drift.spec.ts`: **1 PASS/0 FAIL/0 SKIP, 4,3 s**. check:integration, Prettier i diff PASS. Sandbox wymagany przez konfigurację wejścia płatności; test nie płaci. Sol xhigh przejrzał test, runner i ścieżkę: bez blokera. To dowód HTTP precheck, nie wyścigu wewnątrz transakcji ani bezpośredniej obserwacji ruchu Stripe. Liczniki potwierdzają brak lokalnych operacji płatności. Bez zmian backendu/UI i normalnego localhosta.
+
+## 2026-11-07 — dokładna prezentacja ceny pozycji
+
+Review wykrył niespójność prezentacji: combine zachowuje dokładną sumę pozycji, ale cena jednostkowa jest zaokrąglana w górę. Checkout wyświetlał np. 3 × 0,21 zł obok sumy 0,62 zł. Teraz mnożenie pojawia się tylko, gdy kwota jednostkowa w groszach × ilość równa się dokładnej sumie; w przeciwnym razie wyświetlamy samą ilość. Bez zmian kwot backendu, stylów i układu Piotra.
+
+Nowy tests/e2e/checkout-line-prices.spec.ts renderuje prawdziwy checkout przez adapter API z kontrolowanymi fixture: 62 gr/3 → sama ilość, 63 gr/3 → mnożenie, 29 gr/1 → poprawne mnożenie mimo reprezentacji float. To kontrakt widoku, nie dowód cen dostawcy ani slicera. Worker: scoped Playwright 1 PASS/1,7 s, build (svelte-check 0 błędów/ostrzeżeń + Vite), scoped TypeScript, Prettier PASS. Main diff check PASS; Sol xhigh przejrzał źródło/test: zatwierdzone bez blokera.

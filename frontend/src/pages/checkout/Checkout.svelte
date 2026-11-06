@@ -979,7 +979,11 @@
         <span class="eyebrow">Podsumowanie</span>
         <h2>Twoje zamówienie</h2>
         {#each cart.quote?.lines ?? [] as line}<div class="line">
-            <span>{line.name}<small>{line.quantity} szt. × {money(line.unitPrice)}</small></span
+            <span
+              >{line.name}<small
+                >{line.quantity} szt.{#if Math.round(line.unitPrice * 100) * line.quantity === Math.round(line.total * 100)}
+                  {' × '}{money(line.unitPrice)}{/if}</small
+              ></span
             ><strong>{money(line.total)}</strong>
           </div>{/each}
         {#if cart.quote}
