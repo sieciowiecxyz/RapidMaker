@@ -14,6 +14,7 @@ mod mail_inbound;
 mod manual_quotes;
 mod metrics;
 mod metrics_server;
+mod model_limits;
 mod models;
 pub use mail_inbound::receive_once as mail_receive_once;
 mod orders;
@@ -77,11 +78,13 @@ impl Workers {
     }
 }
 pub async fn slicer_worker() -> Result<SliceWorker, Box<dyn std::error::Error + Send + Sync>> {
+    model_limits::ModelProfile::from_env()?;
     Ok(SliceWorker::start(
         rapidmaker_storage::Storage::connect(&std::env::var("DATABASE_URL")?).await?,
     ))
 }
 pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Error + Send + Sync>> {
+    let model_profile = model_limits::ModelProfile::from_env()?;
     let mailer = std::sync::Arc::new(rapidmaker_notifications::Mailer::from_env()?);
     let storage = if let Ok(url) = std::env::var("DATABASE_URL") {
         let storage = rapidmaker_storage::Storage::connect(&url).await?;
@@ -114,7 +117,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .merge(legal::router())
         .merge(packing::router())
         .merge(checkout)
-        .merge(models::router())
+        .merge(models::router(model_profile))
         .merge(quotes::router(storage.clone())?)
         .merge(auth::router(auth.clone()))
         .merge(account_security::router(auth.clone()))

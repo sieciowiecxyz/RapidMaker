@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { request as httpRequest } from 'node:http';
 
 const fixture = (name: string) => resolve('../backend/crates/geometry/tests/fixtures', name);
 
@@ -340,4 +341,47 @@ test('non-manifold 3MF requires repair and the next valid upload recovers', asyn
   await expect(
     page.getByRole('img', { name: /Model z pliku simple_model.3mf.*Czarny/ }),
   ).toBeVisible();
+});
+
+test('analysis admission rejects concurrent bodies before buffering and recovers after disconnect', async ({
+  request,
+}) => {
+  const body = readFileSync(fixture('cube_20mm.stl'));
+  const headers = {
+    Origin: 'http://localhost:18437',
+    'Content-Type': 'application/octet-stream',
+    'x-model-filename': 'cube_20mm.stl',
+  };
+  // Hyper sends 100 Continue when it starts polling the first body. Keep that
+  // body unsent: the shared conversion permit must already be held at this point.
+  const waiting = httpRequest('http://127.0.0.1:18436/api/models/analyze', {
+    method: 'POST',
+    headers: {
+      ...headers,
+      Host: 'localhost:18437',
+      'Content-Length': body.length,
+      Expect: '100-continue',
+    },
+  });
+  try {
+    await new Promise<void>((resolveReady, reject) => {
+      waiting.once('continue', resolveReady);
+      waiting.once('response', (response) => {
+        response.resume();
+        reject(new Error('Analysis did not wait for its body'));
+      });
+      waiting.once('error', () => reject(new Error('Analysis connection failed')));
+      waiting.setTimeout(5000, () => waiting.destroy(new Error('Analysis body wait timed out')));
+      waiting.flushHeaders();
+    });
+    expect((await request.post('/api/models/analyze', { headers, data: body })).status()).toBe(429);
+  } finally {
+    waiting.destroy();
+  }
+  await expect
+    .poll(
+      async () => (await request.post('/api/models/analyze', { headers, data: body })).status(),
+      { timeout: 10000 },
+    )
+    .toBe(200);
 });

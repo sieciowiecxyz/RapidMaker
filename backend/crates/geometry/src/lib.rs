@@ -57,6 +57,7 @@ impl Default for ThreeMfLimits {
 pub struct ConversionLimits {
     pub max_input_bytes: usize,
     pub max_output_glb_bytes: usize,
+    pub max_output_stl_bytes: usize,
     pub max_vertices: usize,
     pub max_triangles: usize,
     pub max_coordinate_abs_mm: f32,
@@ -68,6 +69,7 @@ impl Default for ConversionLimits {
         Self {
             max_input_bytes: 50 * 1024 * 1024,
             max_output_glb_bytes: 25 * 1024 * 1024,
+            max_output_stl_bytes: MAX_CANONICAL_STL_BYTES,
             max_vertices: 1_000_000,
             max_triangles: (MAX_CANONICAL_STL_BYTES - 84) / 50,
             max_coordinate_abs_mm: 1_000_000.0,
@@ -166,7 +168,12 @@ pub fn source_to_preview_glb(
     if input.len() > limits.max_input_bytes {
         return Err(PreviewError::InputTooLarge);
     }
-    let gate = gate_source_format(source_filename, input, three_mf_limits)?;
+    let gate = gate_source_format_bounded(
+        source_filename,
+        input,
+        three_mf_limits,
+        limits.max_input_bytes,
+    )?;
     if gate.status == FormatSupportStatus::Unsupported {
         return Err(PreviewError::UnsupportedFormat);
     }
@@ -175,7 +182,7 @@ pub fn source_to_preview_glb(
 }
 
 /// Canonical millimetre geometry only: no project settings, G-code or attachments.
-/// STL is limited to 50 MiB; its accompanying preview uses the GLB byte budget.
+/// STL uses the explicit output budget (50 MiB by default); preview stays capped at 25 MiB.
 #[tracing::instrument(skip_all, level = "debug")]
 pub fn source_to_stl(
     filename: &str,
@@ -222,7 +229,8 @@ pub fn source_to_production(
         if input.len() > limits.max_input_bytes {
             return Err(PreviewError::InputTooLarge);
         }
-        let gate = gate_source_format(filename, input, three_mf_limits)?;
+        let gate =
+            gate_source_format_bounded(filename, input, three_mf_limits, limits.max_input_bytes)?;
         if gate.status == FormatSupportStatus::Unsupported {
             return Err(PreviewError::UnsupportedFormat);
         }
@@ -240,7 +248,7 @@ pub fn source_to_production(
             .triangle_count
             .checked_mul(50)
             .and_then(|n| n.checked_add(84))
-            .filter(|n| *n <= MAX_CANONICAL_STL_BYTES)
+            .filter(|n| *n <= limits.max_output_stl_bytes && *n <= u32::MAX as usize)
             .ok_or(PreviewError::OutputTooLarge)?;
         let count =
             u32::try_from(analysis.triangle_count).map_err(|_| PreviewError::TooManyTriangles)?;
@@ -348,6 +356,20 @@ pub fn gate_source_format(
     input: &[u8],
     limits: &ThreeMfLimits,
 ) -> Result<FormatGateResult, PreviewError> {
+    gate_source_format_bounded(
+        filename,
+        input,
+        limits,
+        ConversionLimits::default().max_input_bytes,
+    )
+}
+
+fn gate_source_format_bounded(
+    filename: &str,
+    input: &[u8],
+    limits: &ThreeMfLimits,
+    max_input_bytes: usize,
+) -> Result<FormatGateResult, PreviewError> {
     let lower = filename.to_lowercase();
     if lower.ends_with(".stl") {
         return Ok(FormatGateResult {
@@ -365,7 +387,7 @@ pub fn gate_source_format(
         });
     }
     if lower.ends_with(".step") || lower.ends_with(".stp") {
-        validate_step_part21(input)?;
+        validate_step_part21(input, max_input_bytes)?;
         return Ok(FormatGateResult {
             source_format: SourceFormat::Step,
             status: FormatSupportStatus::ManualReviewRequired,
@@ -379,8 +401,8 @@ pub fn gate_source_format(
     })
 }
 
-fn validate_step_part21(input: &[u8]) -> Result<(), PreviewError> {
-    if input.len() > 50 * 1024 * 1024 {
+fn validate_step_part21(input: &[u8], max_input_bytes: usize) -> Result<(), PreviewError> {
+    if input.len() > max_input_bytes {
         return Err(PreviewError::InputTooLarge);
     }
     let text = std::str::from_utf8(input).map_err(|_| PreviewError::MalformedInput)?;
@@ -1237,6 +1259,26 @@ mod tests {
         assert_eq!(triangles, 1_048_574);
         assert!(84 + triangles * 50 <= MAX_CANONICAL_STL_BYTES);
         assert!(84 + (triangles + 1) * 50 > MAX_CANONICAL_STL_BYTES);
+    }
+
+    #[test]
+    fn canonical_stl_output_budget_accepts_exact_size_rejects_one_byte_less() {
+        let mut limits = ConversionLimits {
+            max_output_stl_bytes: 84 + 12 * 50,
+            ..Default::default()
+        };
+        let archive = ThreeMfLimits::default();
+        let output = source_to_production("cube.stl", CUBE_BINARY, &limits, &archive).unwrap();
+        assert_eq!(output.stl.len(), limits.max_output_stl_bytes);
+        limits.max_output_stl_bytes -= 1;
+        assert_eq!(
+            source_to_production("cube.stl", CUBE_BINARY, &limits, &archive).err(),
+            Some(PreviewError::OutputTooLarge)
+        );
+        assert_eq!(
+            ConversionLimits::default().max_output_stl_bytes,
+            MAX_CANONICAL_STL_BYTES
+        );
     }
 
     const CUBE_BINARY: &[u8] = include_bytes!("../tests/fixtures/cube_20mm.stl");

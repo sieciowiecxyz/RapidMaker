@@ -182,3 +182,7 @@ Uprawnienia i aktualne wyniki audytu: [security.md](../docs/security.md). Izolow
 Brak automatycznego profilu/ceny, przekroczenie 500 mm lub niepasująca P1P kierują do ręcznej oceny. Admin podaje całkowite brutto i zawartą w nim dostawę, zakres oraz uzgodnioną metodę; nie udajemy automatycznej oferty Furgonetki. Prośba ma 14 dni, oferta 7 dni. Jedna próba płatności na zamówienie; po rozpoczęciu nie można zmienić ceny, po definitywnym wygaśnięciu potrzebne nowe zgłoszenie. Publikacja/email i zapłata/email są atomowe.
 
 Worker uzgadnia próby ze Stripe. Po 24 h zamyka tylko potwierdzone nieopłacone Session/Intent; processing, succeeded i requires_capture zachowują ochronę plików. Awaria Stripe nie zwalnia hold. Sprzątanie usuwa cały katalog modelu dopiero po utracie wszystkich aktywnych hold.
+
+## Większe modele — profil lokalny
+
+Domyślny `MODEL_PROFILE=standard` zachowuje dotychczasowe limity. Kod ma osobny, niewłączony profil `large`, wymagający jawnego `AUTH_MODE=localhost`: API96MiB, ZIP512MiB, siatka200MiB, GLB nadal25MiB; slicer120CPU/125wall na partię, całe zadanie nadal150s. `.env` nie zmieniono; aktualny frontend nie obsługuje jeszcze rozszerzonych limitów. Nie włączaj tego jako deklaracji gotowej obsługi całej strony. Budżety, pozostałe blokery i komenda testu na osobnej bazie: [plan dużych modeli](../docs/plans/large-models.md).

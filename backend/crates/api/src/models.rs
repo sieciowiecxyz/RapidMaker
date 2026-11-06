@@ -1,14 +1,15 @@
 //! Bounded geometry analysis in a disposable subprocess. The shipping mass is a
 //! conservative solid estimate, never a slicer result or customer-provided value.
+use super::model_limits::ModelProfile;
 use axum::{
     Json,
     body::Bytes,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request, State},
     http::{HeaderMap, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
 };
-use rapidmaker_geometry::{
-    ConversionLimits, PreviewError, ThreeMfLimits, source_to_preview_glb, source_to_production,
-};
+use rapidmaker_geometry::{PreviewError, source_to_preview_glb, source_to_production};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -22,7 +23,6 @@ use std::{
 use tokio::sync::Semaphore;
 use utoipa_axum::{router::OpenApiRouter as Router, routes};
 
-const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 static BUSY: Semaphore = Semaphore::const_new(1);
 
@@ -36,10 +36,33 @@ pub struct ModelAnalysis {
     pub reason: Option<String>,
 }
 
-pub fn router() -> Router {
+pub(super) fn router(profile: ModelProfile) -> Router {
     Router::new()
         .routes(routes!(analyze))
-        .layer(DefaultBodyLimit::max(MAX_BYTES))
+        .route_layer(middleware::from_fn(admit_analysis))
+        .layer(DefaultBodyLimit::max(profile.input_bytes()))
+        .with_state(profile)
+}
+
+// Share the conversion permit before Bytes extraction, so waiting uploads cannot
+// allocate unbounded bodies in the API process outside the parser sandbox.
+async fn admit_analysis(request: Request, next: Next) -> Response {
+    let Ok(_permit) = BUSY.try_acquire() else {
+        return error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Trwa analiza innego modelu. Spróbuj za chwilę.",
+        )
+        .into_response();
+    };
+    // A stalled body must not hold the shared conversion slot indefinitely.
+    match tokio::time::timeout(Duration::from_secs(60), next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => error(
+            StatusCode::REQUEST_TIMEOUT,
+            "Przesyłanie lub analiza trwa zbyt długo. Spróbuj ponownie.",
+        )
+        .into_response(),
+    }
 }
 
 type Error = (StatusCode, Json<Value>);
@@ -58,7 +81,11 @@ impl Drop for Workspace {
     request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream"),
     responses((status = 200, description = "Analiza geometrii", body = ModelAnalysis),
         (status = 422, description = "Nieprawidłowy lub zbyt złożony model", body = Value)))]
-async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>, Error> {
+async fn analyze(
+    State(profile): State<ModelProfile>,
+    headers: HeaderMap,
+    input: Bytes,
+) -> Result<Json<ModelAnalysis>, Error> {
     let filename = headers
         .get("x-model-filename")
         .and_then(|v| v.to_str().ok())
@@ -77,12 +104,6 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
             "Wybierz niepusty model STL, STEP lub 3MF.",
         ));
     }
-    let _permit = BUSY.try_acquire().map_err(|_| {
-        error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Trwa analiza innego modelu. Spróbuj za chwilę.",
-        )
-    })?;
     let workspace =
         Workspace(std::env::temp_dir().join(format!("rapidmaker-model-{}", uuid::Uuid::new_v4())));
     fs::DirBuilder::new()
@@ -115,6 +136,7 @@ async fn analyze(headers: HeaderMap, input: Bytes) -> Result<Json<ModelAnalysis>
         80 * 1024 * 1024,
         None,
         None,
+        profile,
     )
     .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Brak procesu analizy."))?;
     let status = tokio::time::timeout(Duration::from_secs(30), command.status())
@@ -160,6 +182,7 @@ fn isolated_worker(
     output_limit: u64,
     metadata: Option<&Path>,
     preview: Option<&Path>,
+    profile: ModelProfile,
 ) -> Result<tokio::process::Command, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     // Fail closed if bubblewrap/namespaces are unavailable: the parser cannot
@@ -212,6 +235,7 @@ fn isolated_worker(
     command
         .args(["--remount-ro", "/", "/worker", flag])
         .arg(&isolated_source)
+        .arg(profile.name())
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .current_dir(source.parent().ok_or("Missing model directory")?)
@@ -229,13 +253,17 @@ pub struct PreparedModel {
     pub dimensions_mm: [f64; 3],
 }
 
-pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<PreparedModel, String> {
+pub(super) async fn prepare_for_slicing(
+    source: &Path,
+    output: &Path,
+    profile: ModelProfile,
+) -> Result<PreparedModel, String> {
     let extension = source.extension().and_then(|v| v.to_str()).unwrap_or("");
     if !matches!(extension, "stl" | "step" | "stp" | "3mf") {
         return Err("Unsupported source format".into());
     }
     let length = fs::metadata(source).map_err(|e| e.to_string())?.len();
-    if length == 0 || length > MAX_BYTES as u64 {
+    if length == 0 || length > profile.input_bytes() as u64 {
         return Err("Invalid model size".into());
     }
     let _permit = BUSY.try_acquire().map_err(|_| "Model parser busy")?;
@@ -266,9 +294,10 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
             source,
             file,
             "--prepare-slicing-worker",
-            50 * 1024 * 1024,
+            profile.stl_bytes() as u64,
             Some(&metadata),
             Some(&preview),
+            profile,
         )?;
         let status = tokio::time::timeout(Duration::from_secs(30), command.status())
             .await
@@ -284,7 +313,7 @@ pub async fn prepare_for_slicing(source: &Path, output: &Path) -> Result<Prepare
             .into());
         }
         let length = fs::metadata(output).map_err(|e| e.to_string())?.len();
-        if !(84..=50 * 1024 * 1024).contains(&length) {
+        if !(84..=profile.stl_bytes() as u64).contains(&length) {
             return Err("Invalid canonical mesh size".into());
         }
         let preview_length = fs::metadata(&preview).map_err(|e| e.to_string())?.len();
@@ -371,21 +400,19 @@ pub fn worker() -> bool {
         .next()
         .ok_or_else(|| "Missing model path".to_string())
         .and_then(|filename| {
+            let profile = ModelProfile::parse(args.next().as_deref(), Some("localhost"))?;
             if mode == "--prepare-slicing-worker" {
-                if fs::metadata(&filename).map_err(|e| e.to_string())?.len() > MAX_BYTES as u64 {
+                if fs::metadata(&filename).map_err(|e| e.to_string())?.len()
+                    > profile.input_bytes() as u64
+                {
                     return Err("Input too large".into());
                 }
-                let input = fs::read(&filename).map_err(|e| e.to_string())?;
+                let input = read_source(Path::new(&filename), profile)?;
                 let output = source_to_production(
                     &filename,
                     &input,
-                    &ConversionLimits {
-                        max_input_bytes: MAX_BYTES,
-                        max_output_glb_bytes: MAX_PREVIEW_BYTES,
-                        max_parse_seconds: 25,
-                        ..Default::default()
-                    },
-                    &ThreeMfLimits::default(),
+                    &profile.conversion(),
+                    &profile.archive(),
                 )
                 .map_err(|e| {
                     resource_limited = is_resource_limit(&e);
@@ -400,7 +427,7 @@ pub fn worker() -> bool {
                 fs::write("/preview.glb", output.glb).map_err(|e| e.to_string())?;
                 Ok(output.stl)
             } else {
-                serde_json::to_vec(&analyze_file(&filename)?).map_err(|e| e.to_string())
+                serde_json::to_vec(&analyze_file(&filename, profile)?).map_err(|e| e.to_string())
             }
         });
     if result
@@ -422,14 +449,22 @@ pub fn worker() -> bool {
     true
 }
 
-fn analyze_file(filename: &str) -> Result<ModelAnalysis, String> {
-    let input = fs::read(filename).map_err(|e| e.to_string())?;
-    let limits = ConversionLimits {
-        max_input_bytes: MAX_BYTES,
-        max_parse_seconds: 25,
-        ..Default::default()
-    };
-    let output = source_to_preview_glb(filename, &input, &limits, &ThreeMfLimits::default())
+fn read_source(path: &Path, profile: ModelProfile) -> Result<Vec<u8>, String> {
+    let mut input = Vec::new();
+    fs::File::open(path)
+        .map_err(|e| e.to_string())?
+        .take(profile.input_bytes() as u64 + 1)
+        .read_to_end(&mut input)
+        .map_err(|e| e.to_string())?;
+    if input.is_empty() || input.len() > profile.input_bytes() {
+        return Err("Invalid model size".into());
+    }
+    Ok(input)
+}
+
+fn analyze_file(filename: &str, profile: ModelProfile) -> Result<ModelAnalysis, String> {
+    let input = read_source(Path::new(filename), profile)?;
+    let output = source_to_preview_glb(filename, &input, &profile.conversion(), &profile.archive())
         .map_err(|e| e.to_string())?;
     let dimensions_mm = output.analysis.dimensions_mm.map(f64::from);
     if dimensions_mm.iter().any(|v| !v.is_finite() || *v <= 0.0) {
@@ -582,6 +617,44 @@ fn solid_volume(glb: &[u8], center: [f64; 3]) -> Option<f64> {
 #[cfg(test)]
 mod resource_tests {
     use super::*;
+    #[test]
+    fn isolated_worker_receives_profile_without_inheriting_configuration() {
+        let profile = ModelProfile::Large;
+        let output = fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/null")
+            .unwrap();
+        let command = isolated_worker(
+            Path::new("/tmp/model.3mf"),
+            output,
+            "--prepare-slicing-worker",
+            profile.stl_bytes() as u64,
+            None,
+            None,
+            profile,
+        )
+        .unwrap();
+        let command = command.as_std();
+        let args = command
+            .get_args()
+            .map(|s| s.to_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(args.contains(&"--fsize=209715200"));
+        assert!(args.contains(&"--as=2147483648"));
+        assert!(args.contains(&"--cpu=25"));
+        assert_eq!(
+            &args[args.len() - 3..],
+            &["--prepare-slicing-worker", "/model.3mf", "large"]
+        );
+        assert_eq!(
+            command.get_envs().collect::<Vec<_>>(),
+            vec![(
+                std::ffi::OsStr::new("PATH"),
+                Some(std::ffi::OsStr::new("/usr/bin:/bin"))
+            )]
+        );
+    }
+
     #[test]
     fn resource_errors_are_distinct_from_invalid_or_unsafe_geometry() {
         for error in [

@@ -11,7 +11,7 @@ allowed.update({"MAIL_MODE", "MAIL_SMTP_HOST", "MAIL_SMTP_PORT", "MAIL_USER", "M
 allowed.update({"MAIL_INBOUND_MODE", "MAIL_REPLY_KEY", "MAIL_IMAP_USER", "MAIL_IMAP_PASSWORD", "MAIL_IMAP_HOST", "MAIL_IMAP_PORT", "MAIL_IMAP_MAILBOX"})
 allowed.update({"AUTH_MODE", "AUTH_ORIGIN", "AUTH_CODE_KEY", "AUTH_TRUSTED_PROXY", "SLICER_WORKER_MODE"})
 allowed.update({"LOG_LEVEL", "METRICS_TOKEN"})
-allowed.add("FURGONETKA_SENDER_POINTS_JSON")
+allowed.update({"FURGONETKA_SENDER_POINTS_JSON", "MODEL_PROFILE"})
 for name in (".env",):
     path = root / name
     if not path.exists():

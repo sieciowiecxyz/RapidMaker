@@ -57,3 +57,34 @@
 - Final GPT-6-Sol xhigh read-only review: no blocker. Scores/10: correctness9, security9, money9, resources9, errors9, concurrency N/A, evidence9, simplicity8, maintainability8, visual compatibility9. Reviewer did not rerun tests. Full64-chunk test exercises planner/layout only; small fixtures independently round-trip, large24/39 actual API/UI. Whole goal remains open.
 
 - Follow-up CPU diagnosis: explicitly Stored internal replacement ZIP entries were trialed then fully reverted: case20 baseline10.022s vs10.018s;41 both SIGKILL9 near25s CPU. No observed improvement, memory tradeoff not retained. Private matched-source/binary provenance: `large-model-probe-zip-comparison/`. A separate temporary phase-only binary places case41 normalization at1.247s; no root-validation completion marker before25s CPU. Bottleneck is inside the existing full SDK root/package validation call; do not skip it or call the signal an OOM. Instrumented source preserved privately, all probe-only source changes removed; normal app/probe rebuilt.
+
+## Explicit backend profile (not enabled on the user server)
+
+`MODEL_PROFILE` accepts only `standard` (default) or `large`; large requires explicit `AUTH_MODE=localhost`. No `.env` changes. This is backend groundwork, not expanded storefront support: browser upload25MiB and preview triangle budgets remain unchanged. Deployment/default-budget question stays open.
+
+| API budget | standard | large (opt-in) |
+| --- | ---: | ---: |
+| Input |32MiB|96MiB|
+| Expanded ZIP total/per entry; entries |96MiB;512|512MiB;512|
+| Exact canonical STL |50MiB|200MiB|
+| Unique vertices |1M|4M|
+| Triangles from STL bytes |1,048,574|4,194,302|
+| Private GLB |25MiB|25MiB|
+| Geometry process |2GiB/25CPU/30wall|same|
+| Bambu per actual batch |4GiB/60CPU/65wall|4GiB/120CPU/125wall|
+
+Overall quote deadline150s and DB lease180s remain; two large batches may exceed the overall deadline and are not promised. Slicer library's existing public wrapper retains64MiB/60CPU; API explicitly passes50/200MiB and60/120CPU. No arbitrary client-supplied budgets. Source read is bounded and checked against file metadata before preparing the private STL. Existing aggregate quotas20models/256MiB per owner,1000/8GiB globally include source+STL+GLB and stay unchanged.
+
+Migration0023 widens only absolute stored source/mesh checks to96/200MiB; default insert wrapper still32/50, large callers pass bounded explicit allowances. Previously accepted files remain privately downloadable after profile rollback under absolute persisted-read caps; current admission settings do not invalidate held order files. Ownership/admin mesh gates and exact stored lengths remain. Legacy analysis acquires the shared conversion permit before body extraction; total body+analysis deadline60s prevents an indefinitely held slot.
+
+Evidence: `large-profile-api-final.json`3PASS25.8s forSHA-bound cases8/20/40, exact canonical74–84MB/counts/bounds and original hashes/privateGLB, outsider401/404 (before later CPU/admission/read fixes). Initial3FAIL only overstrict cache string expectation; actual `no-store` was valid, final asserts that directive. `large-profile-quote.json`2PASS/1FAIL:20 reached Bambu but3attempts exited137 at~33.4s; no OOM diagnosis. `large-profile-quote120.json`1PASS52.8s after explicit120CPU:20 got1measured plate/7687grosze with independent fixture invoice. Not production purchase costs/profitability.
+
+`large-profile-storage.json`20PASS0skipped in isolated databases, including widened migration/explicit allowances/quotas. Geometry39PASS/1optionalignored; final API29PASS/1DBignored and slicer15PASS/3optionalignored; relevant DB cases run separately above. Standard integration `large-profile-standard-regression.json`:11PASS21.7s,3deliberate large-profile skips due former filename matching; renamed to `large-profile.spec.ts` so explicit `models.spec.ts` selection no longer includes it. Real stalled-body100Continue test gets429 before body completion and recovers200 after disconnect. Private-read unit covers persisted files above standard caps/admin denial/length errors; no actual process-restart proof. Clippy4packages/all-targets, normal app build, Python syntax, formatting/diff checks passed. Final `large-profile-complete.json`:3PASS/67.7s,0skip/flaky, all three uploads/full geometry/private GLB plus actual model20 slice+independent price, after read/admission/CPU fixes.
+
+Run only on the disposable integration DB (never changes local `.env`):
+```sh
+E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=large-profile-complete python frontend/tests/run-integration.py --large-models large-profile.spec.ts
+```
+Remaining: browser contract/rendering for expanded profile,19/29 preview>25MiB,41 SDK runtime, full newly accepted-model pricing/quantity/resource evidence. Topology-invalid14/21/37 and malformed32 stay explicit rejections. No413/422 counted as supported upload.
+
+Final scoped GPT-6-Sol xhigh rereview after fixes: no blocker. Correctness9/security9/money9/resources8/errors9/concurrency8/evidence9/simplicity8/maintainability8, visual N/A. No reviewer rerun. Explicit remaining gaps: actual restart HTTP rollback, two large batches under150s, expanded browser support. Not10/10 or goal completion.

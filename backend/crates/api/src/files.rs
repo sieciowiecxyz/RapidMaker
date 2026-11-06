@@ -1,4 +1,5 @@
 //! Guest-owned private models. Cookies authorize reads; filenames never choose disk paths.
+use super::model_limits::ModelProfile;
 use axum::{
     Json,
     body::Bytes,
@@ -22,7 +23,6 @@ use tokio::sync::Semaphore;
 use utoipa_axum::{router::OpenApiRouter as Router, routes};
 use uuid::Uuid;
 
-const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 const COOKIE: &str = "rapidmaker_guest";
 static UPLOAD_BUSY: Semaphore = Semaphore::const_new(1);
@@ -32,6 +32,7 @@ type Error = (StatusCode, Json<Value>);
 struct FileState {
     storage: Option<Storage>,
     root: PathBuf,
+    profile: ModelProfile,
 }
 
 pub struct ModelHandle {
@@ -53,7 +54,11 @@ pub fn router(storage: Option<Storage>) -> Result<Router, String> {
             return Err("Model storage must be a private directory (0700)".into());
         }
     }
-    let state = FileState { storage, root };
+    let state = FileState {
+        storage,
+        root,
+        profile: ModelProfile::from_env()?,
+    };
     let uploads = Router::new()
         .routes(routes!(upload))
         .route_layer(middleware::from_fn_with_state(state.clone(), admit_upload));
@@ -62,7 +67,7 @@ pub fn router(storage: Option<Storage>) -> Result<Router, String> {
         .routes(routes!(metadata))
         .routes(routes!(source))
         .routes(routes!(preview))
-        .layer(DefaultBodyLimit::max(MAX_BYTES))
+        .layer(DefaultBodyLimit::max(state.profile.input_bytes()))
         .with_state(state))
 }
 
@@ -164,6 +169,8 @@ impl Drop for PendingDirectory {
 pub(super) async fn cleanup_models(storage: &Storage) -> Result<(), Error> {
     let state = FileState {
         storage: Some(storage.clone()),
+        profile: ModelProfile::from_env()
+            .map_err(|_| error(StatusCode::SERVICE_UNAVAILABLE, "Invalid model profile"))?,
         root: model_root().map_err(|_| {
             error(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -245,7 +252,7 @@ fn filename(headers: &HeaderMap) -> Result<(String, String), Error> {
 
 #[utoipa::path(operation_id = "files_upload", post, path = "/api/models", tag = "Modele",
     params(("x-model-filename" = String, Header, description = "Zakodowana procentowo nazwa STL, STEP lub 3MF")),
-    request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream", description = "Oryginał do 32 MiB"),
+    request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream", description = "Oryginał domyślnie do 32 MiB (lokalny profil large: 96 MiB)"),
     responses((status = 201, description = "Prywatny model i adres GLB", body = Value),
         (status = 413, description = "Przekroczony limit pliku"), (status = 422, description = "Nieprawidłowa geometria", body = Value)))]
 async fn upload(
@@ -301,7 +308,7 @@ async fn upload(
             )
         })?;
     let mesh = directory.join("canonical.stl");
-    let prepared = super::models::prepare_for_slicing(&source, &mesh)
+    let prepared = super::models::prepare_for_slicing(&source, &mesh, state.profile)
         .await
         .map_err(|message| {
             if message == "Model parser busy" {
@@ -360,12 +367,20 @@ async fn upload(
         dimensions_mm: prepared.dimensions_mm,
         expires_at: timestamp + 86400,
     };
-    if !storage.insert_model(&record).await.map_err(|_| {
-        error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Nie można zachować modelu.",
+    if !storage
+        .insert_model_with_limits(
+            &record,
+            state.profile.input_bytes(),
+            state.profile.stl_bytes(),
         )
-    })? {
+        .await
+        .map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Nie można zachować modelu.",
+            )
+        })?
+    {
         return Err(error(
             StatusCode::TOO_MANY_REQUESTS,
             "Przekroczono limit zapisanych modeli. Spróbuj po wygaśnięciu starszych plików.",
@@ -488,8 +503,13 @@ async fn source(
     source_response(&handle)
 }
 
+// Persisted artifacts remain readable after switching back to standard admission.
 fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
-    let bytes = private_bytes(&handle.source, handle.record.source_bytes, MAX_BYTES)?;
+    let bytes = private_bytes(
+        &handle.source,
+        handle.record.source_bytes,
+        ModelProfile::Large.input_bytes(),
+    )?;
     let disposition = HeaderValue::from_str(&format!(
         "attachment; filename=\"model.{}\"; filename*=UTF-8''{}",
         handle.record.extension,
@@ -571,9 +591,13 @@ pub(super) fn order_artifact(
     admin: bool,
 ) -> Result<Response, Error> {
     let handle = handle(record)?;
+    artifact_response(&handle, kind, admin)
+}
+
+fn artifact_response(handle: &ModelHandle, kind: &str, admin: bool) -> Result<Response, Error> {
     match kind {
-        "source" => source_response(&handle),
-        "preview.glb" => preview_response(&handle),
+        "source" => source_response(handle),
+        "preview.glb" => preview_response(handle),
         "mesh" if admin => Ok((
             [
                 (header::CONTENT_TYPE, "application/octet-stream"),
@@ -584,7 +608,11 @@ pub(super) fn order_artifact(
                 (header::CACHE_CONTROL, "private, no-store"),
                 (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
             ],
-            private_bytes(&handle.mesh, handle.record.mesh_bytes, 50 * 1024 * 1024)?,
+            private_bytes(
+                &handle.mesh,
+                handle.record.mesh_bytes,
+                ModelProfile::Large.stl_bytes(),
+            )?,
         )
             .into_response()),
         _ => Err(error(
@@ -628,6 +656,71 @@ fn private_bytes(path: &Path, expected: i64, limit: usize) -> Result<Vec<u8>, Er
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn persisted_large_downloads_ignore_admission_profile_and_keep_admin_gate() {
+        let directory = std::env::temp_dir().join(format!("rapidmaker-read-{}", Uuid::new_v4()));
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&directory)
+            .unwrap();
+        let _cleanup = PendingDirectory(Some(directory.clone()));
+        let source_len = ModelProfile::Standard.input_bytes() + 1;
+        let mesh_len = ModelProfile::Standard.stl_bytes() + 1;
+        let mut handle = ModelHandle {
+            source: directory.join("model.stl"),
+            mesh: directory.join("canonical.stl"),
+            record: StoredModel {
+                id: Uuid::new_v4().to_string(),
+                owner_hash: "a".repeat(64),
+                user_id: None,
+                filename: "large.stl".into(),
+                extension: "stl".into(),
+                source_bytes: source_len as i64,
+                mesh_bytes: mesh_len as i64,
+                preview_bytes: 0,
+                sha256: "a".repeat(64),
+                dimensions_mm: [20.; 3],
+                expires_at: 2_000_000_000,
+            },
+        };
+        for (path, length) in [(&handle.source, source_len), (&handle.mesh, mesh_len)] {
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(path)
+                .unwrap()
+                .set_len(length as u64)
+                .unwrap();
+        }
+        for (kind, admin, expected) in [("source", false, source_len), ("mesh", true, mesh_len)] {
+            let response = artifact_response(&handle, kind, admin).unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.headers()[header::CACHE_CONTROL],
+                "private, no-store"
+            );
+            let bytes = axum::body::to_bytes(response.into_body(), expected)
+                .await
+                .unwrap();
+            assert_eq!(bytes.len(), expected);
+        }
+        assert_eq!(
+            artifact_response(&handle, "mesh", false).unwrap_err().0,
+            StatusCode::NOT_FOUND
+        );
+        handle.record.source_bytes += 1;
+        assert_eq!(
+            source_response(&handle).unwrap_err().0,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        handle.record.source_bytes = ModelProfile::Large.input_bytes() as i64 + 1;
+        assert_eq!(
+            source_response(&handle).unwrap_err().0,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
 
     #[test]
     fn guest_tokens_are_opaque_and_ambiguous_cookies_authorize_nothing() {

@@ -50,3 +50,5 @@ Bieżąca regresja uploadów: `topology-models-ui-final.json`,6 PASS/5,5s. Napra
 Etap bezstratnego kompaktowego GLB wdrożony; większy profil HTTP nadal oczekuje decyzji. Pięć diagnostycznych dużych modeli ma mniejsze podglądy, trzy mieszczą się w25 MiB. Nie uznajemy tego za nowe zaakceptowane uploady ani ceny. Szczegóły i aktualne testy: raport/plan dużych modeli.
 
 Regresja kont: `pending-mfa-revocation.json`2 PASS/8,5s — realny formularz zmiany hasła odwołuje zarówno kopię sesji zalogowanej, jak niezależną sesję czekającą na2FA. Stare hasło odrzucone, nowe nadal wymaga drugiego składnika; pozostałe istniejące kontrole passkey/TOTP/recovery zachowane. Bez emaila/dostawców i bez zmian produktu.
+
+Backendowy profil dużych modeli zaimplementowany, ale nie włączony domyślnie:3rzeczywiste duże uploady oraz cena modelu20 ze slicera. Frontend nadal wymaga osobnej obsługi limitów/podglądu; całego celu nie zamykamy. Nowa kontrola odczytu i admission po review, dowody i limity: plan dużych modeli.

@@ -156,15 +156,22 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
     {
         return Err(config);
     }
-    let measured = rapidmaker_slicer::slice_job(&model.mesh, &input.material_id, &input.options)
-        .await
-        .map_err(|e| match e {
-            rapidmaker_slicer::Error::Busy | rapidmaker_slicer::Error::Failed(_) => unavailable,
-            _ => (
-                false,
-                "Nie udało się przygotować modelu. Sprawdź plik lub poproś o wycenę indywidualną.",
-            ),
-        })?;
+    let profile = super::model_limits::ModelProfile::from_env().map_err(|_| unavailable)?;
+    let measured = rapidmaker_slicer::slice_job_with_limits(
+        &model.mesh,
+        &input.material_id,
+        &input.options,
+        profile.stl_bytes(),
+        profile.slicer_cpu_seconds(),
+    )
+    .await
+    .map_err(|e| match e {
+        rapidmaker_slicer::Error::Busy | rapidmaker_slicer::Error::Failed(_) => unavailable,
+        _ => (
+            false,
+            "Nie udało się przygotować modelu. Sprawdź plik lub poproś o wycenę indywidualną.",
+        ),
+    })?;
     let price = calculate(
         measured.time_seconds,
         (measured.filament_grams * 1000.0).ceil() as u64,

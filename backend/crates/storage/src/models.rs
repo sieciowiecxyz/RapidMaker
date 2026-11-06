@@ -47,8 +47,24 @@ impl Storage {
     /// All writers take one database lock; concurrent processes cannot exceed quotas.
     /// Return false for quota refusal, while database failures remain errors.
     pub async fn insert_model(&self, model: &StoredModel) -> Result<bool, StorageError> {
-        if !(1..=32 * 1024 * 1024).contains(&model.source_bytes)
-            || !(84..=50 * 1024 * 1024).contains(&model.mesh_bytes)
+        self.insert_model_with_limits(model, 32 * 1024 * 1024, 50 * 1024 * 1024)
+            .await
+    }
+
+    /// Explicit per-file allowances; aggregate quotas and preview cap stay fixed.
+    pub async fn insert_model_with_limits(
+        &self,
+        model: &StoredModel,
+        max_source_bytes: usize,
+        max_mesh_bytes: usize,
+    ) -> Result<bool, StorageError> {
+        if !(1..=96 * 1024 * 1024).contains(&max_source_bytes)
+            || !(84..=200 * 1024 * 1024).contains(&max_mesh_bytes)
+        {
+            return Err("invalid model byte limits".into());
+        }
+        if !(1..=max_source_bytes as i64).contains(&model.source_bytes)
+            || !(84..=max_mesh_bytes as i64).contains(&model.mesh_bytes)
             || !(0..=25 * 1024 * 1024).contains(&model.preview_bytes)
         {
             return Err("invalid model byte lengths".into());
@@ -192,6 +208,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn explicit_model_limits_fail_closed_before_database_access() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://unused/unused")
+            .unwrap();
+        pool.close().await;
+        let db = Storage { pool };
+        let mut model = StoredModel {
+            id: uuid::Uuid::new_v4().to_string(),
+            owner_hash: "a".repeat(64),
+            user_id: None,
+            filename: "large.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 33 * 1024 * 1024,
+            mesh_bytes: 51 * 1024 * 1024,
+            preview_bytes: 25 * 1024 * 1024,
+            sha256: "a".repeat(64),
+            dimensions_mm: [20.; 3],
+            expires_at: 2_000_000_000,
+        };
+        assert_eq!(
+            db.insert_model(&model).await.unwrap_err().to_string(),
+            "invalid model byte lengths"
+        );
+        let source_limit = 96 * 1024 * 1024;
+        let mesh_limit = 200 * 1024 * 1024;
+        for (source, mesh) in [
+            (0, mesh_limit),
+            (source_limit + 1, mesh_limit),
+            (source_limit, 83),
+            (source_limit, mesh_limit + 1),
+        ] {
+            assert_eq!(
+                db.insert_model_with_limits(&model, source, mesh)
+                    .await
+                    .unwrap_err()
+                    .to_string(),
+                "invalid model byte limits"
+            );
+        }
+        model.source_bytes = source_limit as i64;
+        model.mesh_bytes = mesh_limit as i64;
+        let error = db
+            .insert_model_with_limits(&model, source_limit, mesh_limit)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<sqlx::Error>(),
+            Some(sqlx::Error::PoolClosed)
+        ));
+        model.source_bytes += 1;
+        assert_eq!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "invalid model byte lengths"
+        );
+        model.source_bytes -= 1;
+        model.mesh_bytes += 1;
+        assert_eq!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "invalid model byte lengths"
+        );
+        model.mesh_bytes -= 1;
+        model.preview_bytes += 1;
+        assert_eq!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "invalid model byte lengths"
+        );
+    }
+
+    #[tokio::test]
     #[ignore = "requires isolated TEST_DATABASE_URL"]
     async fn preview_bytes_count_toward_quota_and_validate_boundaries() {
         let db = Storage::connect(&std::env::var("TEST_DATABASE_URL").unwrap())
@@ -247,6 +341,49 @@ mod tests {
             .unwrap();
         // The same small record fits once the quota is released; legacy zero is valid.
         assert!(db.insert_model(&model).await.unwrap());
+        // Larger per-file allowances are explicit and retain hard upper bounds.
+        model.id = uuid::Uuid::new_v4().to_string();
+        model.source_bytes = 33 * 1024 * 1024;
+        model.mesh_bytes = 51 * 1024 * 1024;
+        assert!(db.insert_model(&model).await.is_err());
+        let source_limit = 96 * 1024 * 1024;
+        let mesh_limit = 200 * 1024 * 1024;
+        assert!(
+            db.insert_model_with_limits(&model, source_limit + 1, mesh_limit)
+                .await
+                .is_err()
+        );
+        assert!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit + 1)
+                .await
+                .is_err()
+        );
+        assert!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .unwrap()
+        );
+        model.id = uuid::Uuid::new_v4().to_string();
+        model.source_bytes = source_limit as i64 + 1;
+        assert!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .is_err()
+        );
+        model.source_bytes = 33 * 1024 * 1024;
+        model.mesh_bytes = mesh_limit as i64 + 1;
+        assert!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .is_err()
+        );
+        model.mesh_bytes = 51 * 1024 * 1024;
+        model.preview_bytes = 25 * 1024 * 1024 + 1;
+        assert!(
+            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+                .await
+                .is_err()
+        );
         sqlx::query("DELETE FROM private_models WHERE owner_hash=$1")
             .bind(&owner)
             .execute(&db.pool)

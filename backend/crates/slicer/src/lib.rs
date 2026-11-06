@@ -173,7 +173,9 @@ impl fmt::Display for Error {
             Self::InvalidOptions => {
                 f.write_str("Expected quantity 1..1000, walls 2..8, infill 5..100 percent")
             }
-            Self::InvalidModel => f.write_str("Expected a nonempty STL up to 64 MiB"),
+            Self::InvalidModel => {
+                f.write_str("Expected a nonempty STL within the configured size limit")
+            }
             Self::Failed(message) => f.write_str(message),
         }
     }
@@ -296,6 +298,19 @@ pub async fn slice_job(
     material_id: &str,
     options: &Options,
 ) -> Result<BatchEstimate, Error> {
+    slice_job_with_limits(model_path, material_id, options, 64 * 1024 * 1024, 60).await
+}
+
+/// Use explicit trusted STL/CPU caps, bounded to 200 MiB and 120 CPU seconds.
+#[tracing::instrument(skip_all, level = "debug")]
+pub async fn slice_job_with_limits(
+    model_path: &Path,
+    material_id: &str,
+    options: &Options,
+    max_bytes: usize,
+    cpu_seconds: u64,
+) -> Result<BatchEstimate, Error> {
+    validate_slice_limits(max_bytes, cpu_seconds)?;
     let started = std::time::Instant::now();
     let result = async {
         options.validate()?;
@@ -305,32 +320,18 @@ pub async fn slice_job(
             .get(material_id)
             .ok_or(Error::UnsupportedMaterial)?;
         let _permit = BUSY.try_acquire().map_err(|_| Error::Busy)?;
-        let metadata = fs::symlink_metadata(model_path)?;
-        if !metadata.is_file()
-            || metadata.len() == 0
-            || metadata.len() > 64 * 1024 * 1024
-            || model_path
-                .extension()
-                .and_then(|s| s.to_str())
-                .is_none_or(|s| !s.eq_ignore_ascii_case("stl"))
-        {
-            return Err(Error::InvalidModel);
-        }
+        let mut input = read_stl(model_path, max_bytes)?;
+        prepare_stl(&mut input, max_bytes)?;
         let workspace = Workspace(
             std::env::temp_dir().join(format!("rapidmaker-slicer-{}", uuid::Uuid::new_v4())),
         );
         fs::create_dir(&workspace.0)?;
         fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700))?;
-        // Copy into our private directory, avoiding changes to the input during execution.
-        let mut input = Vec::with_capacity(metadata.len() as usize);
-        fs::File::open(model_path)?
-            .take(64 * 1024 * 1024 + 1)
-            .read_to_end(&mut input)?;
-        prepare_stl(&mut input)?;
+        // Only the validated private copy reaches the external slicer.
         fs::write(workspace.0.join("model.stl"), input)?;
         write_profiles(&workspace.0, filament, options)?;
         let mut batches = Vec::with_capacity(2);
-        let first = run_plate(&workspace, options.quantity.min(512)).await?;
+        let first = run_plate(&workspace, options.quantity.min(512), cpu_seconds).await?;
         let capacity = first.copies_per_plate;
         let repeats = options.quantity / capacity;
         batches.push(PlateBatch {
@@ -339,7 +340,7 @@ pub async fn slice_job(
         });
         let remainder = options.quantity % capacity;
         if remainder > 0 {
-            let remaining = run_plate(&workspace, remainder).await?;
+            let remaining = run_plate(&workspace, remainder, cpu_seconds).await?;
             if remaining.copies_per_plate != remainder {
                 return Err(Error::Failed(
                     "Remainder did not fit its measured plate".into(),
@@ -389,10 +390,52 @@ pub async fn slice_job(
     result
 }
 
+fn validate_slice_limits(max_bytes: usize, cpu_seconds: u64) -> Result<(), Error> {
+    if !(84..=200 * 1024 * 1024).contains(&max_bytes) || !(60..=120).contains(&cpu_seconds) {
+        return Err(Error::Failed(
+            "Invalid trusted slicer resource limits".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn read_stl(model_path: &Path, max_bytes: usize) -> Result<Vec<u8>, Error> {
+    if !(84..=200 * 1024 * 1024).contains(&max_bytes) {
+        return Err(Error::InvalidModel);
+    }
+    let metadata = fs::symlink_metadata(model_path)?;
+    if !metadata.is_file()
+        || !(84..=max_bytes as u64).contains(&metadata.len())
+        || model_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_none_or(|s| !s.eq_ignore_ascii_case("stl"))
+    {
+        return Err(Error::InvalidModel);
+    }
+    let mut source = fs::File::open(model_path)?;
+    let opened = source.metadata()?;
+    if !opened.is_file() || opened.len() != metadata.len() {
+        return Err(Error::InvalidModel);
+    }
+    let mut input = Vec::with_capacity(metadata.len() as usize);
+    Read::by_ref(&mut source)
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut input)?;
+    if input.len() as u64 != metadata.len()
+        || input.len() > max_bytes
+        || source.metadata()?.len() != metadata.len()
+    {
+        return Err(Error::InvalidModel);
+    }
+    Ok(input)
+}
+
 // Existing uploads can contain zero normals. Prepare only the private slicing copy,
 // retaining the customer's source/preview coordinates and replacing no printer settings.
-fn prepare_stl(bytes: &mut [u8]) -> Result<(), Error> {
-    if bytes.len() < 84 || bytes.len() > 64 * 1024 * 1024 {
+fn prepare_stl(bytes: &mut [u8], max_bytes: usize) -> Result<(), Error> {
+    if !(84..=200 * 1024 * 1024).contains(&max_bytes) || bytes.len() < 84 || bytes.len() > max_bytes
+    {
         return Err(Error::InvalidModel);
     }
     let count = u32::from_le_bytes([bytes[80], bytes[81], bytes[82], bytes[83]]) as usize;
@@ -474,7 +517,11 @@ fn slicer_cpus(status: &str) -> Result<String, Error> {
     }
 }
 
-async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Error> {
+async fn run_plate(
+    workspace: &Workspace,
+    copies: u32,
+    cpu_seconds: u64,
+) -> Result<PlateBatch, Error> {
     let out = workspace.0.join("out");
     if out.exists() {
         fs::remove_dir_all(&out)?;
@@ -483,9 +530,9 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
     let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status")?)?;
     let mut command = tokio::process::Command::new("/usr/bin/taskset");
     command.args(["--cpu-list", &cpus, "/usr/bin/prlimit"]);
+    command.arg(format!("--cpu={cpu_seconds}"));
     command.args([
         "--as=4294967296",
-        "--cpu=60",
         "--fsize=134217728",
         "--nofile=128",
         "--",
@@ -574,9 +621,10 @@ async fn run_plate(workspace: &Workspace, copies: u32) -> Result<PlateBatch, Err
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
     runtime_sha256().await?;
-    let status = tokio::time::timeout(Duration::from_secs(65), command.status())
+    let wall_seconds = cpu_seconds + 5;
+    let status = tokio::time::timeout(Duration::from_secs(wall_seconds), command.status())
         .await
-        .map_err(|_| Error::Failed("Slicing exceeded 65 seconds".into()))??;
+        .map_err(|_| Error::Failed(format!("Slicing exceeded {wall_seconds} seconds")))??;
     runtime_sha256().await?;
     let result = out.join("result.json");
     if !status.success() {
@@ -661,6 +709,58 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
 mod tests {
     use super::*;
     #[test]
+    fn trusted_slice_limits_keep_standard_and_large_budgets_bounded() {
+        assert!(validate_slice_limits(64 * 1024 * 1024, 60).is_ok());
+        assert!(validate_slice_limits(50 * 1024 * 1024, 60).is_ok());
+        assert!(validate_slice_limits(200 * 1024 * 1024, 120).is_ok());
+        for (bytes, cpu) in [
+            (83, 60),
+            (200 * 1024 * 1024 + 1, 120),
+            (84, 59),
+            (84, 121),
+            (84, u64::MAX),
+        ] {
+            assert!(validate_slice_limits(bytes, cpu).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_trusted_cpu_budget_is_rejected_before_model_or_runtime_access() {
+        assert!(matches!(
+            slice_job_with_limits(Path::new("/missing.stl"), "unknown", &Options::default(), 84, 121).await,
+            Err(Error::Failed(message)) if message == "Invalid trusted slicer resource limits"
+        ));
+    }
+
+    #[test]
+    fn canonical_file_budget_accepts_exact_size_and_rejects_short_or_unbounded_caps() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-stl-limit-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        let path = workspace.0.join("model.stl");
+        let fixture = include_bytes!("../../geometry/tests/fixtures/cube_20mm.stl");
+        fs::write(&path, fixture).unwrap();
+        let mut bytes = read_stl(&path, fixture.len()).unwrap();
+        assert_eq!(bytes, fixture);
+        prepare_stl(&mut bytes, fixture.len()).unwrap();
+        for limit in [0, 83, fixture.len() - 1, 200 * 1024 * 1024 + 1] {
+            assert!(matches!(read_stl(&path, limit), Err(Error::InvalidModel)));
+        }
+        assert!(matches!(
+            prepare_stl(&mut bytes, fixture.len() - 1),
+            Err(Error::InvalidModel)
+        ));
+        bytes.push(0);
+        fs::write(&path, &bytes).unwrap();
+        let mut padded = read_stl(&path, bytes.len()).unwrap();
+        assert!(matches!(
+            prepare_stl(&mut padded, bytes.len()),
+            Err(Error::InvalidModel)
+        ));
+    }
+
+    #[test]
     fn old_zero_normal_mesh_is_prepared_without_changing_its_shape() {
         let mut bytes = include_bytes!("../../geometry/tests/fixtures/cube_20mm.stl").to_vec();
         for facet in bytes[84..].chunks_exact_mut(50) {
@@ -671,7 +771,7 @@ mod tests {
             }
         }
         let original = bytes.clone();
-        prepare_stl(&mut bytes).unwrap();
+        prepare_stl(&mut bytes, 64 * 1024 * 1024).unwrap();
         for (old, new) in original[84..]
             .chunks_exact(50)
             .zip(bytes[84..].chunks_exact(50))
@@ -689,13 +789,16 @@ mod tests {
             }
         }
         bytes[96..100].copy_from_slice(&f32::NAN.to_le_bytes());
-        assert!(matches!(prepare_stl(&mut bytes), Err(Error::InvalidModel)));
         assert!(matches!(
-            prepare_stl(&mut [0; 84]),
+            prepare_stl(&mut bytes, 64 * 1024 * 1024),
             Err(Error::InvalidModel)
         ));
         assert!(matches!(
-            prepare_stl(&mut [0; 83]),
+            prepare_stl(&mut [0; 84], 64 * 1024 * 1024),
+            Err(Error::InvalidModel)
+        ));
+        assert!(matches!(
+            prepare_stl(&mut [0; 83], 64 * 1024 * 1024),
             Err(Error::InvalidModel)
         ));
     }

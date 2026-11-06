@@ -23,8 +23,9 @@ artifacts.chmod(0o700)
 registration = "--registration" in sys.argv
 sandbox = "--sandbox" in sys.argv
 local_accounts = "--local-accounts" in sys.argv
+large_models = "--large-models" in sys.argv
 client_totp = "--client-totp" in sys.argv or local_accounts
-arguments = [arg for arg in sys.argv[1:] if arg not in ("--sandbox", "--client-totp", "--local-accounts", "--registration")]
+arguments = [arg for arg in sys.argv[1:] if arg not in ("--sandbox", "--client-totp", "--local-accounts", "--registration", "--large-models")]
 if client_totp and (not (sandbox or local_accounts) or not arguments or any(Path(arg).name == "auth.spec.ts" for arg in arguments)):
     raise SystemExit("TOTP fixture requires --sandbox or --local-accounts and explicit tests other than auth.spec.ts")
 if registration and not sandbox:
@@ -76,6 +77,7 @@ try:
     env.update(DATABASE_URL=parsed._replace(path="/" + name).geturl(), MODEL_STORAGE_DIR=str(folder / "models"), API_PORT="18436", AUTH_MODE="localhost", AUTH_ORIGIN="http://localhost:18437", AUTH_CODE_KEY=secrets.token_hex(32), MAIL_MODE="disabled", MAIL_INBOUND_MODE="disabled", LOG_LEVEL="warn")
     rates = dict(version="browser-test-only", setup_grosze=1000, handling_per_plate_grosze=500, machine_per_hour_grosze=200, energy_per_kwh_grosze=120, printer_watts=150, loss_bps=500, margin_bps=3000, vat_bps=2300, minimum_net_grosze=2000)
     env["PRICING_RATES_JSON"] = json.dumps(rates)
+    if large_models: env["MODEL_PROFILE"] = "large"
     if sandbox:
         if not provider_values.get("STRIPE_SECRET_KEY", "").startswith(("sk_test_", "rk_test_")):
             raise RuntimeError("Stripe test key required; live keys refused")
@@ -100,6 +102,7 @@ try:
     browser_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DISPLAY", "PLAYWRIGHT_CHROMIUM_EXECUTABLE", "E2E_CORPUS_MANIFEST", "E2E_CORPUS_LIMIT")}
     # Chromium otherwise drops Unicode file paths from FileList in this minimal environment.
     browser_env.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
+    if large_models: browser_env["RAPIDMAKER_LARGE_MODELS"] = "1"
     if "PLAYWRIGHT_CHROMIUM_EXECUTABLE" not in browser_env and Path("/usr/bin/chromium").is_file():
         browser_env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"] = "/usr/bin/chromium"
     browser_env.update(RAPIDMAKER_TEST_DATABASE=name, RAPIDMAKER_TEST_MODEL_ROOT=str(folder / "models"), TEST_PG_CONTAINER=container)
