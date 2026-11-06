@@ -1,59 +1,40 @@
 # Cel: rzeczywiste modele i wiarygodne E2E
 
-Przeczytaj gdy: kontynuujesz cel lub oceniasz jego zamknięcie.
-Opis: aktualne kryteria i następna praca; szczegóły dowodów w [raporcie](../corpus-report.md).
+Przeczytaj gdy: wznawiasz goal lub oceniasz jego zamknięcie.
+Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../corpus-report.md).
 
 ## Wymagania
 
-- 41 różnych projektów MakerWorld, lokalnie i prywatnie, z pochodzeniem/SHA; 34×3MF, 7×STL. Użytkownik zakończył pobieranie; STEP z fixtures.
-- Rzeczywisty upload, prywatny podgląd, slicer, ilości i niezależny rachunek ceny. Ręczna ścieżka lub odmowa nie oznacza automatycznej wyceny ani obsłużonej geometrii.
-- Obrazy/przykłady, desktop/mobile, oba motywy i działające interakcje z [mapy kontrolek](../e2e-controls.md): konfigurator, zakup/refundy, dostawa, klient/admin, MFA, chat i rzeczywiste emaile.
-- Zachować wygląd i interakcje Piotra; minimalny Rust/proste API/KISS. Nie usuwać kontroli kwot, własności ani zasobów dla zielonego raportu.
-- Po etapie review Sol xhigh: poprawność, bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody, prostota, utrzymanie, wygląd. Naprawiać konkretne problemy; nie wymuszać ocen ani deklarować nieudowodnionego 10/10.
+- 41 prywatnych projektów MakerWorld z pochodzeniem/SHA (34×3MF, 7×STL); użytkownik zakończył pobieranie. STEP z fixtures.
+- Rzeczywisty upload, prywatny podgląd, slicer i niezależny rachunek ceny. Ręczna ścieżka/odmowa nie oznacza automatycznej wyceny lub obsługi geometrii.
+- Obrazy, opcje i interakcje Piotra bez redesignu: konfigurator, zakup/refundy, dostawa, klient/admin, MFA, chat i rzeczywisty email. [Mapa dowodów](../e2e-coverage.md), [kontrolki](../e2e-controls.md).
+- Minimalny Rust, proste API/KISS; zachować kwoty, własność, izolację i limity. Nie zmieniać oczekiwań dla zielonego raportu.
+- Po etapie Sol xhigh w dziesięciu kategoriach: poprawność, bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody, prostota, utrzymanie, wygląd. Naprawiać konkretne problemy, nie wymuszać 10/10.
 
 ## Checkpoint
 
-| Etap | Stan i dowód |
+| Zakres | Zweryfikowany stan |
 | --- | --- |
-| C1 Źródła | 41 unikalnych projektów/hashów, ignorowane oryginały i manifest |
-| C2 API/wycena | `corpus41-large-current.json`: 41 scenariuszy PASS / 599,7 s na produkcie df8760d; 24 ceny ze slicera z pełnym niezależnym rachunkiem, 12 ręcznych, 4 wadliwe pliki, 1 odmowa zasobów. 36 prywatnych GLB; brak skipped/flaky. Profil large tylko izolowany opt-in |
-| C2 Kontrola ręcznej ścieżki | `corpus12-manual-geometry.json`: 12 PASS / 68,7 s po wzmocnieniu testu; surowe pozycje GLB uzasadniają wymiary/powód i wykluczają błędną ręczną wycenę części mieszczącej się w P1P. Nie przypisujemy tej nowej kontroli wcześniejszemu przebiegowi 41 |
-| C3 Obrazy/UI | UI41: 37 PASS / 4 FAIL przez błąd zakresu zmiennej w teście; poprawiony zakres 4 PASS w osobnym przebiegu. 36 modeli × 4 warianty = 144 ujęcia obejrzane na 6 zestawieniach; 5 odmów sprawdzonych. Źródło pozostałych 37 scenariuszy identyczne; nie jest to pojedynczy czysty przebieg 41 |
-| C4 Konta/zakup | Core 45 PASS / 1 SKIP, duże usuwanie osobno 1 PASS. Rzeczywisty auth/email/manualny zakup/refund/chat: 2 PASS; pełny sandbox: 9 PASS; rejestracja hasło/passkey po 1 PASS; niezależny odczyt płatności/3 zwrotów Stripe: 1 PASS. Osobne zakresy i raporty, bez ich sumowania w jeden przebieg |
-| C5 Zamknięcie | Zakup gościa → konto/claim i historia przeszły nowy E2E po poprawce powiązań pozycji/pliku/wyceny. RetryPayment po opuszczeniu płatności ma nowy osobny dowód. Mapa kontrolek zaktualizowana; wymagania i dowody zebrano w [e2e-coverage.md](../e2e-coverage.md). Zwykły localhost zaktualizowany osobno 6 listopada; dowód upload/podgląd/usunięcie poniżej. Dwie konfiguracje jednego uploadu: osobny rzeczywisty Stripe/client/admin E2E PASS; utworzenie drugiej pozycji używa jawnego szwu lokalnego szkicu, bo UI nie ma przycisku duplikacji |
+| Korpus/API | corpus41-large-current: 41 scenariuszy; 24 native ceny, 12 ręcznych, 4 wadliwe, 1 limit; 36 GLB. corpus12-manual-geometry osobno uzasadnia ręczne ścieżki |
+| Korpus/UI | 37 PASS/4 FAIL harnessu, poprawione 4 PASS osobno; 144 unikalne ujęcia 1440/390 px i oba motywy obejrzane. Nie pojedynczy czysty przebieg 41 |
+| Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
+| Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |
+| Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja szkicu to jawny szew, brak przycisku powielania |
+| Osiem klientów | eight-clients-final: 1 PASS/3,8 s. 16 równoczesnych estimate → 8 zadań/8 snapshotów/max prób 1; własne ceny i odmowa obcych zasobów; 4 próbki responsywności, nie szeroki load test |
+| Localhost | Gałąź robocza na 18430/18432, large tylko w środowisku procesu. .env i zmiany głównego checkoutu bez edycji; backup przed migracjami. Model 8: 78,4 MB → podgląd → DELETE 204 |
 
-Większe modele: [plan i ograniczenia](large-models.md). Wdrożone: bezstratny kompaktowy/spatial GLB, jawny podgląd uproszczony modelu 19 z pełnym STL, chronione usuwanie modeli oraz wcześniejsza odmowa zbyt dużego zespołu 41. Profil large uruchomiono na localhost 6 listopada tylko w środowisku procesu; .env pozostaje bez zmian. Pełna semantyczna poprawność modelu 41 nie jest potwierdzona.
+## Dalsza praca i granice
 
-## Następne działania
+1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
+2. Sprawdzić prostotę i zbędne zależności kodu; pozostałe słabiej udowodnione obszary to szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej.
+3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, szew duplikacji, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.
 
-1. Końcowy zestaw na 78d5802 wykonany: 136 PASS/0 FAIL/1 SKIP; pominięty large sprawdzony osobno 1 PASS. Zachować rozdzielenie przebiegów; [mapa dowodów](../e2e-coverage.md).
-2. Dalsza poprawa jakości: sprawdzić zachowanie kolejki i limitów przy większej, jawnie ograniczonej liczbie jednoczesnych klientów. Dotychczasowe scenariusze własności/race nie zastępują testu obciążeniowego.
-3. Nie wymuszać 10/10: końcowe review nie znalazło nowej regresji, ale wskazało ograniczenia zasobów, dowodów i prostoty. Pozostałe granice (wadliwe/ponadlimitowe źródła, szew duplikacji, koszty fixture, fizyczne urządzenia) pozostają jawne; cały goal nadal otwarty.
-4. Zwykły localhost działa z tej gałęzi i profilem large w środowisku procesu; .env bez edycji. Przed zmianą runtime zabezpieczono bazę/pliki. Nie nadpisywać lokalnych zmian w głównym checkoutcie.
-
-## Komendy
+## Uruchamianie
 
 ```sh
-E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=corpus41-large-current python frontend/tests/run-integration.py --large-models corpus.spec.ts
-E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=corpus41-ui-current python frontend/tests/run-integration.py --large-models corpus-ui.spec.ts
 python frontend/tests/run-all.py --group core --no-build
+E2E_REPORT_NAME=eight-clients-current python frontend/tests/run-integration.py concurrency.spec.ts
+E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=corpus41-large-current python frontend/tests/run-integration.py --large-models corpus.spec.ts
 ```
 
-Runtime i runner wymagają lokalnej konfiguracji zgodnie z backend/README.md; sekrety pozostają poza raportami. Starsze checkpointy są w historii Git df8760d i w raporcie; zachowano prywatne wyniki i modele.
-
-Bieżąca poprawka kontraktu: zamówienie zapisuje line_id (pozycja), model_id (upload), quote_id (konfiguracja), bez zmiany cen i lokalnych kluczy checkoutu. Nowy guest-claim dodany do sandboxa. Dowody po poprawce: guest-claim-fixed-final 1 PASS/22,9 s, multi-model pricing 1 PASS/5,0 s, ręczne zamówienie/panele/Stripe 1 PASS/39,2 s, 22 izolowane DB/API PASS. Nie przypisujemy tych zmian wcześniejszemu pełnemu core/sandboxowi; zakres dobrano do zmiany.
-
-
-Wznowienie płatności: test odtworzył brak formularza po odrzuconej karcie i opuszczeniu strony (`payment-resume-current.json`, 1 FAIL). Frontend rozpoznaje teraz faktyczne stany PaymentIntent wymagające ponowienia; nie proponuje płatności opłaconej/przetwarzanej/anulowanej. `payment-resume-provider-fixed.json`: 1 PASS / 18,1 s, prawdziwy Stripe test, ten sam PI/zamówienie/kwota, jedno utworzenie, opłacenie po wznowieniu, ponowne odczyty, odmowa obcemu gościowi. Dwa niezależne GET Stripe potwierdziły succeeded, PLN, kwotę pobraną równą serwerowej i brak zwrotów. Test dodany do sandboxa; wcześniejsze 9 PASS nie obejmowało go. Build/check:integration/format PASS; scoped Sol xhigh bez blokera, bez oceny całego celu. Zwykły localhost nadal bez aktualizacji.
-
-
-Aktualizacja lokalnego runtime 6 listopada: frontend 18430 z tej gałęzi, API 18432/large. Kopia bazy/plików/poprzedniej binarki przed migracjami 22–23; główny checkout i .env bez edycji. Rzeczywisty formularz przyjął model 8 o rozmiarze 78,4 MB, wygenerował prywatny podgląd i pozwolił usunąć upload (204). Obraz obejrzany. Szczegóły, rollback początkowego checku backupu, pierwszy nieudany harness i współdzielony target: [large-models.md](large-models.md). To nie nowy pełny przebieg core/sandboxa ani zakończenie całego celu. Starsze wzmianki o nieaktualnym localhost opisują stan sprzed tego uruchomienia.
-
-
-Dwie konfiguracje jednego uploadu: `same-upload-configs-final.json` 1 PASS / 19,9 s, bez skipped/flaky. Jeden prawdziwy upload; dwie pozycje/quote ID, 2 czarne standardowe i 3 białe fine/wzmocnione, rzeczywisty slicer, niezależny rachunek oraz podział każdej kwoty i jednego przygotowania. Stripe niezależnie potwierdził pobranie 4698 gr PLN. Oba panele zachowują właściwe parametry, kwoty i pliki po reloadzie. Brak przycisku duplikacji: test duplikuje tylko lokalny wiersz szkicu, dalsze ustawienia/checkout są rzeczywiste; nie jest to w pełni dostępna użytkownikowi operacja powielenia. Dodano do sandboxa. Wcześniejsze cztery błędy harnessu zachowane; pierwsze udane rerun4 osobno, final po uzupełnieniu kontroli przypisania kwot. Build/typecheck/format PASS; scoped Sol xhigh potwierdził zamknięcie uwagi o kwotach. Bez zmian produktu i stylów.
-
-
-Runner: usunięto automatyczny wybór /usr/bin/chromium zarówno z run-all, jak i run-integration; preflight i właściwe testy używają teraz tej samej wersji Playwright, chyba że jawnie podano executable override. Poprzednie przebiegi na tym komputerze też używały bundled Chromium, ponieważ systemowego nie ma. Sprawdzone: start przeglądarki, obie ścieżki wyboru z symulacją obecnego systemowego Chromium, compile Pythona i rzeczywisty izolowany browser-default-consistency (Swagger, 1 PASS). Scoped Sol xhigh wykrył drugą pozostałą ścieżkę fallbacku; po jej usunięciu bez blokera. Nie jest to ponowny pełny zestaw.
-
-
-Końcowa walidacja 78d5802: pełny run-all (siedem oddzielnych grup) 136 PASS/0 FAIL/0 flaky/1 SKIP, kod wrappera 2. Osobny final-large-removal-78d5802 1 PASS/15,7 s obejmuje dokładnie pominięty scenariusz. Przed/po oba przebiegi 312 hashów kodu/binarki zgodne, czysty HEAD przy starcie. Raporty zarchiwizowane prywatnie, starsze zachowane. Świeże 12 sandboxowych testów obejmuje także guest-claim, payment-resume i same-upload-configs; są to nowe wyniki całej grupy, nie suma dawnych pojedynczych testów.
+Używaj nowej nazwy raportu, by zachować wcześniejsze wyniki. Konfiguracja w backend/README.md; sekrety poza raportami. Pełne zestawy i testy providerów tylko celowo. Historia etapów, błędów harnessu i review jest w corpus-report.md; starsze checkpointy także w Git.

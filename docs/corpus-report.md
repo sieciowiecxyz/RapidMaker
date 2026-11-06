@@ -341,3 +341,14 @@ Pominięty scenariusz: `model-removal` opt-in large. Oddzielna komenda z --large
 Przed zestawem zapisano czysty HEAD i 312 hashów śledzonych źródeł, testów, locków i rzeczywistej binarki; po zestawie i po large wszystkie zgodne. Prywatna niemodyfikowana kopia: final-suite-78d5802/{summary,sources-before,source-recheck,large-source-recheck}.json i raporty grup; wcześniejsze stałe nazwy zarchiwizowano przed uruchomieniem. Nie zapisano sekretów ani payloadów providerów w metadanych. Z aktualnych 153 zrzutów core obejrzano mobilne jasne szczegóły klienta i desktopowe ciemne szczegóły admina; bez przeprojektowania stylu.
 
 Końcowy Sol xhigh nie znalazł nowej potwierdzonej regresji. Oceny lokalnego POC: poprawność 8, bezpieczeństwo 8, kwoty 8, zasoby 7, błędy 8, współbieżność 7, dowody 8, prostota 7, utrzymanie 7, wygląd 8. To oceny, nie pomiary lub dowód 10/10; reviewer nie ponawiał testów. Najmniejsza wskazana poprawka to aktualizacja starych checkpointów — wykonana w planie i mapie. Dalszy goal pozostaje otwarty, bez udawania obsługi wadliwych/ponadlimitowych źródeł, fizycznych urządzeń, szerokiego pentestu/load testu lub rentowności na kosztach fixture.
+
+
+## Osiem równoczesnych klientów API
+
+Rozszerzono istniejący concurrency.spec z 4 do 8 klientów, bez nowego frameworka lub zmian produktu. Każdy gość ma osobne cookie i model; uploady są sekwencyjne, aby oddzielić kolejkę slicera od admission parsera. Następnie 16 równoczesnych estimate (po dwa identyczne na klienta), ilości 1–8, rzeczywiste Bambu i sprawdzenie własnej wyceny/koszyka/cache. Każdy klient dostaje odmowę dla cudzego modelu, GLB, job, estimate i checkoutu. DB potwierdza dokładnie 8 zadań/8 snapshotów/max prób 1.
+
+`eight-clients-current.json`: 1 PASS / 3,6 s, przyjęcie 88 ms, wyniki 2545 ms, 4 próbki katalogu 12/6/6/7 ms, aktywne zadania 1/1/1/0. Review znalazł drobną ścieżkę cleanup: błąd zapisu attachment mógł pominąć dispose klientów. Dodano zagnieżdżone try/finally; sampler zawsze zatrzymany i dołączony przed dispose.
+
+`eight-clients-final.json`: **1 PASS / 3,8 s** (runner 4,5 s), bez skip/flaky. Przyjęcie 90 ms, wyniki 2611 ms; cztery próbki katalogu HTTP 200 w 13/8/8/8 ms, aktywne zadania 1/1/1/0. Bezpieczny attachment zawiera tylko pomiary/liczniki, bez ID/sekretów/providerów. TypeScript, Prettier i diff PASS. Brak builda lub ponownego pełnego zestawu — zmieniono wyłącznie test już należący do core.
+
+Sol xhigh potwierdził cleanup po poprawce, bez nowej uwagi. Oceny dowodu testu: poprawność 8, bezpieczeństwo 7, kwoty 7, zasoby 6, błędy 6, współbieżność 8, dowody 8, prostota 7, utrzymanie 7, wygląd N/A. To osiem klientów API, nie osiem przeglądarek, równoczesny parsing, benchmark pojemności/RSS lub ciągły pomiar globalnego limitu. Nie ponawiano testów przez reviewera i nie jest to ocena 10/10 produktu.

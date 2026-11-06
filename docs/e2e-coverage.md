@@ -20,7 +20,7 @@ Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijaj�
 | Ręczna oferta, powiadomienia i email → chat | `journey` w auth-journey-current: zgłoszenie, admin cena, rzeczywisty iCloud, płatność, refund i odpowiedź email widoczna raz w chat | Odbiór osobisty; część wiadomości admina wysłana API, nie każdy krok przez UI |
 | Zwroty i zgodność kwot | stripe-provider-proof-current 1 PASS oraz order-identity-manual-compat: 2500 gr pobrane, zwroty 500/1500/500, dokładne ID/suma; role i nadmierny zwrot odrzucone w panels | Niezależne odczyty Stripe test; nie rozliczenie bankowe |
 | Nadanie i podjazd | `logistics` w sandbox-current: nadanie, PDF, tracking, anulowanie/przekazanie, podjazd DHL | Dawny carrierConnectionError DPD nie oznacza awarii DHL ani gwarancji każdego przewoźnika |
-| Prywatność, retencja, równoległość | models/concurrency/boundaries/security/abandonment w core/sandbox; identity-storage-current 22 PASS; duże usuwanie core-large-removal-current 1 PASS | Równoległość ograniczona testami, nie szeroki load test/pentest lub dowód braku wszelkich luk |
+| Prywatność, retencja, równoległość | models/concurrency/boundaries/security/abandonment w core/sandbox; identity-storage-current 22 PASS; final-large-removal-78d5802 1 PASS; eight-clients-final 1 PASS | Równoległość ograniczona testami, nie szeroki load test/pentest lub dowód braku wszelkich luk |
 | Faktyczny localhost | Profil large, proxy 96 MiB; smoke-fixed modelu 8: 78,4 MB → prywatny GLB i widoczny canvas, DELETE 204; kopia przed migracjami | Ten smoke nie powtarza cen/płatności/email. Wspólny target, profil tylko w środowisku procesu; [szczegóły](plans/large-models.md) |
 
 ## Aktualność i pozostałe ograniczenia
@@ -29,6 +29,9 @@ Końcowy zestaw na **78d5802**: storage 22 PASS, core 45 PASS/1 SKIP, sandbox 12
 
 Prywatna kopia raportów: final-suite-78d5802/. Przed startem zapisano czysty HEAD i 312 hashów kodu/binarki; wszystkie niezmienione po zestawie i osobnym large. Komenda: `python frontend/tests/run-all.py --group all --no-build`; build/check były już wykonane dla tej samej wersji produktu. Siedem grup używa osobnych baz/scenariuszy, nie jednego wspólnego zamówienia. Wcześniejsze wyniki z tabeli zachowują opisany zakres; nowy zestaw nie powtarza całego korpusu.
 
-Pozostają granice: nieprzetworzone wadliwe/ponadlimitowe źródła, szew duplikacji szkicu, fizyczny telefon/passkey, pełna macierz kombinacji, formalny kontrast, szeroki load test/pentest oraz rentowność na rzeczywistych kosztach firmy. Nie są to dowody nowych błędów. Ograniczoną współbieżność sprawdzono; większa liczba klientów wymaga osobnego mierzonego scenariusza. Scoped review nie potwierdza 10/10 całego produktu.
+Pozostają granice: nieprzetworzone wadliwe/ponadlimitowe źródła, szew duplikacji szkicu, fizyczny telefon/passkey, pełna macierz kombinacji, formalny kontrast, szeroki load test/pentest oraz rentowność na rzeczywistych kosztach firmy. Nie są to dowody nowych błędów. Osiem izolowanych klientów API sprawdzono osobno: 16 równoczesnych żądań → 8 prawdziwych zadań, poprawne ceny i odmowy obcych zasobów. To mała kohorta, nie osiem przeglądarek ani test przepustowości. Scoped review nie potwierdza 10/10 całego produktu.
 
 Runner ma wspólny Chromium Playwright w preflight i testach; własny executable wymaga jawnej zmiennej. Po poprawce przeszły sprawdzenie obu ścieżek wyboru, start przeglądarki i pełny zestaw powyżej. Z ostatnich 153 zrzutów core obejrzano ponownie mobilny jasny widok klienta oraz ciemny desktop admina; cały korpus miał wcześniejszy osobny przegląd 144 ujęć.
+
+
+`eight-clients-final` (po pełnym zestawie, zmieniony tylko test): 1 PASS / 3,8 s; przyjęcie 16 żądań 90 ms, wszystkie wyniki po 2611 ms, katalog HTTP 200 w czterech próbkach 13/8/8/8 ms, aktywne zadania 1/1/1/0. Uploady były sekwencyjne; współbieżność dotyczy wycen i odczytów. Maksimum jest próbkowane, nie ciągłe; brak pomiaru RSS lub produkcyjnego SLA.
