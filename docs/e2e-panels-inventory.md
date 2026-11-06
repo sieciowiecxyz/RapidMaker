@@ -44,3 +44,8 @@ Klient nie może zlecić refundu admina (403); inne konto nie widzi zamówienia,
 Karty produkcji i rozmowy admina mają etykiety z pełnym UUID, aby zapewnić jednoznaczne dostępne nazwy przy skróconym numerze. Podgląd parametrów admina rozpoznaje także jakość `draft`, zamiast pokazywać „—”. Bez nowej zależności i bez zmiany uprawnień.
 
 Wykryty przez prawdziwy test błąd: rozciągnięty link numeru zamówienia przechwytywał klik „Szczegóły rozliczenia” w Finance. Poprawka CSS podnosi niezależny przycisk ostatniej komórki ponad nakładkę wiersza; test nadal klika normalnie, bez force.
+
+
+## Dwie konfiguracje tego samego uploadu
+
+`same-upload-configs.spec.ts`: rzeczywisty checkout Stripe, klient/admin, dwa wiersze z różnymi ilościami/kolorami/ustawieniami i poprawnie przypisanymi kwotami, wspólny UUID uploadu, odrębne quote ID, prywatne pliki i reload. `same-upload-configs-final.json` 1 PASS / 19,9 s. Jedyny szew to duplikacja lokalnego wiersza szkicu — UI nie ma przycisku duplikacji istniejącego uploadu; pozostałe ustawienia i zakup przez UI. Nie raportujemy tego jako nowej dostępnej funkcji duplikowania.
