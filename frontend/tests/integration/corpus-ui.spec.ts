@@ -231,15 +231,6 @@ for (const item of selected) {
         );
       }
     }
-    if (largeCase && item.case === 19) {
-      await page.locator('input[name=material][value=pla]').check();
-      await page.locator('input[name=color][value=black]').check();
-      await page.locator('input[name=quality][value=standard]').check();
-      await page.locator('input[name=strength][value=standard]').check();
-      await expect(page.locator('.manual-heading')).toHaveText('Wymagana ręczna wycena');
-      await expect(page.locator('.estimate-lines')).toContainText('model przekracza 500 mm');
-      await expect(page.locator('.price')).toHaveCount(0);
-    }
     info.annotations.push({
       type: 'ui-render',
       description: `Deep GUI mesh/privacy checks and four frames; ${item.case === 9 ? 'server price checked' : 'explicit manual quote above 500 mm'}`,

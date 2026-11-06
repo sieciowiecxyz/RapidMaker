@@ -11,7 +11,8 @@
     "test:all": "python tests/run-all.py",
     "format": "prettier --write src vite.config.ts playwright.config.ts",
     "format:check": "prettier --check src vite.config.ts playwright.config.ts",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:integration": "tsc --noEmit --skipLibCheck --moduleResolution bundler --module preserve --target es2022 --esModuleInterop tests/integration/*.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
