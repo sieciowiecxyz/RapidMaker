@@ -11,6 +11,16 @@ use rapidmaker_auth::{
 use serde_json::{Value, json};
 use sqlx::{Postgres, Row, Transaction, postgres::PgRow};
 
+/// Recovery token for a factor email that was definitely not sent.
+/// Contains only keyed verifiers; send limits are deliberately never restored.
+pub struct FactorDelivery {
+    token_hash: Vec<u8>,
+    verifier: Vec<u8>,
+    sent_at: i64,
+    previous_verifier: Option<Vec<u8>>,
+    previous_expires_at: Option<i64>,
+}
+
 pub(crate) async fn lock(tx: &mut Transaction<'_, Postgres>) -> Result<(), StorageError> {
     sqlx::query("SELECT pg_advisory_xact_lock(1380794709)")
         .execute(&mut **tx)
@@ -218,29 +228,48 @@ impl Storage {
         token: &str,
         code: &str,
         now: i64,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<FactorDelivery>, StorageError> {
         let mut tx = self.pool.begin().await?;
         lock(&mut tx).await?;
         let Some(r) = row(&mut tx, token, now).await? else {
-            return Ok(false);
+            return Ok(None);
         };
         if r.try_get::<String, _>("stage")? != "second_factor"
             || r.try_get::<Option<Vec<u8>>, _>("totp_secret")?.is_some()
             || r.try_get::<Option<i64>, _>("factor_sent_at")?
                 .is_some_and(|t| t > now - 60)
         {
-            return Ok(false);
+            return Ok(None);
         }
         let id: String = r.try_get("id")?;
         let email: String = r.try_get("email")?;
         if !limit(&mut tx, "factor-send-user", id.as_bytes(), 5, now, 900).await? {
             tx.commit().await?;
-            return Ok(false);
+            return Ok(None);
         }
         let verifier = key.verifier("second-factor", &email, &hash_token(token), code);
         sqlx::query("UPDATE sessions SET factor_verifier=$2,factor_sent_at=$3,factor_expires_at=$3+600 WHERE token_hash=$1").bind(hash_token(token).as_slice()).bind(verifier.as_slice()).bind(now).execute(&mut *tx).await?;
         tx.commit().await?;
-        Ok(true)
+        Ok(Some(FactorDelivery {
+            token_hash: hash_token(token).to_vec(),
+            verifier: verifier.to_vec(),
+            sent_at: now,
+            previous_verifier: r.try_get("factor_verifier")?,
+            previous_expires_at: r.try_get("factor_expires_at")?,
+        }))
+    }
+    pub async fn auth_factor_unsent(&self, delivery: FactorDelivery) -> Result<(), StorageError> {
+        // CAS: a consumed session or later resend must never be revived/overwritten.
+        // Keep factor_sent_at, guessing attempts and account send counters unchanged.
+        sqlx::query("UPDATE sessions SET factor_verifier=$4,factor_expires_at=$5 WHERE token_hash=$1 AND stage='second_factor' AND factor_verifier=$2 AND factor_sent_at=$3")
+            .bind(delivery.token_hash)
+            .bind(delivery.verifier)
+            .bind(delivery.sent_at)
+            .bind(delivery.previous_verifier)
+            .bind(delivery.previous_expires_at)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
     pub async fn auth_factor_verify(
         &self,
@@ -516,6 +545,131 @@ mod tests {
     };
     #[tokio::test]
     #[ignore = "requires dedicated AUTH_TEST_DATABASE_URL PostgreSQL database"]
+    async fn definitely_unsent_factor_restores_only_the_unchanged_pending_code() {
+        let db = Storage::connect(&std::env::var("AUTH_TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        let key = AuthKey::from_hex(&"ab".repeat(32)).unwrap();
+        let now = 1_800_000_000;
+        for scenario in ["restore", "consumed", "later"] {
+            let id = uuid::Uuid::new_v4().to_string();
+            let email = format!("{id}@example.invalid");
+            sqlx::query(
+                "INSERT INTO users(id,email,created_at,password_hash) VALUES($1,$2,$3,'fixture')",
+            )
+            .bind(&id)
+            .bind(&email)
+            .bind(now)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+            let token = random_token().unwrap();
+            db.auth_primary(&email, Some("fixture"), &token, None, now)
+                .await
+                .unwrap()
+                .unwrap();
+            db.auth_factor_start(&key, &token, "11111111", now)
+                .await
+                .unwrap()
+                .unwrap();
+            let delivery = db
+                .auth_factor_start(&key, &token, "22222222", now + 61)
+                .await
+                .unwrap()
+                .unwrap();
+            let ip = hash_token(&id);
+            let full = random_token().unwrap();
+            if scenario == "consumed" {
+                db.auth_factor_verify(&key, &token, "22222222", &full, &ip, now + 62)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            } else if scenario == "later" {
+                db.auth_factor_start(&key, &token, "33333333", now + 122)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            } else {
+                // An intervening failed guess must not be rolled back either.
+                assert!(
+                    db.auth_factor_verify(&key, &token, "00000000", &full, &ip, now + 62)
+                        .await
+                        .unwrap()
+                        .is_none()
+                );
+            }
+            let limits: i64 = sqlx::query_scalar("SELECT sum(attempts)::bigint FROM auth_limits")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+            db.auth_factor_unsent(delivery).await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT sum(attempts)::bigint FROM auth_limits")
+                    .fetch_one(&db.pool)
+                    .await
+                    .unwrap(),
+                limits
+            );
+            if scenario == "consumed" {
+                assert!(db.auth_pending(&token, now + 123).await.unwrap().is_none());
+                assert!(db.auth_session(&full, now + 123).await.unwrap().is_some());
+                continue;
+            }
+            let row = sqlx::query("SELECT factor_sent_at,factor_expires_at,factor_attempts FROM sessions WHERE token_hash=$1")
+                .bind(hash_token(&token).as_slice()).fetch_one(&db.pool).await.unwrap();
+            assert_eq!(
+                row.get::<i64, _>("factor_sent_at"),
+                now + if scenario == "restore" { 61 } else { 122 }
+            );
+            assert_eq!(
+                row.get::<i64, _>("factor_expires_at"),
+                now + if scenario == "restore" { 600 } else { 722 }
+            );
+            assert_eq!(
+                row.get::<i16, _>("factor_attempts"),
+                if scenario == "restore" { 1 } else { 0 }
+            );
+            if scenario == "restore" {
+                assert!(
+                    db.auth_factor_start(&key, &token, "44444444", now + 62)
+                        .await
+                        .unwrap()
+                        .is_none()
+                );
+            } else {
+                assert!(
+                    db.auth_factor_verify(&key, &token, "11111111", &full, &ip, now + 123)
+                        .await
+                        .unwrap()
+                        .is_none()
+                );
+            }
+            assert!(
+                db.auth_factor_verify(&key, &token, "22222222", &full, &ip, now + 123)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            db.auth_factor_verify(
+                &key,
+                &token,
+                if scenario == "restore" {
+                    "11111111"
+                } else {
+                    "33333333"
+                },
+                &full,
+                &ip,
+                now + 124,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires dedicated AUTH_TEST_DATABASE_URL PostgreSQL database"]
     async fn passwords_email_and_totp_enforce_both_factors_and_atomic_recovery() {
         let db =
             Storage::connect(&std::env::var("AUTH_TEST_DATABASE_URL").expect("dedicated test DB"))
@@ -567,11 +721,13 @@ mod tests {
             db.auth_factor_start(&key, &pending, "12345678", now + 1)
                 .await
                 .unwrap()
+                .is_some()
         );
         assert!(
-            !db.auth_factor_start(&key, &pending, "87654321", now + 2)
+            db.auth_factor_start(&key, &pending, "87654321", now + 2)
                 .await
                 .unwrap()
+                .is_none()
         );
         let wrong = random_token().unwrap();
         assert!(
@@ -653,9 +809,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(
-            !db.auth_factor_start(&key, &t1, "44444444", now + 90)
+            db.auth_factor_start(&key, &t1, "44444444", now + 90)
                 .await
                 .unwrap()
+                .is_none()
         );
         assert!(
             db.auth_factor_verify(

@@ -12,6 +12,7 @@ mod checkout;
 mod credentials;
 pub use chat::{InboxLease, InboxOutcome, MessagePage, ReplyRoute};
 pub use checkout::{AttemptInput, CheckoutDraft, PaymentAttempt, StripeEvent};
+pub use credentials::FactorDelivery;
 mod email;
 mod jobs;
 mod manual_quotes;

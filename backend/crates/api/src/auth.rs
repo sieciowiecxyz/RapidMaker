@@ -7,7 +7,7 @@ use axum::{
 };
 use rapidmaker_auth::passkeys::{Url, Webauthn, WebauthnBuilder};
 use rapidmaker_auth::{AuthKey, hash_token, random_code, random_token, valid_token};
-use rapidmaker_notifications::{Mailer, Notification};
+use rapidmaker_notifications::{MailError, Mailer, Notification};
 use rapidmaker_storage::{AuthSession, Storage};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -276,22 +276,46 @@ impl Auth {
             return Ok(());
         }
         let code = random_code().map_err(|_| unavailable())?;
-        if !self
+        let delivery = self
             .database()?
             .auth_factor_start(self.key()?, token, &code, now())
             .await
             .map_err(|_| unavailable())?
-        {
-            return Err(error(
-                StatusCode::TOO_MANY_REQUESTS,
-                "Odczekaj minutę przed ponowną wysyłką kodu.",
-            ));
-        }
-        self.mailer
+            .ok_or_else(|| {
+                error(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "Odczekaj minutę przed ponowną wysyłką kodu.",
+                )
+            })?;
+        match self
+            .mailer
             .send(&session.user.email, Notification::LoginCode(&code))
             .await
-            .map_err(|_| unavailable())
+        {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                if match error {
+                    MailError::Uncertain => false,
+                    MailError::Disabled
+                    | MailError::Configuration
+                    | MailError::InvalidAddress
+                    | MailError::InvalidMessage
+                    | MailError::TestRecipient
+                    | MailError::Busy
+                    | MailError::Authentication
+                    | MailError::Transient
+                    | MailError::Rejected => true,
+                } {
+                    self.database()?
+                        .auth_factor_unsent(delivery)
+                        .await
+                        .map_err(|_| unavailable())?;
+                }
+                Err(unavailable())
+            }
+        }
     }
+
     pub(super) fn session_body(&self, token: &str, s: &AuthSession) -> Result<Value, Error> {
         Ok(
             json!({"user":s.user,"stage":s.stage,"second_factor":s.second_factor,"expires_at":s.expires_at,"csrf_token":self.csrf(token)?,"admin_verified":s.stage=="authenticated" && s.user.role=="admin"}),
@@ -670,6 +694,84 @@ async fn save_preferences(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "requires dedicated AUTH_TEST_DATABASE_URL PostgreSQL database; MAIL_MODE disabled"]
+    async fn factor_resend_route_preserves_delivered_code_when_mail_is_disabled() {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        let db = Storage::connect(&std::env::var("AUTH_TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        let mailer = Arc::new(Mailer::from_env().unwrap());
+        assert!(!mailer.enabled());
+        let key = AuthKey::from_hex(&"ab".repeat(32)).unwrap();
+        let pool = sqlx::PgPool::connect(&std::env::var("AUTH_TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let email = format!("{id}@example.invalid");
+        let now = now();
+        sqlx::query(
+            "INSERT INTO users(id,email,created_at,password_hash) VALUES($1,$2,$3,'fixture')",
+        )
+        .bind(&id)
+        .bind(&email)
+        .bind(now - 61)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let token = random_token().unwrap();
+        db.auth_primary(&email, Some("fixture"), &token, None, now - 61)
+            .await
+            .unwrap()
+            .unwrap();
+        db.auth_factor_start(&key, &token, "11111111", now - 61)
+            .await
+            .unwrap()
+            .unwrap();
+        let csrf = key.csrf(&token);
+        let auth = Arc::new(Auth {
+            storage: Some(db.clone()),
+            key: Some(key),
+            mailer,
+            password_work: Arc::new(tokio::sync::Semaphore::new(2)),
+            dummy_password: None,
+            origin: "http://localhost:18430".into(),
+            production: false,
+            authority: "localhost:18430".into(),
+            webauthn: None,
+            trusted_proxy: None,
+        });
+        let response = crate::account_security::router(auth)
+            .split_for_parts()
+            .0
+            .oneshot(
+                Request::post("/api/auth/factor/resend")
+                    .header("origin", "http://localhost:18430")
+                    .header("cookie", format!("{}={token}", session_name()))
+                    .header("x-csrf-token", csrf)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let key = AuthKey::from_hex(&"ab".repeat(32)).unwrap();
+        assert!(
+            db.auth_factor_verify(
+                &key,
+                &token,
+                "11111111",
+                &random_token().unwrap(),
+                &hash_token(&id),
+                now + 1
+            )
+            .await
+            .unwrap()
+            .is_some()
+        );
+    }
+
     #[test]
     fn login_attempt_cookies_reject_ambiguous_or_malformed_values() {
         let token = "ab".repeat(32);
