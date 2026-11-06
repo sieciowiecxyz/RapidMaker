@@ -52,3 +52,5 @@ Etap bezstratnego kompaktowego GLB wdrożony; większy profil HTTP nadal oczekuj
 Regresja kont: `pending-mfa-revocation.json`2 PASS/8,5s — realny formularz zmiany hasła odwołuje zarówno kopię sesji zalogowanej, jak niezależną sesję czekającą na2FA. Stare hasło odrzucone, nowe nadal wymaga drugiego składnika; pozostałe istniejące kontrole passkey/TOTP/recovery zachowane. Bez emaila/dostawców i bez zmian produktu.
 
 Backendowy profil dużych modeli zaimplementowany, ale nie włączony domyślnie:3rzeczywiste duże uploady oraz cena modelu20 ze slicera. Frontend nadal wymaga osobnej obsługi limitów/podglądu; całego celu nie zamykamy. Nowa kontrola odczytu i admission po review, dowody i limity: plan dużych modeli.
+
+Frontend dużego profilu:3rzeczywiste uploady/renderowanie w4wariantach; dodatkowo cena20 przez formularz zgodna z serwerem.31kontrolowanych kontraktów oraz regresja standardu z poprawionym starym oczekiwaniem25MB; dokładne przebiegi w planie dużych modeli. Następny konkretny problem: usunięty lokalnie model nadal obciąża kwotę serwera; potrzebne bezpieczne usuwanie bez naruszania kolejki/plików zamówień. Cel nadal otwarty.

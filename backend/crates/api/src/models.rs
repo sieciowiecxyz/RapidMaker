@@ -36,12 +36,26 @@ pub struct ModelAnalysis {
     pub reason: Option<String>,
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ModelLimits {
+    pub max_upload_bytes: usize,
+}
+
 pub(super) fn router(profile: ModelProfile) -> Router {
     Router::new()
         .routes(routes!(analyze))
         .route_layer(middleware::from_fn(admit_analysis))
+        .routes(routes!(limits))
         .layer(DefaultBodyLimit::max(profile.input_bytes()))
         .with_state(profile)
+}
+
+#[utoipa::path(operation_id = "models_limits", get, path = "/api/models/limits", tag = "Modele",
+    responses((status = 200, description = "Limit przesyłania modeli", body = ModelLimits)))]
+async fn limits(State(profile): State<ModelProfile>) -> Json<ModelLimits> {
+    Json(ModelLimits {
+        max_upload_bytes: profile.input_bytes(),
+    })
 }
 
 // Share the conversion permit before Bytes extraction, so waiting uploads cannot
@@ -617,6 +631,44 @@ fn solid_volume(glb: &[u8], center: [f64; 3]) -> Option<f64> {
 #[cfg(test)]
 mod resource_tests {
     use super::*;
+    #[tokio::test]
+    async fn public_limits_follow_profile_and_remain_available_while_analysis_is_busy() {
+        use axum::body::{Body, to_bytes};
+        use tower::ServiceExt;
+
+        let _permit = BUSY.try_acquire().unwrap();
+        for profile in [ModelProfile::Standard, ModelProfile::Large] {
+            let (app, _) = router(profile).split_for_parts();
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/api/models/limits")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), 1024).await.unwrap();
+            assert_eq!(
+                serde_json::from_slice::<Value>(&body).unwrap(),
+                json!({"max_upload_bytes": profile.input_bytes()})
+            );
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/models/analyze")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+    }
+
     #[test]
     fn isolated_worker_receives_profile_without_inheriting_configuration() {
         let profile = ModelProfile::Large;

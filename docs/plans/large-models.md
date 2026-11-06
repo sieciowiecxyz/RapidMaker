@@ -60,7 +60,7 @@
 
 ## Explicit backend profile (not enabled on the user server)
 
-`MODEL_PROFILE` accepts only `standard` (default) or `large`; large requires explicit `AUTH_MODE=localhost`. No `.env` changes. This is backend groundwork, not expanded storefront support: browser upload25MiB and preview triangle budgets remain unchanged. Deployment/default-budget question stays open.
+`MODEL_PROFILE` accepts only `standard` (default) or `large`; large requires explicit `AUTH_MODE=localhost`. No `.env` changes. Frontend now reads the32/96MiB upload limit from public `/api/models/limits`; failure falls back to25MiB. Private GLB is independently capped at2M triangles/25MiB. Three real large UI cases are verified below; this is not general large-model readiness. Deployment/default-budget question stays open.
 
 | API budget | standard | large (opt-in) |
 | --- | ---: | ---: |
@@ -85,6 +85,17 @@ Run only on the disposable integration DB (never changes local `.env`):
 ```sh
 E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=large-profile-complete python frontend/tests/run-integration.py --large-models large-profile.spec.ts
 ```
-Remaining: browser contract/rendering for expanded profile,19/29 preview>25MiB,41 SDK runtime, full newly accepted-model pricing/quantity/resource evidence. Topology-invalid14/21/37 and malformed32 stay explicit rejections. No413/422 counted as supported upload.
+Remaining: server cleanup/cancellation for removed models,19/29 preview>25MiB,41 SDK runtime, full newly accepted-model pricing/quantity/resource evidence. Topology-invalid14/21/37 and malformed32 stay explicit rejections. No413/422 counted as supported upload.
 
 Final scoped GPT-6-Sol xhigh rereview after fixes: no blocker. Correctness9/security9/money9/resources8/errors9/concurrency8/evidence9/simplicity8/maintainability8, visual N/A. No reviewer rerun. Explicit remaining gaps: actual restart HTTP rollback, two large batches under150s, expanded browser support. Not10/10 or goal completion.
+
+## Browser checkpoint and next action
+- `large-profile-ui.json`:3PASS78.1s, cases8/20/40 through the real form; privateGLB, exact independently counted1,567,758/1,487,438/1,677,324 rendered triangles (zeroArea0), zoom/pixels/overflow,1440/390/light/dark.12captures visually inspected; viewport simulation is not physical mobile hardware evidence.
+- `large-profile-ui-price.json`:1PASS78.9s, case20 option clicks→actual slicer→server cart7686grosze→same UI price/enabled checkout. Different run/configuration from earlier7687grosze; neither is a fixed expected production price. No payment/provider claim here.
+- Codec24+mocked upload-limit7 contracts:31PASS6.4s (`glb-and-model-limits-contracts-final.json`). Initial collection failed only duplicate generated test name; corrected with value type.
+- Standard regression:12PASS/1FAIL in13 tests (`large-ui-standard-regression.json`); stale25MB expectation updated to32MB and new32MB+1 rejection boundary. Focused `large-ui-standard-boundary.json`2PASS10.1s: repaired scenario plus valid padded ASCII STL25MiB+1→201/privateGLB12triangles. Do not combine these into one full-suite PASS.
+- Backend limits endpoint HTTP unit/appbuild/Clippy and frontend Svelte-check0errors/0warnings+Vitebuild passed. No CSS/shader/normalizer changes/new deps. LocalSTL25MiB/1Mtri remains independent of backend. Metadata cached until reload; failed loads retry.
+- GLB2M ceiling permits144,000,000B interleaved vertices plus72,000,000B temporary positions and25MiB wire; degenerate trimming may copy another output buffer; GPU/main/cache add memory. Old48MiB LRU evicts other meshes but can retain one oversized selected mesh. Do not claim low-memory phone readiness.
+
+### Next: reclaim removed working uploads (before general large-profile readiness)
+Review found existing local-only removal/sample replacement leaves accepted models and in-flight uploads charged to256MiB owner quota for24h. Implement owner-authorized, Origin/CSRF-protected removal with durable marking under the existing queue lock. Reuse cleanup; never delete queued/running-job files or held/paid order artifacts. Reconcile late upload results after local removal, and show real cleanup failures. Test same-owner remove→physical deletion/quota reuse, foreign owner denial, upload/removal race, active job and order hold protection. No new broker/schema unless owning code requires it; keep backend profile opt-in. This is actionable remaining work, not a passed requirement.

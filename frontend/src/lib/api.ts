@@ -415,6 +415,24 @@ export async function startOrderIntent(quote: Quote, _contact: Contact, offerId:
   return { ...result, order: { id: result.order_id } };
 }
 
+let uploadLimitRequest: Promise<number> | undefined;
+export function getModelUploadLimit(): Promise<number> {
+  return (uploadLimitRequest ??= request<{ max_upload_bytes: number }>(
+    '/api/models/limits',
+    undefined,
+    AbortSignal.timeout(3000),
+  )
+    .then(({ max_upload_bytes }) => {
+      if (![32 * 1024 * 1024, 96 * 1024 * 1024].includes(max_upload_bytes))
+        throw new Error('Nieprawidłowy limit pliku.');
+      return max_upload_bytes;
+    })
+    .catch(() => {
+      uploadLimitRequest = undefined;
+      return 25 * 1024 * 1024;
+    }));
+}
+
 export async function analyzeModel(file: File) {
   const response = await apiFetch('/api/models', {
     method: 'POST',

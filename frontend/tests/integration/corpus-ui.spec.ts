@@ -238,42 +238,51 @@ for (const item of selected) {
 
 // Every remaining manifest entry exercises the authored form; outcomes are observed,
 // not copied from the API corpus report. Rejections are UI evidence, never prices.
+const clientCapMiB = process.env.RAPIDMAKER_LARGE_MODELS === '1' ? 96 : 32;
+const largeTriangleCounts: Record<number, number> = { 8: 1_567_758, 20: 1_487_438, 40: 1_677_324 };
 for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))) {
   test(`corpus GUI ${item.case}: real form render or explicit rejection`, async ({
     page,
     context,
   }, info) => {
-    test.setTimeout(120_000);
+    const largeCase =
+      process.env.RAPIDMAKER_LARGE_MODELS === '1' && item.case in largeTriangleCounts;
+    test.setTimeout(largeCase ? 300_000 : 120_000);
     const path = corpusFile(item),
       name = basename(path);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/wycena');
+    await expect(
+      page.getByText(`STL, STEP, 3MF / do ${clientCapMiB} MB na plik`, { exact: true }),
+    ).toBeVisible();
     let posts = 0;
     const isUpload = (request: { url(): string; method(): string }) =>
       new URL(request.url()).pathname === '/api/models' && request.method() === 'POST';
     page.on('request', (request) => {
       if (isUpload(request)) posts++;
     });
-    const oversized = item.size_bytes > 25 * 1024 * 1024;
-    if ([24, 39].includes(item.case)) expect(oversized).toBe(false);
+    const oversized = item.size_bytes > clientCapMiB * 1024 * 1024;
+    if ([24, 39].includes(item.case) || largeCase) expect(oversized).toBe(false);
     const uploaded = oversized
       ? undefined
       : page.waitForResponse((response) => isUpload(response.request()), { timeout: 90_000 });
     await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles(path);
     if (oversized) {
-      // The alert is written by the synchronous input handler: it has settled here.
-      await expect(page.getByRole('alert')).toHaveText('Wybierz niepusty plik do 25 MB.');
+      // The visible alert confirms the input handler rejected the file before upload.
+      await expect(page.getByRole('alert')).toHaveText(
+        `Wybierz niepusty plik do ${clientCapMiB} MB.`,
+      );
       expect(posts).toBe(0);
       await expect(page.locator('.quote-contact')).toBeDisabled();
       info.annotations.push({
         type: 'ui-size-rejection',
-        description: '25 MiB form limit; no upload POST',
+        description: `${clientCapMiB} MiB form limit; no upload POST`,
       });
       return;
     }
     const upload = await uploaded!;
-    if ([24, 39].includes(item.case)) expect(upload.status()).toBe(201);
+    if ([24, 39].includes(item.case) || largeCase) expect(upload.status()).toBe(201);
     if (item.case === 32) expect(upload.status()).toBe(422);
     if (upload.status() === 422) {
       // Chromium can evict large upload response bodies from its inspector cache.
@@ -363,7 +372,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       (await scene.locator('.scene-caption').innerText()).split('trójkątów')[0].replace(/\D/g, ''),
     );
     expect(renderedTriangles).toBeGreaterThanOrEqual(1);
-    if ([24, 39].includes(item.case)) {
+    if ([24, 39].includes(item.case) || largeCase) {
       const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
       const binary = 28 + glb.readUInt32LE(12);
       let sourceTriangles = 0,
@@ -400,11 +409,17 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       // The canonical GLB retains zero-area faces; the viewer omits them.
       expect(renderedTriangles).toBe(sourceTriangles - zeroArea);
       info.annotations.push({
-        type: 'near-byte-budget',
+        type: largeCase ? 'large-GUI' : 'near-byte-budget',
         description: JSON.stringify({ sourceTriangles, renderedTriangles, zeroArea }),
       });
-      expect(renderedTriangles).toBeGreaterThan(1_000_000);
-      expect(renderedTriangles).toBeLessThanOrEqual(1_048_574);
+      if (largeCase) {
+        expect(sourceTriangles).toBe(largeTriangleCounts[item.case]);
+        expect(renderedTriangles).toBeGreaterThan(1_048_574);
+        expect(renderedTriangles).toBeLessThanOrEqual(2_000_000);
+      } else {
+        expect(renderedTriangles).toBeGreaterThan(1_000_000);
+        expect(renderedTriangles).toBeLessThanOrEqual(1_048_574);
+      }
     }
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -449,10 +464,41 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         );
       }
     }
+    if (largeCase && item.case === 20) {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.locator('input[name=material][value=pla]').check();
+      await page.locator('input[name=color][value=black]').check();
+      await page.locator('input[name=quality][value=standard]').check();
+      const cartPriced = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/checkout/quote' &&
+          response.request().method() === 'POST',
+        { timeout: 180_000 },
+      );
+      await page.locator('input[name=strength][value=standard]').check();
+      const response = await cartPriced;
+      expect(response.status()).toBe(200);
+      const priced = await response.json();
+      expect(priced.manual_required).toBe(false);
+      expect(Number.isSafeInteger(priced.print_grosze) && priced.print_grosze > 0).toBe(true);
+      await expect(page.locator('.price')).toHaveText(
+        new Intl.NumberFormat('pl-PL', {
+          style: 'currency',
+          currency: 'PLN',
+        }).format(priced.print_grosze / 100),
+      );
+      await expect(
+        page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true }),
+      ).toBeEnabled();
+      info.annotations.push({
+        type: 'large-ui-price',
+        description: `case20 UI equals server cart ${priced.print_grosze} grosze; real slicer; explicit fixture costs`,
+      });
+    }
     info.annotations.push({
       type: 'ui-render',
       description:
-        'Real upload, metadata, owner GLB, mesh and zoom; four normal scene frames; no price claim',
+        'Real upload, metadata, owner GLB, mesh and zoom; four normal scene frames; render evidence only, price reported separately',
     });
   });
 }

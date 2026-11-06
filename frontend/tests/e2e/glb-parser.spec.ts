@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { parsePreviewGlb } from '../../src/storefront/lib/glbParser';
-import { MAX_PREVIEW_TRIANGLES, meshFromPositions } from '../../src/storefront/lib/stlParser';
+import {
+  MAX_GLB_PREVIEW_TRIANGLES,
+  MAX_PREVIEW_TRIANGLES,
+  meshFromPositions,
+} from '../../src/storefront/lib/stlParser';
 
 const invalid = 'Nieprawidłowy format prywatnego podglądu GLB.';
 const first = [0, 0, 0, 4, 0, 0, 0, 3, 2];
@@ -234,9 +238,12 @@ test('canonical GLB rejects more than 64 primitives and multiple legacy primitiv
 });
 
 test('aggregate compact triangle budget is checked across chunks before flattened allocation', () => {
-  const count = 3 * (Math.floor(MAX_PREVIEW_TRIANGLES / 2) + 1);
+  const half = Math.floor(MAX_GLB_PREVIEW_TRIANGLES / 2);
   const fixture = wire(
-    Array.from({ length: 2 }, () => ({ positions: first, indices: Array<number>(count).fill(0) })),
+    [half, MAX_GLB_PREVIEW_TRIANGLES - half + 1].map((triangles) => ({
+      positions: first,
+      indices: Array<number>(triangles * 3).fill(0),
+    })),
   );
   expect(fixture.binary.length).toBeLessThan(25 * 1024 * 1024);
   rejects(encode(fixture.json, fixture.binary));
@@ -263,4 +270,32 @@ test('legacy GLB retains the one million position cap and rejects invalid u32 in
   fixture.binary.writeUInt32LE(0, 36);
   fixture.json.accessors[0].count = 1_000_001;
   rejects(encode(fixture.json, fixture.binary));
+});
+
+test('compact GLB decodes nondegenerate triangles above the unchanged default mesh limit', () => {
+  const count = MAX_PREVIEW_TRIANGLES + 1;
+  const fixture = wire([
+    { positions: first, indices: Array.from({ length: count * 3 }, (_, i) => i % 3) },
+  ]);
+  expect(fixture.binary.length).toBeLessThan(25 * 1024 * 1024);
+  const mesh = parsePreviewGlb(encode(fixture.json, fixture.binary));
+  expect(mesh.triangleCount).toBe(count);
+  expect(mesh.dimensions).toEqual([4, 3, 2]);
+  const triangle = meshFromPositions(new Float32Array(first));
+  expect(mesh.vertices.subarray(0, 18)).toEqual(triangle.vertices);
+  expect(mesh.vertices.subarray(mesh.vertices.length - 18)).toEqual(triangle.vertices);
+  const positions = new Float32Array(count * 9);
+  for (let i = 0; i < positions.length; i += 9) positions.set(first, i);
+  expect(() => meshFromPositions(positions)).toThrow(
+    'Siatka podglądu jest nieprawidłowa lub zbyt szczegółowa.',
+  );
+});
+
+test('mesh builder rejects invalid or unbounded triangle limit arguments', () => {
+  const positions = new Float32Array(first);
+  for (const limit of [NaN, Infinity, MAX_GLB_PREVIEW_TRIANGLES + 1, 0, -1, 1.5])
+    expect(() => meshFromPositions(positions, limit)).toThrow(
+      'Siatka podglądu jest nieprawidłowa lub zbyt szczegółowa.',
+    );
+  expect(meshFromPositions(positions, 1).triangleCount).toBe(1);
 });

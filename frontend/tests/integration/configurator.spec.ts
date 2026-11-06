@@ -93,8 +93,8 @@ test('storefront navigation, theme, sample and invalid upload actions have obser
   const upload = page.getByLabel('Dodaj modele STL, STEP lub 3MF');
   for (const [name, buffer, message] of [
     ['not-model.txt', Buffer.from('not a model'), 'Nieobsługiwany format: not-model.txt'],
-    ['empty.stl', Buffer.alloc(0), 'Wybierz niepusty plik do 25 MB.'],
-    ['large.stl', Buffer.alloc(25 * 1024 * 1024 + 1), 'Wybierz niepusty plik do 25 MB.'],
+    ['empty.stl', Buffer.alloc(0), 'Wybierz niepusty plik do 32 MB.'],
+    ['large.stl', Buffer.alloc(32 * 1024 * 1024 + 1), 'Wybierz niepusty plik do 32 MB.'],
   ] as const) {
     await upload.setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
     await expect(page.getByRole('alert')).toContainText(message);

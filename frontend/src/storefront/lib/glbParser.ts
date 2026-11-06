@@ -1,4 +1,4 @@
-import { MAX_PREVIEW_TRIANGLES, meshFromPositions, type StlMesh } from './stlParser';
+import { MAX_GLB_PREVIEW_TRIANGLES, meshFromPositions, type StlMesh } from './stlParser';
 
 /** Only the self-contained, single-mesh GLB emitted by rapidmaker-geometry is accepted.
  * This is deliberately not a general glTF loader; no URL, texture or external buffer is fetched.
@@ -164,7 +164,10 @@ function parseCanonicalGlb(buffer: ArrayBuffer): StlMesh {
       fail();
     totalIndices += indices.count;
     totalPositions += positions.count;
-    if (totalIndices > 3 * MAX_PREVIEW_TRIANGLES || totalPositions > 3 * MAX_PREVIEW_TRIANGLES)
+    if (
+      totalIndices > 3 * MAX_GLB_PREVIEW_TRIANGLES ||
+      totalPositions > 3 * MAX_GLB_PREVIEW_TRIANGLES
+    )
       fail();
     const end = indexView.byteOffset + indexView.byteLength;
     offset = Math.ceil(end / 4) * 4;
@@ -196,5 +199,5 @@ function parseCanonicalGlb(buffer: ArrayBuffer): StlMesh {
         );
     }
   }
-  return meshFromPositions(triangles);
+  return meshFromPositions(triangles, MAX_GLB_PREVIEW_TRIANGLES);
 }

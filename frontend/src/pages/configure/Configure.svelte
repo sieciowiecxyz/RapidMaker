@@ -13,6 +13,7 @@
     error = $state(''),
     progress = $state(''),
     selectedId = $state('');
+  let uploadLimit = $state(25 * 1024 * 1024);
   let generation = 0;
   let editorRevision = $state(0);
   let advancedOpen = $state(false);
@@ -20,6 +21,9 @@
   let selected = $derived(cart?.models.find((model) => model.id === selectedId) ?? cart?.models[0]);
   onMount(() => {
     refresh();
+    void api.getModelUploadLimit().then((value) => {
+      uploadLimit = value;
+    });
   });
   async function refresh(resetEditor = false) {
     if (resetEditor) editorRevision++;
@@ -65,14 +69,17 @@
   async function files(list: FileList | null) {
     if (!list || busy) return;
     const chosen = Array.from(list);
+    if (chosen.some((file) => file.size > uploadLimit))
+      uploadLimit = await api.getModelUploadLimit();
+    if (busy) return;
     error = '';
     for (const file of chosen) {
       if (!/\.(stl|step|stp|3mf)$/i.test(file.name)) {
         error = `${file.name}: wybierz STL, STEP lub 3MF.`;
         return;
       }
-      if (!file.size || file.size > 25 * 1024 * 1024) {
-        error = `${file.name}: plik musi mieć od 1 B do 25 MB.`;
+      if (!file.size || file.size > uploadLimit) {
+        error = `${file.name}: plik musi mieć od 1 B do ${uploadLimit / 1024 / 1024} MB.`;
         return;
       }
     }
@@ -132,7 +139,9 @@
         <span class="upload-symbol" aria-hidden="true">↑</span>
         <div class="upload-copy">
           <h2>{cart?.models.length ? 'Dodaj kolejną część' : 'Przeciągnij swoje modele'}</h2>
-          <p class="muted">STL, STEP, 3MF · do 25 MB / plik · STL w milimetrach</p>
+          <p class="muted">
+            STL, STEP, 3MF · do {uploadLimit / 1024 / 1024} MB / plik · STL w milimetrach
+          </p>
         </div>
         <label class="button primary upload-label"
           >Wybierz pliki<input

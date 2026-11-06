@@ -47,6 +47,7 @@ export async function getMaterials(): Promise<Material[]> {
 
 export const getSampleModels = samples;
 export const analyzeFile = checkout.analyzeModel;
+export const getModelUploadLimit = checkout.getModelUploadLimit;
 
 function validate(models: Model[], materials: Material[]) {
   if (!models.length || models.length > 10) throw new Error('Dodaj od 1 do 10 części.');

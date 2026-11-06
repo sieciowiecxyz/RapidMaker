@@ -385,3 +385,33 @@ test('analysis admission rejects concurrent bodies before buffering and recovers
     )
     .toBe(200);
 });
+
+test('standard form accepts a valid STL just above the former 25 MiB cap via private server preview', async ({
+  page,
+}) => {
+  await page.goto('/wycena');
+  await expect(page.getByText('STL, STEP, 3MF / do 32 MB na plik', { exact: true })).toBeVisible();
+  // A valid small ASCII cube plus permitted trailing whitespace exercises only
+  // the wire-size boundary, not complex geometry or a production price.
+  const bytes = Buffer.alloc(25 * 1024 * 1024 + 1, 0x20);
+  readFileSync(fixture('cube_20mm_ascii.stl')).copy(bytes);
+  const uploaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/models' && r.request().method() === 'POST',
+  );
+  const preview = page.waitForResponse((r) =>
+    /\/api\/models\/[^/]+\/preview\.glb$/.test(new URL(r.url()).pathname),
+  );
+  await page
+    .getByLabel('Dodaj modele STL, STEP lub 3MF')
+    .setInputFiles({
+      name: 'padded-cube.stl',
+      mimeType: 'application/octet-stream',
+      buffer: bytes,
+    });
+  expect((await uploaded).status()).toBe(201);
+  expect((await preview).status()).toBe(200);
+  await expect(
+    page.getByRole('img', { name: /Model z pliku padded-cube.stl.*Czarny/ }),
+  ).toBeVisible();
+  await expect(page.locator('.print-scene .scene-caption')).toContainText('12 trójkątów');
+});

@@ -33,7 +33,7 @@ suites = {
     'email': ['--sandbox', 'auth.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],
     'registration-passkey': ['--sandbox', '--registration', 'registration.spec.ts'],
-    'contracts': ['glb-parser.spec.ts', 'admin-csv.spec.ts', 'auth-factors.spec.ts', 'legal.spec.ts', 'live-panels.spec.ts', 'operations.spec.ts', 'operator.spec.ts'],
+    'contracts': ['glb-parser.spec.ts', 'model-limits.spec.ts', 'admin-csv.spec.ts', 'auth-factors.spec.ts', 'legal.spec.ts', 'live-panels.spec.ts', 'operations.spec.ts', 'operator.spec.ts'],
 }
 results = []
 selected = list(suites) if args.group == 'all' else ['registration-password', 'registration-passkey'] if args.group == 'registration' else [args.group]

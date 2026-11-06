@@ -165,6 +165,7 @@
     const syncMobile = () => { isMobile = mobile.matches; };
     syncMobile(); mobile.addEventListener('change', syncMobile);
     api.getMaterials().then(value => { materials = value; }).catch(() => { fileError='Nie udało się wczytać materiałów. Odśwież stronę.'; });
+    void api.getModelUploadLimit().then(value => { uploadLimit = value; });
     void (async()=>{
       try {
         const restored = new URLSearchParams(location.search).get('restore')==='cart' ? await api.restoreCheckoutDraft() ?? api.loadDraft() : api.loadDraft();
@@ -215,7 +216,7 @@
     fileRevision; previewRetry;
     const id=selectedId, model=selectedModel, file=uploadedFiles.get(id);
     if(!model || model.sample){stlPreview={status:'idle',id};return;}
-    const localStl=!!file && /\.stl$/i.test(file.name);
+    const localStl=!!file && file.size<=25*1024*1024 && /\.stl$/i.test(file.name);
     const analysisId=model.analysis?.id;
     if(!localStl && !analysisId){stlPreview={status:model.status==='analyzing'?'loading':'error',id,error:model.error ?? 'Dodaj plik ponownie, aby przygotować podgląd.'};return;}
     const cached=meshCache.get(id);
@@ -258,13 +259,15 @@
     saveTheme(theme);
   }
   async function useSample(count = 1) { if(models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.'))return; uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied=''; models = (await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings,color:'black'}})); selectModel(models[0]?.id ?? ''); fileError = ''; simulateError = false; }
-  function addFiles(files: FileList | File[] | null) {
+  let uploadLimit = $state(25 * 1024 * 1024);
+  async function addFiles(files: FileList | File[] | null) {
     if (!files?.length) return;
     const incoming = Array.from(files);
-    if (models.length + incoming.length > 10) { fileError = 'Możesz dodać do 10 modeli. Usuń część plików i spróbuj ponownie.'; return; }
     const invalid = incoming.find(file => !/\.(stl|step|stp|3mf)$/i.test(file.name));
     if (invalid) { fileError = `Nieobsługiwany format: ${invalid.name}. Wybierz STL, STEP lub 3MF.`; return; }
-    if (incoming.some(file => file.size === 0 || file.size > 25 * 1024 * 1024)) { fileError = 'Wybierz niepusty plik do 25 MB.'; return; }
+    if (incoming.some(file => file.size > uploadLimit)) uploadLimit = await api.getModelUploadLimit();
+    if (models.length + incoming.length > 10) { fileError = 'Możesz dodać do 10 modeli. Usuń część plików i spróbuj ponownie.'; return; }
+    if (incoming.some(file => file.size === 0 || file.size > uploadLimit)) { fileError = `Wybierz niepusty plik do ${uploadLimit / 1024 / 1024} MB.`; return; }
     fileError = ''; simulateError = false; settingsCopied='';
     const added=incoming.map(file=>{const id=crypto.randomUUID();uploadedFiles.set(id,file);return {id,name:file.name,quantity:1,status:'analyzing' as const,settings:{...emptySettings,color:'black'}};});
     models = [...models,...added];fileRevision++;
@@ -341,7 +344,7 @@
         <div class="quote-heading"><div><h2>Skonfiguruj wydruk.</h2><p>Materiał. Kolor. Detal. Nadaj mu formę.</p></div><div class="quote-icon"><IconCube size={22} stroke={1.5} /></div></div>
         <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => addFiles(event.currentTarget.files)} />
         <button type="button" class:dragging class="dropzone" onclick={() => fileInput.click()} ondragover={event => { event.preventDefault(); dragging = true; }} ondragleave={() => { dragging = false; }} ondrop={event => { event.preventDefault(); dragging = false; addFiles(event.dataTransfer?.files ?? null); }}>
-          <span class="drop-title"><IconUpload size={19} stroke={1.7} /> Dodaj modele lub przeciągnij pliki</span><p>STL, STEP, 3MF / do 25 MB na plik</p>
+          <span class="drop-title"><IconUpload size={19} stroke={1.7} /> Dodaj modele lub przeciągnij pliki</span><p>STL, STEP, 3MF / do {uploadLimit / 1024 / 1024} MB na plik</p>
         </button>
         <p class="upload-privacy">Pliki wysyłamy do analizy i wyceny; podgląd STL działa także lokalnie. <a href="/prywatnosc" target="_blank" rel="noopener">Zasady prywatności</a>.</p>
         <div class="sample-link"><Button variant="text" onclick={() => useSample()}>{models.length ? 'Wczytaj ponownie przykład' : 'Nie masz pliku? Wypróbuj przykład'}<IconArrowRight size={15} stroke={1.7} /></Button><Button variant="text" onclick={() => useSample(10)}>Pokaż przykład: 10 STL</Button></div>
