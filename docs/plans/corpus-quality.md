@@ -27,7 +27,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 | Profil przy płatności | Hash profilu sprawdzany pod blokadą katalogu w końcowej transakcji; regresja PG 1 PASS oraz HTTP 1 PASS (409 i brak prób płatności/zamówień), review bez blokera. Pliki runtime osobno kontroluje API |
 | Retencja orphanów | Root flock + nieblokujący fence DB, 24 h/64 wpisy z kursorem, ochrona zadań/holdów; orphan-gc-storage 23 PASS i upload regression 1 PASS. Bez migracji, nowych zależności lub endpointu; bez rotacji root na żywo |
 | Zależności Rust | Pierwotny audyt 74bc144: cargo-machete 0.9.2 bez nieużywanych zależności; 13 crate’ów, 99 deklaracji. Streaming dodaje dwa użyte bezpośrednie helpery już obecne w lockfile. Brak ignorelist i zmian; nie dowodzi to prostoty całego kodu |
-| Localhost | Gałąź robocza na 18430/18432, large tylko w środowisku procesu. .env i zmiany głównego checkoutu bez edycji; backup przed migracjami. Model 8: 78,4 MB → podgląd → DELETE 204 |
+| Localhost | API18432 stabilne binarium ed1fcd0, Vite18430 aktualny; backup DB i2 katalogów. Upload/GLB/native wycena/delete PASS; niezależny rachunek37,05zł zgodny z obecnymi stawkami POC, rentowność niepotwierdzona |
 
 ## Dalsza praca i granice
 
