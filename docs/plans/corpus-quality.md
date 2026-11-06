@@ -21,6 +21,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 | Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |
 | Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja szkicu to jawny szew, brak przycisku powielania |
 | Osiem klientów | eight-clients-final: 1 PASS/3,8 s. 16 równoczesnych estimate → 8 zadań/8 snapshotów/max prób 1; własne ceny i odmowa obcych zasobów; 4 próbki responsywności, nie szeroki load test |
+| Błędy uploadu | upload-failures-final: 2 PASS (istniejąca retencja + nowy scenariusz). Rzeczywisty ENOTDIR → 500, błąd insertu po konwersji → 503, brak nowych plików/rekordów, wcześniejszy model zachowany, następny upload 201. Nie ENOSPC |
 | Zależności Rust | cargo-machete 0.9.2 bez nieużywanych zależności; metadata offline/locked: 13 crate’ów, 99 deklaracji. Brak ignorelist i zmian; nie dowodzi to prostoty całego kodu |
 | Localhost | Gałąź robocza na 18430/18432, large tylko w środowisku procesu. .env i zmiany głównego checkoutu bez edycji; backup przed migracjami. Model 8: 78,4 MB → podgląd → DELETE 204 |
 

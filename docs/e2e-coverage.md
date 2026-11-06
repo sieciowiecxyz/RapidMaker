@@ -21,6 +21,7 @@ Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijaj�
 | Zwroty i zgodność kwot | stripe-provider-proof-current 1 PASS oraz order-identity-manual-compat: 2500 gr pobrane, zwroty 500/1500/500, dokładne ID/suma; role i nadmierny zwrot odrzucone w panels | Niezależne odczyty Stripe test; nie rozliczenie bankowe |
 | Nadanie i podjazd | `logistics` w sandbox-current: nadanie, PDF, tracking, anulowanie/przekazanie, podjazd DHL | Dawny carrierConnectionError DPD nie oznacza awarii DHL ani gwarancji każdego przewoźnika |
 | Prywatność, retencja, równoległość | models/concurrency/boundaries/security/abandonment w core/sandbox; identity-storage-current 22 PASS; final-large-removal-78d5802 1 PASS; eight-clients-final 1 PASS | Równoległość ograniczona testami, nie szeroki load test/pentest lub dowód braku wszelkich luk |
+| Operacyjne błędy uploadu | `upload-failures-final`: 2 PASS we wspólnej bazie (retencja + nowy scenariusz); ENOTDIR 500 i odrzucenie insertu po konwersji 503, brak pozostałości, oryginalne pliki bez zmian, recovery 201 | Rzeczywiste filesystem/DB fault injection tylko w izolacji; nie ENOSPC, awaria procesu lub UI. Nowy spec w core, pełnego zestawu nie powtarzano |
 | Faktyczny localhost | Profil large, proxy 96 MiB; smoke-fixed modelu 8: 78,4 MB → prywatny GLB i widoczny canvas, DELETE 204; kopia przed migracjami | Ten smoke nie powtarza cen/płatności/email. Wspólny target, profil tylko w środowisku procesu; [szczegóły](plans/large-models.md) |
 
 ## Aktualność i pozostałe ograniczenia

@@ -359,3 +359,14 @@ Sol xhigh potwierdził cleanup po poprawce, bez nowej uwagi. Oceny dowodu testu:
 cargo-machete 0.9.2, `cargo machete --skip-target-dir .` w backend: exit 0, nie znaleziono nieużywanych zależności. `cargo metadata --offline --locked --no-deps --format-version 1`: exit 0, 13 crate’ów workspace / 99 deklaracji zależności. Brak ignorelist machete. Główny agent potwierdził wynik osobnym uruchomieniem; zapis manifestów/SHA w prywatnym rust-dependency-audit-74bc144.json. Nie zmieniono źródeł/locka/wersji, bez instalacji, sieci lub przebudowy.
 
 Sol xhigh porównał zapisane hashe i zakres ze wszystkimi manifestami, bez konkretnej uwagi. To negatywny audyt bezpośrednich zależności; nie dowodzi braku dead code, prostoty, bezpieczeństwa lub 10/10 całego produktu. Kategorie produktowe poza tym zakresem pozostają N/A, a zapis komendy nie zastępuje surowego pełnego transkryptu. Kryterium zakończenia według wymaganego 10/10 wymaga doprecyzowania; pytanie do właściciela pozostaje otwarte, bez samodzielnego zmieniania celu lub zawyżania ocen.
+
+
+## Upload — błędy magazynu i późnego zapisu
+
+Nowy upload-failures.spec sprawdza rzeczywiste błędy w izolowanym katalogu/bazie. Mały cube 684 B daje baseline 201; podmiana wyłącznie testowego katalogu models na plik wymusza ENOTDIR/500, a trigger odrzucający private_models INSERT po przygotowaniu siatki/GLB daje 503. Po obu błędach brak nowego katalogu/rekordu, wcześniejsze trzy pliki zachowują SHA i prywatne uprawnienia. Kolejny upload 201, źródło i GLB dostępne właścicielowi, obcy bez cookie dostaje 401. Root i trigger przywracane w finally; bez źródeł użytkownika, mocków, providerów, dużych plików lub builda.
+
+upload-failures-current: 1 PASS/1,6 s. Review wskazał dwa problemy harnessu: licznik przed baseline uploadem nie uwzględniał legalnego sprzątania wygasłych modeli; częściowy błąd writeFileSync mógł zostawić plik blokujący odtworzenie katalogu. Baseline przeniesiono po uploadzie, plik tworzony explicit openSync/create-new, ownership flag przed zapisem i close/finally.
+
+upload-failures-final: **2 PASS/2,5 s**, 0 fail/skip/flaky. We wspólnej bazie poprzedzał go istniejący test retencji (313 ms), nowy scenariusz 1,3 s. Pierwszy raport zachowany. TypeScript, Prettier i diff PASS; dodano spec do core. To nie nowy pełny zestaw 136 i nie test rzeczywistego ENOSPC, crashu, wyczerpania kwoty, RSS lub UI.
+
+Scoped Sol xhigh potwierdził poprawki bez nowej uwagi. Początkowe oceny dowodu: poprawność 8, bezpieczeństwo 9, kwoty N/A, zasoby 8, błędy 9, współbieżność N/A, dowody 9, prostota 8, utrzymanie 7, wygląd N/A. Reviewer nie ponawiał testów. Produkt bez zmian — potwierdzono istniejący PendingDirectory rollback; pytanie o końcowe kryterium 10/10 pozostaje bez odpowiedzi.
