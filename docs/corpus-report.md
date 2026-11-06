@@ -318,3 +318,26 @@ Aktualne wymagania/testy/raporty/ograniczenia zebrano w [e2e-coverage.md](e2e-co
 run-all i run-integration nie wybierają automatycznie systemowego Chromium; korzystają z tej samej przypiętej wersji co preflight, z zachowaniem jawnego override. Test statycznych ścieżek z symulacją obecnego systemowego Chromium oraz rzeczywisty start bundled PASS. `browser-default-consistency.json`: 1 PASS, bez skipped/flaky, rzeczywista izolowana aplikacja/Swagger, bez wywołań providerów. Poprzednie rzeczywiste raporty tego hosta nie zmieniają znaczenia: /usr/bin/chromium tu nie ma, więc już korzystały z bundled.
 
 Review Sol xhigh wskazał początkowo pozostawiony fallback drugiego runnera; usunięto i sprawdzono. Finalnie bez blokera; poprawność 9, zasoby 8, błędy 8, dowody 8, prostota 8, utrzymanie 8; bezpieczeństwo/kwoty/współbieżność/wygląd N/A dla tej zmiany. Nie ponawiano całego zestawu ani testów przez reviewera.
+
+
+## Końcowy zestaw na 78d5802
+
+Komenda `python frontend/tests/run-all.py --group all --no-build` zakończyła się kodem **2**, nie 0: jeden opcjonalny test large jest pomijany przy standardzie. Wyniki, bez flaky i provider-blocked:
+
+| Grupa | PASS | SKIP | FAIL |
+| --- | ---: | ---: | ---: |
+| storage | 22 | 0 | 0 |
+| core | 45 | 1 | 0 |
+| sandbox | 12 | 0 | 0 |
+| email | 2 | 0 | 0 |
+| rejestracja hasło | 1 | 0 | 0 |
+| rejestracja passkey | 1 | 0 | 0 |
+| contracts | 53 | 0 | 0 |
+
+Łącznie **136 PASS, 1 SKIP, 0 FAIL**. To siedem grup z osobnymi bazami/scenariuszami. Sandbox obejmuje już nowe powiązania gościa, dwa warianty jednego uploadu i wznowienie PI; rzeczywiste Stripe/Furgonetka/iCloud sprawdzone. Contracts to osobne testy jednostkowe/kontraktowe, nie dodatkowe potwierdzenia providerów.
+
+Pominięty scenariusz: `model-removal` opt-in large. Oddzielna komenda z --large-models --local-accounts, manifestem 41 i --grep 'opt-in large removal' dała final-large-removal-78d5802 **1 PASS/15,7 s**, 0 skip/flaky. Nie zmienia to wyniku oryginalnego wrappera; pokazuje pokrycie drugiego profilu osobno. Nie powtarzano korpusu 41 ani renderów 144 ujęć po zmianach tożsamości/PI; geometria pozostała bez zmian.
+
+Przed zestawem zapisano czysty HEAD i 312 hashów śledzonych źródeł, testów, locków i rzeczywistej binarki; po zestawie i po large wszystkie zgodne. Prywatna niemodyfikowana kopia: final-suite-78d5802/{summary,sources-before,source-recheck,large-source-recheck}.json i raporty grup; wcześniejsze stałe nazwy zarchiwizowano przed uruchomieniem. Nie zapisano sekretów ani payloadów providerów w metadanych. Z aktualnych 153 zrzutów core obejrzano mobilne jasne szczegóły klienta i desktopowe ciemne szczegóły admina; bez przeprojektowania stylu.
+
+Końcowy Sol xhigh nie znalazł nowej potwierdzonej regresji. Oceny lokalnego POC: poprawność 8, bezpieczeństwo 8, kwoty 8, zasoby 7, błędy 8, współbieżność 7, dowody 8, prostota 7, utrzymanie 7, wygląd 8. To oceny, nie pomiary lub dowód 10/10; reviewer nie ponawiał testów. Najmniejsza wskazana poprawka to aktualizacja starych checkpointów — wykonana w planie i mapie. Dalszy goal pozostaje otwarty, bez udawania obsługi wadliwych/ponadlimitowych źródeł, fizycznych urządzeń, szerokiego pentestu/load testu lub rentowności na kosztach fixture.

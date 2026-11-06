@@ -26,10 +26,10 @@ Większe modele: [plan i ograniczenia](large-models.md). Wdrożone: bezstratny k
 
 ## Następne działania
 
-1. Obrazy korpusu sprawdzone w powyższym zakresie. Małe rozproszone zespoły wymagają zoomu, szczególnie w ciemnym motywie; bez twierdzenia o zgodności kontrastu lub fizycznym telefonie. Dalsza mapa kontrolek nie jest zastąpiona samym korpusem.
-2. Core sprawdzony na oddzielnej bazie w opisanym zakresie; stare raporty zachowane, bieżący ma unikalną nazwę core-current. Oddzielne duże usuwanie również przeszło. Nie powtarzać całego zestawu bez nowego powodu.
-3. Rzeczywiste auth/email/zakup/panele/dostawa i rejestracja mają nowe dowody w raporcie. Zakup gościa → konto/claim/późniejszy login ma już nowy dowód. RetryPayment → ten sam PaymentIntent potwierdzono osobnym testem payment-resume-provider-fixed. Bez ponawiania całego sandboxa bez powodu.
-4. Mapa wymaganie → test/dowód → ograniczenie jest w e2e-coverage.md. Rozpatrzyć końcowy przebieg po wszystkich poprawkach, z oddzielnym zapisem źródeł i zachowaniem poprzednich wyników. Zwykły localhost:18430 nadal obsługuje main f5bdb5e i starszy proces API z 3 listopada (nowy endpoint limitów 404), a raporty dotyczą gałęzi roboczej i izolacji. Przed aktualizacją runtime sprawdzić istniejącą bazę/konfigurację i zabezpieczyć dane; nie nadpisywać zmian użytkownika w głównym checkoutcie. Nie deklarować każdego stanu/SVG lub fizycznego telefonu na podstawie viewportu.
+1. Końcowy zestaw na 78d5802 wykonany: 136 PASS/0 FAIL/1 SKIP; pominięty large sprawdzony osobno 1 PASS. Zachować rozdzielenie przebiegów; [mapa dowodów](../e2e-coverage.md).
+2. Dalsza poprawa jakości: sprawdzić zachowanie kolejki i limitów przy większej, jawnie ograniczonej liczbie jednoczesnych klientów. Dotychczasowe scenariusze własności/race nie zastępują testu obciążeniowego.
+3. Nie wymuszać 10/10: końcowe review nie znalazło nowej regresji, ale wskazało ograniczenia zasobów, dowodów i prostoty. Pozostałe granice (wadliwe/ponadlimitowe źródła, szew duplikacji, koszty fixture, fizyczne urządzenia) pozostają jawne; cały goal nadal otwarty.
+4. Zwykły localhost działa z tej gałęzi i profilem large w środowisku procesu; .env bez edycji. Przed zmianą runtime zabezpieczono bazę/pliki. Nie nadpisywać lokalnych zmian w głównym checkoutcie.
 
 ## Komendy
 
@@ -54,3 +54,6 @@ Dwie konfiguracje jednego uploadu: `same-upload-configs-final.json` 1 PASS / 19,
 
 
 Runner: usunięto automatyczny wybór /usr/bin/chromium zarówno z run-all, jak i run-integration; preflight i właściwe testy używają teraz tej samej wersji Playwright, chyba że jawnie podano executable override. Poprzednie przebiegi na tym komputerze też używały bundled Chromium, ponieważ systemowego nie ma. Sprawdzone: start przeglądarki, obie ścieżki wyboru z symulacją obecnego systemowego Chromium, compile Pythona i rzeczywisty izolowany browser-default-consistency (Swagger, 1 PASS). Scoped Sol xhigh wykrył drugą pozostałą ścieżkę fallbacku; po jej usunięciu bez blokera. Nie jest to ponowny pełny zestaw.
+
+
+Końcowa walidacja 78d5802: pełny run-all (siedem oddzielnych grup) 136 PASS/0 FAIL/0 flaky/1 SKIP, kod wrappera 2. Osobny final-large-removal-78d5802 1 PASS/15,7 s obejmuje dokładnie pominięty scenariusz. Przed/po oba przebiegi 312 hashów kodu/binarki zgodne, czysty HEAD przy starcie. Raporty zarchiwizowane prywatnie, starsze zachowane. Świeże 12 sandboxowych testów obejmuje także guest-claim, payment-resume i same-upload-configs; są to nowe wyniki całej grupy, nie suma dawnych pojedynczych testów.
