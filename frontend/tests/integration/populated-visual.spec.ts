@@ -169,6 +169,22 @@ test('populated unpaid order, private previews and chat fit both themes and view
           options: { quality: 'standard', wall_loops: 3, infill_percent: 20 },
         });
       }
+      const privateRoot = process.env.RAPIDMAKER_TEST_MODEL_ROOT ?? '';
+      expect(privateRoot).toMatch(/^\/tmp\/rapidmaker-browser-[^/]+\/models$/);
+      const canonical = readFileSync(resolve(privateRoot, model.id, 'canonical.stl'));
+      const meshUrl = `/api/admin/orders/${id}/files/${model.id}/mesh`;
+      const production = await operator.request.get(meshUrl);
+      expect(production.status()).toBe(200);
+      expect(production.headers()['content-disposition']).toBe(
+        'attachment; filename=production.stl',
+      );
+      expect(production.headers()['content-length']).toBe(String(canonical.length));
+      expect(production.headers()['cache-control']).toContain('no-store');
+      expect(await production.body()).toEqual(canonical);
+      expect((await page.request.get(meshUrl)).status()).toBe(403);
+      expect(
+        (await page.request.get(`/api/account/orders/${id}/files/${model.id}/mesh`)).status(),
+      ).toBe(404);
       const file = (await (await page.request.get(`/api/account/orders/${id}/files`)).json())
         .files[0];
       expect(file.quote_id).toMatch(

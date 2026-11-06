@@ -21,7 +21,9 @@ Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie o
 
 ## Pliki
 
-`MODEL_STORAGE_DIR`, domyślnie `~/.local/state/rapidmaker/models`: katalog 0700, pliki 0600, nazwy katalogów to serwerowe UUID. HTTP zawsze sprawdza własność. Limit uploadu: 32 MiB. Limity oryginału, siatki i podglądu łącznie: 20 modeli/256 MiB na właściciela; 1000 modeli/8 GiB globalnie.
+`MODEL_STORAGE_DIR`, domyślnie `~/.local/state/rapidmaker/models`: katalog 0700, pliki 0600, nazwy katalogów to serwerowe UUID. HTTP zawsze sprawdza własność. Limit uploadu: domyślnie 32 MiB; lokalny profil large 96 MiB ([budżety](plans/large-models.md)). Limity oryginału, siatki i podglądu łącznie: 20 modeli/256 MiB na właściciela; 1000 modeli/8 GiB globalnie.
+
+Odbieranie body uploadu trwa maks. 60 s (408); limit nie obejmuje zapisu do bazy, aby nie przerwać commit. Zajęty slot uploadu daje 429. Prywatne źródło/GLB/siatka zamówienia są streamowane po 64 KiB; maks. cztery aktywne transfery na proces, pozostałe dostają 503. Slot jest zwalniany przy EOF lub porzuceniu odpowiedzi. Nagłówki prywatności i kontrola właściciela/admina pozostają obowiązkowe.
 
 Model roboczy żyje 24 h. Przyjęcie zadania zapewnia co najmniej 30 min dostępności modelu; sukces co najmniej ważność wyceny. Aktywne zadanie chroni pliki przed sprzątaniem. Worker sprząta co minutę, upload również uruchamia sprzątanie. DB oznacza wygasły model jako usuwany przed usunięciem plików: nowe zadanie nie może go przejąć. Nieudane usunięcie jest ponawiane, plik nadal liczy się do limitu. Claim gościa przenosi także zadania; działający worker korzysta z aktualnej własności.
 

@@ -1999,7 +1999,9 @@ name = "rapidmaker-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "gltf",
+ "libc",
  "percent-encoding",
  "prometheus-client",
  "rapidmaker-auth",

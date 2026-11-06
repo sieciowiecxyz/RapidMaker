@@ -544,7 +544,7 @@ async fn order_artifact(
                 "Plik zamówienia jest niedostępny lub minął czas jego przechowywania.",
             )
         })?;
-    super::files::order_artifact(record, kind, admin)
+    super::files::order_artifact(record, kind, admin).await
 }
 #[utoipa::path(
     operation_id = "orders_files",

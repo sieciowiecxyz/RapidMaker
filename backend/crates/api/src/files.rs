@@ -2,8 +2,8 @@
 use super::model_limits::ModelProfile;
 use axum::{
     Json,
-    body::Bytes,
-    extract::{DefaultBodyLimit, Extension, Path as RoutePath, Request, State},
+    body::{Body, Bytes},
+    extract::{DefaultBodyLimit, Extension, FromRequest, Path as RoutePath, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -14,18 +14,23 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, DirBuilder, OpenOptions},
-    io::{Read, Write},
+    io::{SeekFrom, Write},
     os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::Semaphore;
+use tokio::{
+    io::{AsyncReadExt, AsyncSeekExt},
+    sync::{Semaphore, SemaphorePermit},
+};
 use utoipa_axum::{router::OpenApiRouter as Router, routes};
 use uuid::Uuid;
 
 const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024;
 const COOKIE: &str = "rapidmaker_guest";
 static UPLOAD_BUSY: Semaphore = Semaphore::const_new(1);
+static DOWNLOADS: Semaphore = Semaphore::const_new(4);
+const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
 type Error = (StatusCode, Json<Value>);
 
 #[derive(Clone)]
@@ -84,7 +89,36 @@ async fn admit_upload(State(state): State<FileState>, request: Request, next: Ne
         )
         .into_response();
     };
-    next.run(request).await
+    let (parts, body) = request.into_parts();
+    // Bound ingestion only: cancelling a handler during a database commit can
+    // leave a committed model whose PendingDirectory has already been removed.
+    let bytes = match upload_body(Request::from_parts(parts.clone(), body)).await {
+        Ok(bytes) => bytes,
+        Err(response) => return response,
+    };
+    // Bytes extraction and Body::from(Bytes) share the allocation.
+    next.run(Request::from_parts(parts, Body::from(bytes)))
+        .await
+}
+
+async fn upload_body(request: Request) -> Result<Bytes, Response> {
+    match tokio::time::timeout(Duration::from_secs(60), Bytes::from_request(request, &())).await {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(rejection)) => Err(error(
+            if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                StatusCode::PAYLOAD_TOO_LARGE
+            } else {
+                StatusCode::BAD_REQUEST
+            },
+            "Nie można odczytać przesyłanego modelu.",
+        )
+        .into_response()),
+        Err(_) => Err(error(
+            StatusCode::REQUEST_TIMEOUT,
+            "Przesyłanie modelu trwa zbyt długo. Spróbuj ponownie.",
+        )
+        .into_response()),
+    }
 }
 
 fn error(status: StatusCode, message: &str) -> Error {
@@ -315,7 +349,11 @@ fn filename(headers: &HeaderMap) -> Result<(String, String), Error> {
     params(("x-model-filename" = String, Header, description = "Zakodowana procentowo nazwa STL, STEP lub 3MF")),
     request_body(content = super::docs::BinaryFile, content_type = "application/octet-stream", description = "Oryginał domyślnie do 32 MiB (lokalny profil large: 96 MiB)"),
     responses((status = 201, description = "Prywatny model i adres GLB", body = Value),
-        (status = 413, description = "Przekroczony limit pliku"), (status = 422, description = "Nieprawidłowa geometria", body = Value)))]
+        (status = 408, description = "Przekroczony czas odbierania pliku", body = Value),
+        (status = 413, description = "Przekroczony limit pliku", body = Value),
+        (status = 429, description = "Trwa inny upload", body = Value),
+        (status = 503, description = "Magazyn chwilowo niedostępny", body = Value),
+        (status = 422, description = "Nieprawidłowa geometria", body = Value)))]
 async fn upload(
     State(state): State<FileState>,
     headers: HeaderMap,
@@ -553,7 +591,8 @@ async fn metadata(
 
 #[utoipa::path(operation_id = "files_source", get, path = "/api/models/{id}/source", tag = "Modele", params(("id" = String, Path)),
     responses((status = 200, description = "Oryginał", body = super::docs::BinaryFile, content_type = "application/octet-stream"),
-        (status = 404, description = "Brak własnego modelu", body = Value), (status = 410, description = "Plik jest niedostępny", body = Value)),
+        (status = 404, description = "Brak własnego modelu", body = Value), (status = 410, description = "Plik jest niedostępny", body = Value),
+        (status = 503, description = "Limit równoczesnych pobrań", body = Value)),
     security(("session" = []), ("guest" = [])))]
 async fn source(
     State(state): State<FileState>,
@@ -561,16 +600,17 @@ async fn source(
     RoutePath(id): RoutePath<String>,
 ) -> Result<Response, Error> {
     let handle = resolve(database(&state)?, &headers, &id).await?;
-    source_response(&handle)
+    source_response(&handle).await
 }
 
 // Persisted artifacts remain readable after switching back to standard admission.
-fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
-    let bytes = private_bytes(
+async fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
+    let file = private_file(
         &handle.source,
         handle.record.source_bytes,
         ModelProfile::Large.input_bytes(),
-    )?;
+    )
+    .await?;
     let disposition = HeaderValue::from_str(&format!(
         "attachment; filename=\"model.{}\"; filename*=UTF-8''{}",
         handle.record.extension,
@@ -598,14 +638,15 @@ fn source_response(handle: &ModelHandle) -> Result<Response, Error> {
                 HeaderValue::from_static("nosniff"),
             ),
         ],
-        bytes,
+        file.body(),
     )
         .into_response())
 }
 
 #[utoipa::path(operation_id = "files_preview", get, path = "/api/models/{id}/preview.glb", tag = "Modele", params(("id" = String, Path)),
     responses((status = 200, description = "GLB w metrach/Y-up", body = super::docs::BinaryFile, content_type = "model/gltf-binary"),
-        (status = 404, description = "Brak własnego modelu", body = Value), (status = 409, description = "Starszy upload wymaga ponownego przesłania", body = Value)),
+        (status = 404, description = "Brak własnego modelu", body = Value), (status = 409, description = "Starszy upload wymaga ponownego przesłania", body = Value),
+        (status = 503, description = "Limit równoczesnych pobrań", body = Value)),
     security(("session" = []), ("guest" = [])))]
 async fn preview(
     State(state): State<FileState>,
@@ -613,22 +654,23 @@ async fn preview(
     RoutePath(id): RoutePath<String>,
 ) -> Result<Response, Error> {
     let handle = resolve(database(&state)?, &headers, &id).await?;
-    preview_response(&handle)
+    preview_response(&handle).await
 }
 
-fn preview_response(handle: &ModelHandle) -> Result<Response, Error> {
+async fn preview_response(handle: &ModelHandle) -> Result<Response, Error> {
     if handle.record.preview_bytes == 0 {
         return Err(error(
             StatusCode::CONFLICT,
             "Ten model nie ma jeszcze podglądu. Prześlij plik ponownie.",
         ));
     }
-    let bytes = private_bytes(
+    let mut file = private_file(
         &handle.mesh.with_file_name("preview.glb"),
         handle.record.preview_bytes,
         MAX_PREVIEW_BYTES,
-    )?;
-    if gltf::binary::Glb::from_slice(&bytes).is_err() {
+    )
+    .await?;
+    if validate_glb(&mut file.file, file.remaining).await.is_err() {
         return Err(error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Nieprawidłowy zapis podglądu.",
@@ -641,24 +683,28 @@ fn preview_response(handle: &ModelHandle) -> Result<Response, Error> {
             (header::CACHE_CONTROL, "private, no-store"),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
         ],
-        bytes,
+        file.body(),
     )
         .into_response())
 }
 
-pub(super) fn order_artifact(
+pub(super) async fn order_artifact(
     record: StoredModel,
     kind: &str,
     admin: bool,
 ) -> Result<Response, Error> {
     let handle = handle(record)?;
-    artifact_response(&handle, kind, admin)
+    artifact_response(&handle, kind, admin).await
 }
 
-fn artifact_response(handle: &ModelHandle, kind: &str, admin: bool) -> Result<Response, Error> {
+async fn artifact_response(
+    handle: &ModelHandle,
+    kind: &str,
+    admin: bool,
+) -> Result<Response, Error> {
     match kind {
-        "source" => source_response(handle),
-        "preview.glb" => preview_response(handle),
+        "source" => source_response(handle).await,
+        "preview.glb" => preview_response(handle).await,
         "mesh" if admin => Ok((
             [
                 (header::CONTENT_TYPE, "application/octet-stream"),
@@ -669,11 +715,13 @@ fn artifact_response(handle: &ModelHandle, kind: &str, admin: bool) -> Result<Re
                 (header::CACHE_CONTROL, "private, no-store"),
                 (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
             ],
-            private_bytes(
+            private_file(
                 &handle.mesh,
                 handle.record.mesh_bytes,
                 ModelProfile::Large.stl_bytes(),
-            )?,
+            )
+            .await?
+            .body(),
         )
             .into_response()),
         _ => Err(error(
@@ -683,40 +731,127 @@ fn artifact_response(handle: &ModelHandle, kind: &str, admin: bool) -> Result<Re
     }
 }
 
-fn private_bytes(path: &Path, expected: i64, limit: usize) -> Result<Vec<u8>, Error> {
+// The permit travels with the body, including while a client stops polling it.
+struct PrivateFile {
+    file: tokio::fs::File,
+    remaining: u64,
+    _permit: SemaphorePermit<'static>,
+}
+
+impl PrivateFile {
+    fn body(self) -> ([(header::HeaderName, String); 1], Body) {
+        let length = self.remaining;
+        let stream = futures_util::stream::try_unfold(self, |mut state| async move {
+            if state.remaining == 0 {
+                return Ok(None);
+            }
+            let mut bytes = vec![0; state.remaining.min(DOWNLOAD_CHUNK_BYTES as u64) as usize];
+            let read = state
+                .file
+                .read(&mut bytes)
+                .await
+                .map_err(|_| download_error())?;
+            if read == 0 {
+                return Err(download_error());
+            }
+            bytes.truncate(read);
+            state.remaining -= read as u64;
+            Ok(Some((Bytes::from(bytes), state)))
+        });
+        (
+            [(header::CONTENT_LENGTH, length.to_string())],
+            Body::from_stream(stream),
+        )
+    }
+}
+
+fn download_error() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::UnexpectedEof,
+        "Private model read failed",
+    )
+}
+
+async fn private_file(path: &Path, expected: i64, limit: usize) -> Result<PrivateFile, Error> {
     let invalid = || {
         error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Nieprawidłowy zapis modelu.",
         )
     };
-    let metadata = fs::symlink_metadata(path).map_err(|_| {
+    if expected <= 0 || expected as u64 > limit as u64 {
+        return Err(invalid());
+    }
+    let permit = DOWNLOADS.try_acquire().map_err(|_| {
         error(
-            StatusCode::GONE,
-            "Plik modelu jest niedostępny. Prześlij go ponownie.",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Trwa pobieranie modeli. Spróbuj za chwilę.",
         )
     })?;
-    if expected <= 0
-        || expected as u64 > limit as u64
-        || !metadata.is_file()
-        || metadata.len() != expected as u64
+    // Do not follow a replaced final symlink; nonblocking open also rejects FIFOs
+    // through the same-descriptor regular-file check without blocking a worker.
+    let file = tokio::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .await
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                error(
+                    StatusCode::GONE,
+                    "Plik modelu jest niedostępny. Prześlij go ponownie.",
+                )
+            } else {
+                invalid()
+            }
+        })?;
+    let metadata = file.metadata().await.map_err(|_| invalid())?;
+    if !metadata.is_file() || metadata.len() != expected as u64 {
+        return Err(invalid());
+    }
+    Ok(PrivateFile {
+        file,
+        remaining: expected as u64,
+        _permit: permit,
+    })
+}
+
+// Equivalent envelope checks to gltf::binary::Glb::from_slice, without copying
+// JSON/BIN payloads. That parser permits trailing bytes and does not parse JSON.
+async fn validate_glb(file: &mut tokio::fs::File, length: u64) -> std::io::Result<()> {
+    let mut header = [0; 12];
+    file.read_exact(&mut header).await?;
+    let declared = u32::from_le_bytes(header[8..12].try_into().unwrap()) as u64;
+    if &header[..4] != b"glTF"
+        || header[4..8] != 2u32.to_le_bytes()
+        || declared < 12
+        || declared > length
     {
-        return Err(invalid());
+        return Err(download_error());
     }
-    let file = fs::File::open(path).map_err(|_| invalid())?;
-    let mut bytes = Vec::new();
-    file.take(limit as u64 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| invalid())?;
-    if bytes.len() as i64 != expected {
-        return Err(invalid());
+    let mut chunk = [0; 8];
+    file.read_exact(&mut chunk).await?;
+    let json_end = 20 + u32::from_le_bytes(chunk[..4].try_into().unwrap()) as u64;
+    if &chunk[4..] != b"JSON" || json_end > length {
+        return Err(download_error());
     }
-    Ok(bytes)
+    if json_end < length {
+        file.seek(SeekFrom::Start(json_end)).await?;
+        file.read_exact(&mut chunk).await?;
+        let bin_end = json_end + 8 + u32::from_le_bytes(chunk[..4].try_into().unwrap()) as u64;
+        if &chunk[4..] != b"BIN\0" || bin_end > length {
+            return Err(download_error());
+        }
+    }
+    file.seek(SeekFrom::Start(0)).await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::StreamExt;
+    static DOWNLOAD_TEST: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[test]
     fn private_directory_removal_is_uuid_bounded_idempotent_and_retryable() {
@@ -746,6 +881,7 @@ mod tests {
 
     #[tokio::test]
     async fn persisted_large_downloads_ignore_admission_profile_and_keep_admin_gate() {
+        let _serial = DOWNLOAD_TEST.lock().await;
         let directory = std::env::temp_dir().join(format!("rapidmaker-read-{}", Uuid::new_v4()));
         fs::DirBuilder::new()
             .mode(0o700)
@@ -782,32 +918,46 @@ mod tests {
                 .unwrap();
         }
         for (kind, admin, expected) in [("source", false, source_len), ("mesh", true, mesh_len)] {
-            let response = artifact_response(&handle, kind, admin).unwrap();
+            let response = artifact_response(&handle, kind, admin).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
             assert_eq!(
                 response.headers()[header::CACHE_CONTROL],
                 "private, no-store"
             );
-            let bytes = axum::body::to_bytes(response.into_body(), expected)
-                .await
-                .unwrap();
-            assert_eq!(bytes.len(), expected);
+            assert_eq!(
+                response.headers()[header::CONTENT_LENGTH],
+                expected.to_string()
+            );
+            let mut body = response.into_body().into_data_stream();
+            let mut total = 0;
+            while let Some(bytes) = body.next().await {
+                let bytes = bytes.unwrap();
+                assert!(bytes.len() <= DOWNLOAD_CHUNK_BYTES);
+                assert!(bytes.iter().all(|byte| *byte == 0));
+                total += bytes.len();
+            }
+            assert_eq!(total, expected);
         }
         assert_eq!(
-            artifact_response(&handle, "mesh", false).unwrap_err().0,
+            artifact_response(&handle, "mesh", false)
+                .await
+                .unwrap_err()
+                .0,
             StatusCode::NOT_FOUND
         );
         handle.record.source_bytes += 1;
         assert_eq!(
-            source_response(&handle).unwrap_err().0,
+            source_response(&handle).await.unwrap_err().0,
             StatusCode::INTERNAL_SERVER_ERROR
         );
         handle.record.source_bytes = ModelProfile::Large.input_bytes() as i64 + 1;
         assert_eq!(
-            source_response(&handle).unwrap_err().0,
+            source_response(&handle).await.unwrap_err().0,
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }
+
+    include!("files_transfer_tests.rs");
 
     #[test]
     fn guest_tokens_are_opaque_and_ambiguous_cookies_authorize_nothing() {
