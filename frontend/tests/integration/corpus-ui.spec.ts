@@ -294,14 +294,18 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       await expect(page.locator('.quote-contact')).toBeDisabled();
       info.annotations.push({
         type: 'ui-size-rejection',
-        description: `${clientCapMiB} MiB form limit; no upload POST`,
+        description: `${clientCapMiB} MiB form limit; no upload POST, source not processed`,
       });
       return;
     }
     const upload = await uploaded!;
-    if ([24, 39].includes(item.case) || largeCase) expect(upload.status()).toBe(201);
-    if (item.case === 32) expect(upload.status()).toBe(422);
-    if (upload.status() === 422) {
+    const topology = [14, 21, 37].includes(item.case);
+    const resource =
+      item.case === 41 ||
+      (process.env.RAPIDMAKER_LARGE_MODELS !== '1' && [8, 19, 20, 29, 40].includes(item.case));
+    const rejectedCase = topology || resource || item.case === 32;
+    expect(upload.status()).toBe(rejectedCase ? 422 : 201);
+    if (rejectedCase) {
       // Chromium can evict large upload response bodies from its inspector cache.
       // Reproduce the same rejection through the owner's HTTP client, then match the UI.
       const rejected = await context.request.post('/api/models', {
@@ -318,10 +322,13 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       // Case 32 contains an invalid 3DManufacturing:3mfVersion metadata prefix.
       // It fits the byte budget now, but must still fail strict package validation.
       if (item.case === 32) {
-        expect(error.message).toBe(
-          'Nie można odczytać geometrii. Wybierz poprawny STL, STEP lub 3MF.',
-        );
-      } else expect(error.code).toBe('model_resource_limit');
+        expect(error).toEqual({
+          message: 'Nie można odczytać geometrii. Wybierz poprawny STL, STEP lub 3MF.',
+        });
+      } else if (process.env.RAPIDMAKER_LARGE_MODELS !== '1' && item.case === 14) {
+        // Standard budget may precede this source's independently known bad topology.
+        expect(['model_resource_limit', 'model_topology_invalid']).toContain(error.code);
+      } else expect(error.code).toBe(topology ? 'model_topology_invalid' : 'model_resource_limit');
       expect(typeof error.message).toBe('string');
       expect(error.message.length).toBeGreaterThan(0);
       await expect(page.getByRole('alert')).toHaveText(error.message);
@@ -345,9 +352,9 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         await expect(page.locator('.chamber-visual[aria-label^="Model z pliku"]')).toHaveCount(0);
 
       info.annotations.push({
-        type: item.case === 32 ? 'ui-invalid-rejection' : 'ui-resource-rejection',
-        description:
-          'HTTP 422 shown; completed print settings cannot enable checkout; no price claimed',
+        type:
+          error.code === 'model_resource_limit' ? 'ui-resource-rejection' : 'ui-invalid-rejection',
+        description: `${error.code ?? 'malformed-geometry'} shown; source rejected, no preview or price; completed settings cannot enable checkout`,
       });
       return;
     }

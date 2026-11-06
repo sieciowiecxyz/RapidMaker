@@ -224,3 +224,20 @@ Pierwszy `budget41-api.json`: 1 FAIL / 2 PASS; poprawne &amp; w metadanych wył�
 50 testów geometrii PASS / 1 wcześniej opcjonalny ignored; build, format, Clippy PASS. Review Sol xhigh bez kolejnego blokera; oceny 8/9/N/A/8/9/9/9/7/7/N/A (poprawność/bezpieczeństwo/kwoty/zasoby/błędy/współbieżność/dowody/prostota/utrzymanie/wygląd), bez własnego rerunu. Dalsze dowody całego korpusu i audyt celu pozostają otwarte.
 
 `budget41-standard-models.json`: 8 PASS / 7,6 s, bez skipped/flaky, na końcowym kodzie kontroli zespołu; zakres zwykłych modeli/odmów/retencji/izolacji/admission. Nie jest to ponowienie całego 41-elementowego korpusu.
+
+## Pełny korpus API po rozszerzeniu modeli — 2026-11-06
+
+`corpus41-large-current.json`: **41 scenariuszy PASS / 599,7 s**, 0 skipped/flaky. Produkt `df8760d`, profil large wyłącznie w izolowanej bazie/storage runnera, dostawcy wyłączeni. Źródła testu/runnera/manifestu oraz SHA binarki zachowane w prywatnym `corpus41-large-current-provenance/`. Profil serwera użytkownika nie został zmieniony.
+
+| Rzeczywisty wynik | Liczba | Co udowodniono |
+| --- | ---: | --- |
+| Cena automatyczna | 24 | Upload, prywatny GLB, rzeczywisty Bambu i pełny niezależny rachunek kosztów/strat/marży/VAT/minimum |
+| Wycena ręczna | 12 | Upload i GLB działają; odmowa automatycznej ceny ma jawny powód |
+| Wadliwe źródło | 4 | 14/21/37: niepoprawna topologia; 32: wadliwy XML; nie przetworzono geometrii |
+| Limit zespołu | 1 | 41: 6,26 mln trójkątów przekracza budżet; nie przetworzono geometrii |
+
+Łącznie powstało 36 prywatnych podglądów. PASS testu odmowy nie oznacza obsługi modelu. Ceny sprawdzono na jawnej fixture 100 PLN/kg i stawkach runnera, **nie na zweryfikowanych rzeczywistych kosztach firmy**; nie jest to certyfikat rentowności. API nie dowodzi renderowania zdjęć ani wszystkich stanów UI.
+
+Review wykrył zbyt słabą kontrolę ręcznej ścieżki. Po poprawce `corpus12-manual-geometry.json`: **12 PASS / 68,7 s**, 0 skipped/flaky, wszystkie rzeczywiste ręczne przypadki (2/5/15/16/18/19/22/24/25/28/31/36). Test niezależnie czyta surowe pozycje GLB, sprawdza wymiary i powód >500 mm lub brak ortogonalnego ułożenia P1P; mały drukowalny model nie przejdzie przez błędne manual. Późniejsza kontrola typu/długości BIN: `corpus-bin-guard-final.json` **1 PASS / 1,1 s** na przypadku 16. Nie przypisujemy nowych asercji wcześniejszemu pełnemu przebiegowi 41.
+
+Klasyfikacja błędów w pełnym teście UI poprawiona analogicznie i zebrano 41 testów; wykonanie całego UI pozostaje oddzielnym krokiem. Nie poluzowano wymagań dla nieoczekiwanego 422/503 lub błędu slicera. Review Sol xhigh bez kolejnego blokera tego zakresu: poprawność 8, bezpieczeństwo N/A poza prywatnym odczytem, kwoty 8, zasoby 8, błędy 9, współbieżność N/A, dowody 8, prostota 8, utrzymanie 7, wygląd N/A. Reviewer nie powtarzał testów. Cały cel, aktualny core, konta/dostawcy i audyt mapy kontrolek pozostają otwarte.
