@@ -11,7 +11,7 @@ Opis: wymagania i następne kroki; wyniki/źródła w [raporcie](../corpus-repor
 - Minimalny Rust/proste API/KISS; bez zbędnych warstw i usuwania kontroli kwot, własności lub zasobów dla zielonego raportu.
 - Raport i audyt całego celu w 10 kategoriach; nie utożsamiać zielonej regresji lub oceny małej zmiany z kompletnym 10/10.
 
-Większe pliki: [aktywny plan](large-models.md),9 przypadków wraz z pięcioma413. Diagnostyka:5 pełnych konwersji podglądu,1 nierozstrzygnięte odrzucenie parsera,3 sygnały przy granicyCPU; nie jest to nowa obsługa HTTP.
+Większe pliki: [aktywny plan](large-models.md),9 przypadków wraz z pięcioma413. Diagnostyka:5 pełnych konwersji podglądu,3 potwierdzone odrzucenia topologii i1 sygnał przy granicyCPU; nie jest to nowa obsługa HTTP.
 
 ## Etapy i dowody
 
@@ -40,7 +40,7 @@ Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi
 
 ## Następne kroki i zamknięcie
 
-1. Zapisać rzeczywisty wynik trwającego core; następne sprawdzenia kierować na zmiany lub wykazane luki. Bez powtarzania zielonych zestawów bez powodu i bez sumowania osobnych przebiegów w pełny PASS.
+1. Core33/33 zapisany; następne sprawdzenia kierować na zmiany lub wykazane luki. Bez powtarzania zielonych zestawów bez powodu i bez sumowania osobnych przebiegów w pełny PASS.
 2. Po decyzji użytkownika ustalić politykę pozostałych dużych modeli. Zachować jawny FAIL wadliwego32; raportować limity i skutki dla UI zamiast udawać obsługę/cenę.
 3. Uzupełniać wykazane luki całej mapy interakcji, grafik/przykładów i stanów/dialogów w obu motywach/rozmiarach, zachowując styl Piotra; nie ograniczać pierwotnego wymagania do istniejących testów.
 4. Końcowy review GPT-6-Sol xhigh: poprawność, uprawnienia/bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody testowe, prostota, utrzymanie, zgodność wizualna/kontrakt. Naprawiać konkretne uwagi, bez wymuszania ocen. Cel otwarty przy nieudowodnionych wymaganiach lub ocenach poniżej żądanego poziomu.
@@ -48,3 +48,5 @@ Dalsze regresje: publikacja z dwóch sesji MFA 1 PASS/29,5 s; zerwane odpowiedzi
 Bieżąca regresja uploadów: `topology-models-ui-final.json`,6 PASS/5,5s. Naprawiono klasyfikację topologii3MF bez akceptowania wadliwej siatki; duże14/21/37 mają potwierdzony problem krawędzi,41 nadal ograniczenie CPU w diagnostyce. Szczegóły w planie większych modeli.
 
 Etap bezstratnego kompaktowego GLB wdrożony; większy profil HTTP nadal oczekuje decyzji. Pięć diagnostycznych dużych modeli ma mniejsze podglądy, trzy mieszczą się w25 MiB. Nie uznajemy tego za nowe zaakceptowane uploady ani ceny. Szczegóły i aktualne testy: raport/plan dużych modeli.
+
+Regresja kont: `pending-mfa-revocation.json`2 PASS/8,5s — realny formularz zmiany hasła odwołuje zarówno kopię sesji zalogowanej, jak niezależną sesję czekającą na2FA. Stare hasło odrzucone, nowe nadal wymaga drugiego składnika; pozostałe istniejące kontrole passkey/TOTP/recovery zachowane. Bez emaila/dostawców i bez zmian produktu.

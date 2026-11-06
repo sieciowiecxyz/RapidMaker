@@ -53,23 +53,48 @@ test('real security settings rotate sessions, change password, use passkey and r
   await security.getByRole('button', { name: 'Odśwież stan', exact: true }).click();
   await expect(security.getByRole('heading', { name: 'Zmień hasło', exact: true })).toBeVisible();
   const stale = await browser.newContext({ storageState: await context.storageState() });
+  const pending = await browser.newContext();
   const password = account.password + '-changed';
-  await security.getByLabel('Nowe hasło', { exact: true }).fill('short');
-  await security.getByLabel('Powtórz hasło', { exact: true }).fill('short');
-  await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
-  await expect(security.getByRole('alert')).toContainText('12');
-  await security.getByLabel('Nowe hasło', { exact: true }).fill(password);
-  await security.getByLabel('Powtórz hasło', { exact: true }).fill(password + 'different');
-  await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
-  await expect(security.getByRole('alert')).toContainText(/hasła są różne/);
-  await security.getByLabel('Powtórz hasło', { exact: true }).fill(password);
-  const saved = page.waitForResponse(
-    (r) => r.url().endsWith('/api/account/password') && r.request().method() === 'PUT',
-  );
-  await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
-  expect((await saved).status()).toBe(200);
-  expect((await stale.request.get('/api/auth/me')).status()).toBe(401);
-  await stale.close();
+  const origin = new URL(page.url()).origin;
+  try {
+    const primary = await pending.request.post(`${origin}/api/auth/password/login`, {
+      headers: { Origin: origin },
+      data: { email: account.email, password: account.password },
+    });
+    expect(primary.status()).toBe(200);
+    const pendingMe = await pending.request.get(`${origin}/api/auth/me`);
+    expect(pendingMe.status()).toBe(200);
+    const pendingSession = await pendingMe.json();
+    expect(pendingSession.stage).toBe('second_factor');
+    expect((await pending.request.get(`${origin}/api/account/orders`)).status()).toBe(401);
+    await security.getByLabel('Nowe hasło', { exact: true }).fill('short');
+    await security.getByLabel('Powtórz hasło', { exact: true }).fill('short');
+    await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
+    await expect(security.getByRole('alert')).toContainText('12');
+    await security.getByLabel('Nowe hasło', { exact: true }).fill(password);
+    await security.getByLabel('Powtórz hasło', { exact: true }).fill(password + 'different');
+    await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
+    await expect(security.getByRole('alert')).toContainText(/hasła są różne/);
+    await security.getByLabel('Powtórz hasło', { exact: true }).fill(password);
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith('/api/account/password') && r.request().method() === 'PUT',
+    );
+    await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    expect((await stale.request.get('/api/auth/me')).status()).toBe(401);
+    expect(
+      (
+        await pending.request.post(`${origin}/api/auth/factor/verify`, {
+          headers: { Origin: origin, 'X-CSRF-Token': pendingSession.csrf_token },
+          data: { code: totp(account.totp_uri!) },
+        })
+      ).status(),
+    ).toBe(401);
+    expect((await pending.request.get(`${origin}/api/auth/me`)).status()).toBe(401);
+    expect((await pending.request.get(`${origin}/api/account/orders`)).status()).toBe(401);
+  } finally {
+    await Promise.all([pending.close(), stale.close()]);
+  }
   const probe = await browser.newContext();
   try {
     const endpoint = new URL('/api/auth/password/login', page.url()).href;
