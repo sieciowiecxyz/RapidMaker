@@ -6,7 +6,7 @@ Opis: aktualne granice, dowody i następne kroki; szczegóły w [raporcie](../co
 ## Cel i decyzje
 - Pełna geometria STL/STEP/3MF dla slicera; ograniczony, poprawny podgląd. Nie liczymy413/422 jako obsługi modelu ani błędu konwersji jako udanej ręcznej wyceny.
 - Zachować wygląd Piotra, własność, kwoty dysku, izolację, holdy zamówień i dokładne kwoty płatności. Cały cel stron/auth/email/wycen pozostaje w [corpus-quality.md](corpus-quality.md).
-- Profil `large` jest przygotowany/testowany, **niewłączony na serwerze użytkownika**; wymaga jawnego `AUTH_MODE=localhost`. Pytanie o budżet/default nadal bez odpowiedzi. `.env` nie zmieniamy bez niej.
+- Po decyzji o rozszerzeniu obsługi profil `large` działa na lokalnym serwerze od 6 listopada; wymaga `AUTH_MODE=localhost`. Ustawiono go tylko w środowisku procesu, bez zmiany `.env`. Domyślny profil programu pozostaje standard; produkcji nie wdrażano.
 - 41 projektów wystarcza; bez nowych pobrań. STEP z fixtures. Dane/zrzuty prywatne i ignorowane.
 
 ## Budżety
@@ -78,3 +78,14 @@ Kontrole po poprawce: 50 testów geometrii PASS / 1 wcześniej opcjonalny ignore
 Review Sol xhigh po poprawce encji: brak konkretnego blokera. Oceny /10: poprawność 8, bezpieczeństwo 9, kwoty N/A, zasoby 8, błędy 9, współbieżność 9, dowody 9, prostota 7, utrzymanie 7, wygląd N/A. Dodatkowy skan XML ma koszt: dwa przyjęte duże przypadki mieszczą się w limicie, bez gwarancji dla dowolnego pliku/sprzętu. Reviewer nie uruchamiał testów ponownie; nie jest to ocena całego celu.
 
 Regresja zwykłego profilu po kontroli zespołu: `budget41-standard-models.json` 8 PASS / 7,6 s — wszystkie formaty, odrzucenia, retencja, izolacja klientów/admission i upload ponad dawnym limitem 25 MiB.
+
+
+## Lokalny serwer — 6 listopada
+
+`http://localhost:18430/wycena` obsługuje worktree `codex/corpus-quality`, API 18432 z profilem large. Przed aktualizacją zachowano poprzednią binarkę, pg_dump i pliki; strukturę dumpa sprawdzono pg_restore --list (nie wykonano odtworzenia). Migracje 22–23 zastosowane, dane głównego checkoutu i `.env` bez edycji. Pierwszy check kopii nie przekazał stdin do kontenera i uruchomił rollback; następny check z -i i aktualizacja przeszły.
+
+Rzeczywisty formularz: model 8, 78 387 984 B → 201, prywatny GLB 19 466 312 B / 1 567 758 trójkątów, wymiary 100×190×58 mm, geometria widoczna na obejrzanym zrzucie; usunięcie własnego testowego uploadu 204. Prywatny zapis smoke-fixed.json. Pierwszy smoke przy 201 stracił body odpowiedzi w cache inspektora; poprawiono harness na odczyt ID ze szkicu i metadata GET. Jego poprzedni upload pozostał bez cookie do naturalnej retencji 24 h. Nie uznajemy tego pierwszego testu za PASS.
+
+Nie powtarzano tu slicera/Stripe/email; ich izolowane dowody opisano osobno. Wspólny backend/target jest symlinkiem do głównego checkoutu: to współdzielona binarka, nie izolowany katalog kompilacji; jej SHA zapisano w prywatnych metadata. Kolejny start przez launcher wymaga jawnego `MODEL_PROFILE=large python backend/run.py`, inaczej wróci standard. Backup i logi są prywatne/ignorowane.
+
+Scoped Sol xhigh bez blokera dla upload/podgląd/usunięcie: poprawność 8, bezpieczeństwo 8, kwoty 7, zasoby 7, błędy 7, współbieżność 7, dowody 8, prostota 7, utrzymanie 7, wygląd 8. Bez ponawiania testów przez reviewera i bez oceny całego produktu.
