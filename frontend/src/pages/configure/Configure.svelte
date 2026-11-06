@@ -14,6 +14,12 @@
     progress = $state(''),
     selectedId = $state('');
   let uploadLimit = $state(25 * 1024 * 1024);
+  const abandonedUploads = new Set<string>();
+  async function releaseUpload(id: string) {
+    abandonedUploads.add(id);
+    await api.releaseModel(id);
+    abandonedUploads.delete(id);
+  }
   let generation = 0;
   let editorRevision = $state(0);
   let advancedOpen = $state(false);
@@ -59,6 +65,7 @@
     quoteValid = false;
     error = '';
     try {
+      for (const id of abandonedUploads) await releaseUpload(id);
       await action();
       await refresh();
     } catch (e) {
@@ -68,10 +75,11 @@
   }
   async function files(list: FileList | null) {
     if (!list || busy) return;
+    const admission = generation;
     const chosen = Array.from(list);
     if (chosen.some((file) => file.size > uploadLimit))
       uploadLimit = await api.getModelUploadLimit();
-    if (busy) return;
+    if (busy || admission !== generation) return;
     error = '';
     for (const file of chosen) {
       if (!/\.(stl|step|stp|3mf)$/i.test(file.name)) {
@@ -87,17 +95,30 @@
       for (let index = 0; index < chosen.length; index++) {
         progress = `Analizujemy model ${index + 1} z ${chosen.length}…`;
         const analysis = await api.analyzeModel(chosen[index]);
-        const next = await api.addModel(chosen[index].name);
-        selectedId = next.models.at(-1)?.id ?? '';
-        await api.updateModel(selectedId, {
-          analysis,
-          shipping: analysis.weight_g
-            ? {
-                dimensions_mm: analysis.dimensions_mm.map(Math.ceil) as [number, number, number],
-                weight_g: Math.ceil(analysis.weight_g),
-              }
-            : undefined,
-        });
+        let addedId = '';
+        try {
+          const next = await api.addModel(chosen[index].name);
+          addedId = next.models.at(-1)?.id ?? '';
+          selectedId = addedId;
+          await api.updateModel(addedId, {
+            analysis,
+            shipping: analysis.weight_g
+              ? {
+                  dimensions_mm: analysis.dimensions_mm.map(Math.ceil) as [number, number, number],
+                  weight_g: Math.ceil(analysis.weight_g),
+                }
+              : undefined,
+          });
+        } catch (cause) {
+          const cleanup = await Promise.allSettled([
+            releaseUpload(analysis.id),
+            ...(addedId ? [api.removeModel(addedId)] : []),
+          ]);
+          const failed = cleanup.find((result) => result.status === 'rejected');
+          throw new Error(
+            `${cause instanceof Error ? cause.message : 'Nie udało się dodać modelu.'}${failed?.status === 'rejected' ? ` Sprzątanie: ${failed.reason instanceof Error ? failed.reason.message : 'ponów operację.'}` : ''}`,
+          );
+        }
       }
     });
     progress = '';
@@ -205,7 +226,13 @@
             <button
               class="button ghost"
               disabled={busy}
-              onclick={() => mutate(() => api.removeModel(model.id))}
+              onclick={() => {
+                if (busy) return;
+                void mutate(async () => {
+                  if (model.analysis?.id) await api.releaseModel(model.analysis.id);
+                  await api.removeModel(model.id);
+                });
+              }}
               aria-label={`Usuń ${model.name}`}>Usuń</button
             >
           </div>

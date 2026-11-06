@@ -75,6 +75,28 @@
   let materials = $state<Material[]>([]);
   let models = $state<Model[]>([]);
   const uploadedFiles = new Map<string,File>();
+  const uploads = new Map<string,Promise<void>>();
+  let uploadTail = Promise.resolve();
+  const removals = new Map<string,Promise<boolean>>();
+  const releases = new Map<string,Promise<void>>();
+  const pendingCleanup = new Set<string>();
+  let replacingSamples = false;
+  let admissionGeneration = 0;
+  function releaseRemote(id:string) {
+    const existing=releases.get(id);
+    if(existing)return existing;
+    const task=api.releaseModel(id).finally(()=>releases.delete(id));
+    releases.set(id,task);
+    return task;
+  }
+  async function cleanupUpload(id:string) {
+    pendingCleanup.add(id);
+    await releaseRemote(id);
+    pendingCleanup.delete(id);
+  }
+  async function retryCleanup() {
+    for(const id of pendingCleanup)await cleanupUpload(id);
+  }
   const meshCache = new Map<string,StlMesh>();
   let fileRevision = $state(0);
   type Preview = {status:'idle'|'loading'|'ready'|'error'|'unsupported';id:string;mesh?:StlMesh;error?:string};
@@ -127,11 +149,24 @@
     const settings=models.find(model=>model.id===id)?.settings;
     if(settings) lastSettings={...settings};
   }
-  function removeModel(id:string) {
-    uploadedFiles.delete(id);meshCache.delete(id);fileRevision++;
-    const index=models.findIndex(model=>model.id===id);
-    models=models.filter(model=>model.id!==id);
-    if(selectedId===id) selectModel(models[Math.min(index,models.length-1)]?.id ?? '');
+  function removeModel(id:string):Promise<boolean> {
+    const existing=removals.get(id);
+    if(existing)return existing;
+    const task=Promise.resolve().then(async()=>{
+      const model=models.find(model=>model.id===id);
+      try {
+        if(!model)return true;
+        if(!model.sample && model.analysis?.id)await releaseRemote(model.analysis.id);
+        uploadedFiles.delete(id);meshCache.delete(id);fileRevision++;
+        const index=models.findIndex(model=>model.id===id);
+        models=models.filter(model=>model.id!==id);
+        if(selectedId===id)selectModel(models[Math.min(index,models.length-1)]?.id ?? '');
+        return true;
+      }catch(error){fileError=error instanceof Error?error.message:'Nie udało się usunąć pliku modelu.';return false;}
+      finally{removals.delete(id);}
+    });
+    removals.set(id,task);
+    return task;
   }
   let delivery = $state('pickup');
   let manual = $state(false);
@@ -258,14 +293,31 @@
     theme = theme === 'dark' ? 'light' : 'dark';
     saveTheme(theme);
   }
-  async function useSample(count = 1) { if(models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.'))return; uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied=''; models = (await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings,color:'black'}})); selectModel(models[0]?.id ?? ''); fileError = ''; simulateError = false; }
+  async function useSample(count = 1) {
+    if(replacingSamples)return;
+    if(models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.'))return;
+    replacingSamples=true;admissionGeneration++;
+    try {
+      await retryCleanup();
+      for(const model of [...models])if(!await removeModel(model.id))return;
+      await Promise.all(uploads.values());
+      await retryCleanup();
+      uploadedFiles.clear();meshCache.clear();fileRevision++;settingsCopied='';
+      models=(await api.getSampleModels(count)).map(model=>({...model,settings:{...emptySettings,color:'black'}}));
+      selectModel(models[0]?.id ?? '');fileError='';simulateError=false;
+    }catch(error){fileError=error instanceof Error?error.message:'Nie udało się usunąć plików przed wczytaniem przykładu.';}
+    finally{replacingSamples=false;}
+  }
   let uploadLimit = $state(25 * 1024 * 1024);
   async function addFiles(files: FileList | File[] | null) {
     if (!files?.length) return;
+    if(replacingSamples){fileError='Poczekaj na zakończenie usuwania modeli.';return;}
+    const admission=admissionGeneration;
     const incoming = Array.from(files);
     const invalid = incoming.find(file => !/\.(stl|step|stp|3mf)$/i.test(file.name));
     if (invalid) { fileError = `Nieobsługiwany format: ${invalid.name}. Wybierz STL, STEP lub 3MF.`; return; }
     if (incoming.some(file => file.size > uploadLimit)) uploadLimit = await api.getModelUploadLimit();
+    if(replacingSamples || admission!==admissionGeneration)return;
     if (models.length + incoming.length > 10) { fileError = 'Możesz dodać do 10 modeli. Usuń część plików i spróbuj ponownie.'; return; }
     if (incoming.some(file => file.size === 0 || file.size > uploadLimit)) { fileError = `Wybierz niepusty plik do ${uploadLimit / 1024 / 1024} MB.`; return; }
     fileError = ''; simulateError = false; settingsCopied='';
@@ -276,14 +328,33 @@
     if (fileInput) fileInput.value = '';
   }
   function changeQuantity(id: string, quantity: number) { models = models.map(m => m.id === id ? { ...m, quantity } : m); }
-  async function uploadModel(id:string) {
+  function uploadModel(id:string):Promise<void> {
+    const existing=uploads.get(id);
+    if(existing)return existing;
     const file=uploadedFiles.get(id);
-    if(!file)return;
-    models=models.map(model=>model.id===id?{...model,status:'analyzing',error:undefined}:model);
-    try {
-      const analysis=await api.analyzeFile(file);
-      models=models.map(model=>model.id===id?{...model,analysis,status:'ready',error:undefined}:model);
-    }catch(error){models=models.map(model=>model.id===id?{...model,status:'error',error:error instanceof Error?error.message:'Nie udało się wysłać modelu.'}:model);}
+    if(!file || !models.some(model=>model.id===id))return Promise.resolve();
+    // Serialize uploads so the guest cookie from an accepted response owns later cleanup.
+    const task=uploadTail.then(async()=>{
+      try {
+        await retryCleanup();
+        if(uploadedFiles.get(id)!==file || !models.some(model=>model.id===id))return;
+        models=models.map(model=>model.id===id?{...model,status:'analyzing',error:undefined}:model);
+        const analysis=await api.analyzeFile(file);
+        if(uploadedFiles.get(id)!==file || !models.some(model=>model.id===id)){
+          await cleanupUpload(analysis.id);
+          return;
+        }
+        models=models.map(model=>model.id===id?{...model,analysis,status:'ready',error:undefined}:model);
+      }catch(error){
+        const message=error instanceof Error?error.message:'Nie udało się wysłać modelu.';
+        if(pendingCleanup.size)fileError=message;
+        if(uploadedFiles.get(id)===file && models.some(model=>model.id===id))models=models.map(model=>model.id===id?{...model,status:'error',error:message}:model);
+        else fileError=message;
+      }finally{uploads.delete(id);}
+    });
+    uploadTail=task;
+    uploads.set(id,task);
+    return task;
   }
   async function prepareContact(event:MouseEvent) {
     if (!canContact || !quote || transitioning || preparing) return;

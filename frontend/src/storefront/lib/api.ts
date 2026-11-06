@@ -47,6 +47,7 @@ export async function getMaterials(): Promise<Material[]> {
 
 export const getSampleModels = samples;
 export const analyzeFile = checkout.analyzeModel;
+export const releaseModel = checkout.releaseModel;
 export const getModelUploadLimit = checkout.getModelUploadLimit;
 
 function validate(models: Model[], materials: Material[]) {

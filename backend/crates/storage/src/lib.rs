@@ -29,7 +29,7 @@ mod shipments;
 pub use admin::{MaterialInput, validate_color};
 pub use auth::{AuthSession, AuthUser};
 pub use email::{EmailOutcome, EmailStats, QueuedEmail};
-pub use models::{StoredModel, account_owner};
+pub use models::{ModelRemoval, StoredModel, account_owner};
 pub use orders::OrderInput;
 pub use refunds::{Refund, RefundPrepareError};
 pub use shipment_actions::ShipmentAction;

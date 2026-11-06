@@ -3,13 +3,13 @@ use super::model_limits::ModelProfile;
 use axum::{
     Json,
     body::Bytes,
-    extract::{DefaultBodyLimit, Path as RoutePath, Request, State},
+    extract::{DefaultBodyLimit, Extension, Path as RoutePath, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
 use percent_encoding::{NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
-use rapidmaker_storage::{Storage, StoredModel};
+use rapidmaker_storage::{ModelRemoval, Storage, StoredModel};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -64,6 +64,7 @@ pub fn router(storage: Option<Storage>) -> Result<Router, String> {
         .route_layer(middleware::from_fn_with_state(state.clone(), admit_upload));
     Ok(Router::new()
         .merge(uploads)
+        .routes(routes!(remove))
         .routes(routes!(metadata))
         .routes(routes!(source))
         .routes(routes!(preview))
@@ -190,23 +191,7 @@ async fn cleanup(state: &FileState, timestamp: i64) -> Result<(), Error> {
         )
     })?;
     for id in ids {
-        // Defense in depth: a corrupt DB identifier must never become a disk path.
-        if !valid_id(&id) {
-            return Err(error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Błędny identyfikator modelu.",
-            ));
-        }
-        match fs::remove_dir_all(state.root.join(&id)) {
-            Ok(()) => (),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-            Err(_) => {
-                return Err(error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Nie można usunąć wygasłego modelu.",
-                ));
-            }
-        }
+        remove_private_directory(&state.root, &id)?;
         storage
             .forget_expired_model(&id, timestamp)
             .await
@@ -218,6 +203,82 @@ async fn cleanup(state: &FileState, timestamp: i64) -> Result<(), Error> {
             })?;
     }
     Ok(())
+}
+
+fn remove_private_directory(root: &Path, id: &str) -> Result<(), Error> {
+    if !valid_id(id) {
+        return Err(error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Błędny identyfikator modelu.",
+        ));
+    }
+    match fs::remove_dir_all(root.join(id)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Nie można usunąć plików modelu. Spróbuj ponownie.",
+        )),
+    }
+}
+
+#[utoipa::path(operation_id = "files_remove", delete, path = "/api/models/{id}", tag = "Modele",
+    params(("id" = String, Path)),
+    responses((status = 204, description = "Model i pliki usunięte"),
+        (status = 404, description = "Brak własnego modelu", body = Value),
+        (status = 409, description = "Model chroniony przez wycenę lub zamówienie", body = Value),
+        (status = 403, description = "Nieprawidłowy Origin lub CSRF", body = Value),
+        (status = 500, description = "Usuwanie plików nie powiodło się; ponów żądanie", body = Value),
+        (status = 503, description = "Magazyn chwilowo niedostępny", body = Value)),
+    security(("session" = [], "csrf" = []), ("guest" = [])))]
+async fn remove(
+    State(state): State<FileState>,
+    Extension(auth): Extension<std::sync::Arc<super::auth::Auth>>,
+    headers: HeaderMap,
+    RoutePath(id): RoutePath<String>,
+) -> Result<StatusCode, Error> {
+    if !valid_id(&id) {
+        return Err(error(StatusCode::NOT_FOUND, "Nie znaleziono modelu."));
+    }
+    // Destructive guest requests also require an exact Origin in localhost mode.
+    auth.check_origin(&headers)?;
+    let guest_owner = if super::auth::session_cookie(&headers)?.is_some() {
+        auth.mutation(&headers).await?;
+        owner(&headers)
+    } else {
+        None
+    };
+    let storage = database(&state)?;
+    let owner = super::cart::owner(Some(storage), &headers).await?;
+    let timestamp = now()?;
+    let unavailable = || {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Nie można usunąć modelu. Spróbuj ponownie.",
+        )
+    };
+    match storage
+        .begin_model_removal_with_guest(&id, &owner, guest_owner.as_deref(), timestamp)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        ModelRemoval::Missing => {
+            return Err(error(StatusCode::NOT_FOUND, "Nie znaleziono modelu."));
+        }
+        ModelRemoval::Protected => {
+            return Err(error(
+                StatusCode::CONFLICT,
+                "Model jest używany przez wycenę lub zamówienie.",
+            ));
+        }
+        ModelRemoval::Ready => {}
+    }
+    remove_private_directory(&state.root, &id)?;
+    storage
+        .forget_expired_model(&id, timestamp)
+        .await
+        .map_err(|_| unavailable())?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn valid_id(id: &str) -> bool {
@@ -656,6 +717,32 @@ fn private_bytes(path: &Path, expected: i64, limit: usize) -> Result<Vec<u8>, Er
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn private_directory_removal_is_uuid_bounded_idempotent_and_retryable() {
+        let root = std::env::temp_dir().join(format!("rapidmaker-remove-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let _cleanup = PendingDirectory(Some(root.clone()));
+        let id = Uuid::new_v4().to_string();
+        let directory = root.join(&id);
+        fs::write(&directory, b"blocked by non-directory").unwrap();
+        assert!(remove_private_directory(&root, &id).is_err());
+        assert!(remove_private_directory(&root, "..").is_err());
+        assert!(directory.exists());
+        fs::remove_file(&directory).unwrap();
+        fs::create_dir(&directory).unwrap();
+        fs::write(directory.join("model.stl"), b"private model").unwrap();
+        remove_private_directory(&root, &id).unwrap();
+        assert!(!directory.exists());
+        remove_private_directory(&root, &id).unwrap();
+        let keep = root.join("keep");
+        fs::create_dir(&keep).unwrap();
+        fs::write(keep.join("sentinel"), b"preserve").unwrap();
+        std::os::unix::fs::symlink(&keep, &directory).unwrap();
+        remove_private_directory(&root, &id).unwrap();
+        assert!(keep.join("sentinel").is_file());
+        assert!(root.is_dir());
+    }
 
     #[tokio::test]
     async fn persisted_large_downloads_ignore_admission_profile_and_keep_admin_gate() {

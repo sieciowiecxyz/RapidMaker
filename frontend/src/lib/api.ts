@@ -433,6 +433,19 @@ export function getModelUploadLimit(): Promise<number> {
     }));
 }
 
+export async function releaseModel(id: string): Promise<void> {
+  const response = await apiFetch(`/api/models/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (response.status === 204 || response.status === 404) return;
+  const data = await response.json().catch(() => undefined);
+  throw new ApiError(
+    response.status,
+    typeof data?.message === 'string'
+      ? data.message
+      : 'Nie udało się usunąć pliku modelu. Spróbuj ponownie.',
+    data?.code,
+  );
+}
+
 export async function analyzeModel(file: File) {
   const response = await apiFetch('/api/models', {
     method: 'POST',

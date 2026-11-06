@@ -16,6 +16,13 @@ pub struct StoredModel {
     pub expires_at: i64,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ModelRemoval {
+    Missing,
+    Protected,
+    Ready,
+}
+
 /// Resource namespace only: callers must authenticate the session before using it.
 pub fn account_owner(user: &str) -> String {
     rapidmaker_auth::hash_token(&format!("account-owner-v1:{user}"))
@@ -131,6 +138,55 @@ impl Storage {
         Ok(ids)
     }
 
+    /// Fence new quotes/holds before filesystem deletion; marked rows stay owned and retryable.
+    pub async fn begin_model_removal(
+        &self,
+        id: &str,
+        owner: &str,
+        now: i64,
+    ) -> Result<ModelRemoval, StorageError> {
+        self.begin_model_removal_with_guest(id, owner, None, now)
+            .await
+    }
+
+    /// The caller must authenticate the account and original guest cookie separately.
+    /// The alternate namespace can authorize only unclaimed guest records.
+    pub async fn begin_model_removal_with_guest(
+        &self,
+        id: &str,
+        owner: &str,
+        authorized_guest: Option<&str>,
+        now: i64,
+    ) -> Result<ModelRemoval, StorageError> {
+        if authorized_guest
+            .is_some_and(|guest| guest.len() != 64 || !guest.bytes().all(|b| b.is_ascii_hexdigit()))
+        {
+            return Err("invalid guest owner hash".into());
+        }
+        let mut tx = self.queue_transaction().await?;
+        if sqlx::query("SELECT id FROM private_models WHERE id=$1 AND (owner_hash=$2 OR (user_id IS NULL AND owner_hash=$3)) FOR UPDATE")
+            .bind(id)
+            .bind(owner)
+            .bind(authorized_guest)
+            .fetch_optional(&mut *tx)
+            .await?
+            .is_none()
+        {
+            return Ok(ModelRemoval::Missing);
+        }
+        let protected: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM slicer_jobs WHERE model_id=$1 AND status='running' AND lease_until>$2) OR EXISTS(SELECT 1 FROM order_files WHERE model_id=$1 AND (retain_until IS NULL OR retain_until>$2))")
+            .bind(id).bind(now).fetch_one(&mut *tx).await?;
+        if protected {
+            return Ok(ModelRemoval::Protected);
+        }
+        sqlx::query("UPDATE slicer_jobs SET status='failed',error='model_removed',lease_token=NULL,lease_until=NULL WHERE model_id=$1 AND status IN ('queued','running')")
+            .bind(id).execute(&mut *tx).await?;
+        sqlx::query("UPDATE private_models SET expires_at=LEAST(expires_at,$2),deletion_started=true WHERE id=$1")
+            .bind(id).bind(now).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(ModelRemoval::Ready)
+    }
+
     /// Delete metadata after file deletion succeeds, so failed cleanup still counts toward quota.
     pub async fn forget_expired_model(&self, id: &str, now: i64) -> Result<(), StorageError> {
         sqlx::query(
@@ -205,6 +261,361 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect::<String>();
         assert_ne!(owner, raw_guest);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated TEST_DATABASE_URL"]
+    async fn model_removal_guest_fallback_is_targeted_and_cannot_override_account_ownership() {
+        let db = Storage::connect(&std::env::var("TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        assert!(
+            sqlx::query_scalar::<_, bool>("SELECT current_database() LIKE 'rapidmaker_test%'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap()
+        );
+        let now = 2_000_000_000;
+        let users = [
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+        ];
+        for user in &users {
+            sqlx::query("INSERT INTO users(id,email,created_at) VALUES($1,$2,$3)")
+                .bind(user)
+                .bind(format!("{user}@example.com"))
+                .bind(now)
+                .execute(&db.pool)
+                .await
+                .unwrap();
+        }
+        let account = account_owner(&users[0]);
+        let other_account = account_owner(&users[1]);
+        let guest = account_owner(&uuid::Uuid::new_v4().to_string());
+        let wrong_guest = "b".repeat(64);
+        let mut model = StoredModel {
+            id: uuid::Uuid::new_v4().to_string(),
+            owner_hash: guest.clone(),
+            user_id: None,
+            filename: "inflight.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 100,
+            mesh_bytes: 100,
+            preview_bytes: 0,
+            sha256: "a".repeat(64),
+            dimensions_mm: [20.; 3],
+            expires_at: now + 3600,
+        };
+        assert!(db.insert_model(&model).await.unwrap());
+        let target = model.id.clone();
+        model.id = uuid::Uuid::new_v4().to_string();
+        assert!(db.insert_model(&model).await.unwrap());
+        let unrelated = model.id.clone();
+        assert_eq!(
+            db.begin_model_removal_with_guest(&target, &account, Some(&wrong_guest), now)
+                .await
+                .unwrap(),
+            ModelRemoval::Missing
+        );
+        assert_eq!(
+            db.begin_model_removal(&target, &other_account, now)
+                .await
+                .unwrap(),
+            ModelRemoval::Missing
+        );
+        assert_eq!(
+            db.begin_model_removal_with_guest(&target, &account, Some(&guest), now)
+                .await
+                .unwrap(),
+            ModelRemoval::Ready
+        );
+        let (owner, user): (String, Option<String>) =
+            sqlx::query_as("SELECT owner_hash,user_id FROM private_models WHERE id=$1")
+                .bind(&target)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(owner, guest);
+        assert!(user.is_none());
+        assert!(db.model(&unrelated, &guest, now).await.unwrap().is_some());
+        assert_eq!(
+            db.begin_model_removal_with_guest(&target, &account, Some(&guest), now)
+                .await
+                .unwrap(),
+            ModelRemoval::Ready
+        );
+
+        model.id = uuid::Uuid::new_v4().to_string();
+        model.owner_hash = other_account.clone();
+        model.user_id = Some(users[1].clone());
+        assert!(db.insert_model(&model).await.unwrap());
+        for fallback in [&guest, &other_account] {
+            assert_eq!(
+                db.begin_model_removal_with_guest(&model.id, &account, Some(fallback), now)
+                    .await
+                    .unwrap(),
+                ModelRemoval::Missing
+            );
+        }
+        assert_eq!(
+            db.begin_model_removal(&model.id, &guest, now)
+                .await
+                .unwrap(),
+            ModelRemoval::Missing
+        );
+        assert!(
+            db.model(&model.id, &other_account, now)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            db.begin_model_removal(&model.id, &other_account, now)
+                .await
+                .unwrap(),
+            ModelRemoval::Ready
+        );
+        sqlx::query("DELETE FROM private_models WHERE id=ANY($1)")
+            .bind(vec![target, unrelated, model.id])
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM users WHERE id=ANY($1)")
+            .bind(users.to_vec())
+            .execute(&db.pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated TEST_DATABASE_URL"]
+    async fn working_model_removal_fences_jobs_preserves_holds_and_releases_quota() {
+        use serde_json::json;
+        let db = Storage::connect(&std::env::var("TEST_DATABASE_URL").unwrap())
+            .await
+            .unwrap();
+        assert!(
+            sqlx::query_scalar::<_, bool>("SELECT current_database() LIKE 'rapidmaker_test%'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap()
+        );
+        let now = 2_000_000_000;
+        let owner = account_owner(&uuid::Uuid::new_v4().to_string());
+        let mut model = StoredModel {
+            id: String::new(),
+            owner_hash: owner.clone(),
+            user_id: None,
+            filename: "removal.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 32 * 1024 * 1024,
+            mesh_bytes: 50 * 1024 * 1024,
+            preview_bytes: 0,
+            sha256: "a".repeat(64),
+            dimensions_mm: [20.; 3],
+            expires_at: now + 3600,
+        };
+        let mut ids = Vec::new();
+        for _ in 0..3 {
+            model.id = uuid::Uuid::new_v4().to_string();
+            assert!(db.insert_model(&model).await.unwrap());
+            ids.push(model.id.clone());
+        }
+        model.id = uuid::Uuid::new_v4().to_string();
+        assert!(!db.insert_model(&model).await.unwrap());
+        let queued = db
+            .enqueue_slice(&owner, &ids[0], "remove-queued", &json!({}), now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[0], &"b".repeat(64), now)
+                .await
+                .unwrap(),
+            ModelRemoval::Missing
+        );
+        assert_eq!(
+            db.slice_job(&queued.id, &owner, now)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            "queued"
+        );
+        let quote = uuid::Uuid::new_v4().to_string();
+        db.save_quote(&quote, &json!({"model_id":ids[0],"owner_hash":owner,"expires_at":now+3600,"model_sha256":model.sha256}), &json!({})).await.unwrap();
+        let payload = json!({});
+        let (removed, raced) = tokio::join!(
+            db.begin_model_removal(&ids[0], &owner, now),
+            db.enqueue_slice(&owner, &ids[0], "remove-race", &payload, now)
+        );
+        assert_eq!(removed.unwrap(), ModelRemoval::Ready);
+        let queued = db
+            .slice_job(&queued.id, &owner, now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(queued.status, "failed");
+        assert_eq!(queued.error.as_deref(), Some("model_removed"));
+        if let Some(job) = raced.unwrap() {
+            assert_eq!(
+                db.slice_job(&job.id, &owner, now)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .status,
+                "failed"
+            );
+        }
+        assert_eq!(
+            db.begin_model_removal(&ids[0], &owner, now).await.unwrap(),
+            ModelRemoval::Ready
+        );
+        assert!(
+            db.enqueue_slice(&owner, &ids[0], "after-remove", &json!({}), now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            !db.hold_order_files(
+                &uuid::Uuid::new_v4().to_string(),
+                &owner,
+                std::slice::from_ref(&quote),
+                now
+            )
+            .await
+            .unwrap()
+        );
+        assert!(!db.insert_model(&model).await.unwrap()); // Mark alone cannot release quota.
+        db.forget_expired_model(&ids[0], now).await.unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[0], &owner, now).await.unwrap(),
+            ModelRemoval::Missing
+        );
+        assert!(db.insert_model(&model).await.unwrap());
+
+        let running = db
+            .enqueue_slice(&owner, &ids[1], "remove-running", &json!({}), now)
+            .await
+            .unwrap()
+            .unwrap();
+        sqlx::query("UPDATE slicer_jobs SET status='running',attempts=1,lease_token='removal-test',lease_until=$2 WHERE id=$1")
+            .bind(&running.id).bind(now+180).execute(&db.pool).await.unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[1], &owner, now).await.unwrap(),
+            ModelRemoval::Protected
+        );
+        assert!(db.model(&ids[1], &owner, now).await.unwrap().is_some());
+        assert_eq!(
+            db.slice_job(&running.id, &owner, now)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            "running"
+        );
+        sqlx::query("UPDATE slicer_jobs SET lease_until=$2 WHERE id=$1")
+            .bind(&running.id)
+            .bind(now)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[1], &owner, now).await.unwrap(),
+            ModelRemoval::Ready
+        );
+        let stale = db
+            .slice_job(&running.id, &owner, now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stale.status, "failed");
+        assert!(stale.lease_token.is_none());
+
+        let held_quote = uuid::Uuid::new_v4().to_string();
+        db.save_quote(&held_quote, &json!({"model_id":ids[2],"owner_hash":owner,"expires_at":now+3600,"model_sha256":model.sha256}), &json!({})).await.unwrap();
+        let order = uuid::Uuid::new_v4().to_string();
+        assert!(
+            db.hold_order_files(&order, &owner, std::slice::from_ref(&held_quote), now)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            db.begin_model_removal(&ids[2], &owner, now).await.unwrap(),
+            ModelRemoval::Protected
+        );
+        sqlx::query("UPDATE private_models SET expires_at=$2 WHERE id=$1")
+            .bind(&ids[2])
+            .bind(now)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[2], &owner, now).await.unwrap(),
+            ModelRemoval::Protected
+        );
+        assert!(
+            db.order_model(&order, &ids[2], now)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        sqlx::query("UPDATE order_files SET retain_until=$2 WHERE order_id=$1")
+            .bind(&order)
+            .bind(now + 1)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[2], &owner, now).await.unwrap(),
+            ModelRemoval::Protected
+        );
+        sqlx::query("UPDATE order_files SET retain_until=$2 WHERE order_id=$1")
+            .bind(&order)
+            .bind(now)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            db.begin_model_removal(&ids[2], &owner, now).await.unwrap(),
+            ModelRemoval::Ready
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT retain_until FROM order_files WHERE order_id=$1")
+                .bind(&order)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap(),
+            now
+        );
+        db.forget_expired_model(&ids[1], now).await.unwrap();
+        db.forget_expired_model(&ids[2], now).await.unwrap();
+        sqlx::query("DELETE FROM order_files WHERE order_id=$1")
+            .bind(&order)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM order_file_holds WHERE order_id=$1")
+            .bind(&order)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM quotes WHERE id=ANY($1)")
+            .bind(vec![quote, held_quote])
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM slicer_jobs WHERE owner_hash=$1")
+            .bind(&owner)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM private_models WHERE owner_hash=$1")
+            .bind(&owner)
+            .execute(&db.pool)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
