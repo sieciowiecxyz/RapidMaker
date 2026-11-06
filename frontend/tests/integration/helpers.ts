@@ -1,6 +1,6 @@
 import { expect, type Page, type Frame } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { resolve } from 'node:path';
 export type Account = {
@@ -10,6 +10,40 @@ export type Account = {
   password: string;
   totp_uri: string | null;
 };
+type StripeEvidence = {
+  payment_intent_id: string;
+  amount: number;
+  amount_received: number;
+  currency: string;
+  status: string;
+  quote_id: string;
+  refunds: {
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    ledger_refund_id: string;
+  }[];
+};
+export function stripeEvidence(input: {
+  payment_intent_id: string;
+  attempt_id: string;
+  order_id: string;
+}): StripeEvidence {
+  try {
+    return JSON.parse(
+      execFileSync('python', [resolve('tests/read-test-stripe.py')], {
+        input: JSON.stringify(input),
+        encoding: 'utf8',
+        timeout: 40_000,
+        maxBuffer: 16 * 1024,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }),
+    );
+  } catch {
+    throw new Error('Independent test Stripe evidence unavailable; no provider payload logged');
+  }
+}
 export function accounts(): Account[] {
   const path = process.env.RAPIDMAKER_TEST_ACCOUNTS;
   if (!path?.startsWith('/tmp/rapidmaker-browser-')) throw new Error('Isolated fixture missing');

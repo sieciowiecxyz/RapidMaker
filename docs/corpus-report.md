@@ -251,3 +251,31 @@ Pokrycie obu przebiegów: 36 przyjętych modeli, piksele/zoom, 1440/390 px, jasn
 Powstało 144 unikalnych ujęć (160 plików z duplikatami czterech ponowień). Wszystkie 144 obejrzano na sześciu prywatnych zestawieniach `corpus41-ui-contact/`. Układ Piotra zachowany, brak pustych podglądów/uciętych kontrolek w sprawdzonym zakresie. Rozproszone zestawy mają małe części przy widoku całego zespołu, szczególnie subtelne w ciemnym motywie; zoom działa. To nie certyfikat kontrastu ani test telefonu. Nie zmieniano kodu strony, shaderów ani stylu w tym etapie.
 
 Dodano `npm --prefix frontend run check:integration`: szybki TypeScript check wszystkich integration spec, który wykrywa taką nieistniejącą zmienną przed uruchomieniem przeglądarki; PASS. Review Sol xhigh bez blokera poprawki: poprawność 9, bezpieczeństwo 8, kwoty 8, zasoby 8, błędy 9, współbieżność N/A, dowody 9, prostota 9, utrzymanie 9, wygląd 8. Reviewer dodatkowo obejrzał strony 3 i 5 zestawień; nie powtarzał testów i nie oceniał całego celu. Aktualny core/auth/email/checkout/dostawcy i audyt mapy kontrolek nadal pozostają do wykonania.
+
+## Aktualny core — 2026-11-06, fe47828
+
+`core-current.json`: **45 PASS / 1 SKIP / 320,4 s**, bez FAIL/flaky, lokalne rzeczywiste konta/TOTP, osobny PostgreSQL/storage, dostawcy wyłączeni. Jedyny pominięty test wymaga profilu dużego: `core-large-removal-current.json` **1 PASS / 16,2 s** w osobnym przebiegu z large i manifestem. Nie opisujemy tego jako pojedynczego 46 PASS. Stan źródeł/binarki po przebiegach: prywatny core-current.sources.json; HEAD był taki sam przy uruchomieniu i po, bez zmian produktu.
+
+Sprawdzono: rzeczywisty slicer dla 1/10/1000 sztuk, sumy partii/płyt i niezależne zaokrąglenia kosztów, wiele modeli ze wspólnym przygotowaniem, podmienione/cudze wyceny; równoległych gości i deduplikację; odrzucenia/upload/retencję; własność/Origin/CSRF/usuwanie fizyczne/zwalnianie kwoty/spóźnione odpowiedzi; zmianę hasła i odwołanie sesji, passkey/TOTP/recovery; publikację ręcznej ceny przy utracie odpowiedzi i deduplikację outboxa; dokumenty prawne, publiczne/zalogowane widoki i wszystkie pięć pokazowych modeli. To testy lokalne, nie dowód doręczenia emaili lub działania Stripe/kuriera.
+
+Review Sol xhigh bez konkretnego blokera tego zakresu: poprawność 9, bezpieczeństwo 8, kwoty 9, zasoby 8, błędy 8, współbieżność 8, dowody 8, prostota N/A, utrzymanie N/A, wygląd 8. Reviewer obejrzał raporty i odpowiednie testy; nie powtarzał wykonania ani nie oceniał całego kodu na podstawie testów. Prawdziwy auth/email/zakup/panele/dostawcy i pełny audyt mapy kontrolek pozostają osobnym krokiem.
+
+## Rzeczywiste konta, email i dostawcy — 2026-11-06
+
+Osobne przebiegi na produkcie fe47828 (bez zmian backendu w tym etapie), izolowane bazy/storage, tylko Stripe test/Furgonetka sandbox i poczta testowa do void@sieciowiec.xyz:
+
+| Raport prywatny | Wynik | Zakres |
+| --- | --- | --- |
+| auth-journey-current.json | 2 PASS / 209,5 s | Hasło/email, wirtualny passkey/email, admin/TOTP; ręczna oferta, płatność, legalny email, częściowy zwrot z powiadomieniem, kopia chatu i odpowiedź SMTP widoczna raz |
+| sandbox-current.json | 9 PASS / 164,0 s | Zakup automatyczny, locker/kurier, adres/faktura, Furgonetka/cena/cache, panele/produkcja/chat/pliki/uprawnienia, częściowe/pełne zwroty i wyścigi, katalog/cennik, porzucone płatności, etykieta PDF/tracking/anulowanie/przekazanie |
+| registration-password-current.json | 1 PASS / 30,7 s | Dobrowolne konto hasłem, prawdziwy kod email, setup i prywatność |
+| registration-passkey-current.json | 1 PASS / 28,5 s | Jak wyżej, z wirtualnym passkey |
+| stripe-provider-proof-current.json | 1 PASS / 37,3 s | Niezależny GET Stripe: pobrano 2500 gr PLN, dokładnie 3 udane zwroty 500/1500/500 gr, suma 2500, te same identyfikatory rejestru, brak dodatkowego zwrotu |
+
+Wszystkie powyższe bez skipped/flaky/FAIL, każdy raport osobno. Sandbox nie ma adnotacji provider-blocked: bieżący test potwierdził **podjazd DHL**, nie ogólną dostępność każdego przewoźnika. Historyczne carrierConnectionError DPD pozostaje odrębnym dowodem/ograniczeniem. To nie fizyczne dostarczenie paczki ani produkcyjne rozliczenie.
+
+Wzmocnienie Stripe jest tylko testowe: read-test-stripe.py + mały wrapper Node. Przyjmuje trzy identyfikatory, czyta wyłącznie klucz sk_test_, wykonuje dwa stałe GET, odrzuca redirect/proxy/paginację/niezgodną korelację, ogranicza czas i rozmiar oraz emituje tylko bezpieczne pola. Nie zwraca client_secret/danych karty/odbiorcy. Lokalny check: 5 nieprawidłowych wejść odrzuconych przed odczytem klucza, 3 nietestowe klucze przed siecią; 0 rzeczywistych wywołań w tym checku. TypeScript i format PASS. Hash kodu/runnera/binarki po przebiegu: stripe-provider-proof-current.sources.json. Pełny sandbox sprzed wzmocnienia nie miał tej nowej asercji; potwierdzono ją osobnym pojedynczym E2E.
+
+Review Sol xhigh bez blokera nowej kontroli Stripe: poprawność 9, bezpieczeństwo 9, kwoty 9, zasoby 9, błędy 8, współbieżność 8, dowody 8, prostota 8, utrzymanie 8, wygląd N/A; bez ponawiania testów przez reviewera. Osobne review auth/journey i sandboxa potwierdziły zakres i ograniczenia: passkey wirtualny, manualny journey z odbiorem osobistym, wiadomość admina nadana API/odpowiedź widoczna UI, brak szerokiego load testu i nie jest to ocena całego produktu 10/10.
+
+Audyt mapy wskazał nadal brak złożonego E2E opłaconego gościa → konto/claim oraz RetryPayment po opuszczeniu płatności. Backendowe zasady claim i osobne rejestracje już mają testy; brakuje spiętego przebiegu przeglądarki. Zwykły localhost:18430 nadal serwuje starszy main/API, podczas gdy powyższe dowody dotyczą worktree i oddzielnego runtime testów; nie utożsamiamy ich z aktualizacją głównego serwera.

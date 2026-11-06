@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { accounts, login, fillStripeCard } from './helpers';
+import { accounts, login, fillStripeCard, stripeEvidence } from './helpers';
 
 // Auth, addresses and Stripe secrets must not be recorded in traces or screenshots.
 test.use({ screenshot: 'off', trace: 'off' });
@@ -289,7 +289,15 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
       )
       .toBe('offered');
     await page.goto(`/konto/zamowienia/${id}`, { waitUntil: 'domcontentloaded' });
+    const paymentPrepared = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/account/orders/${id}/payment`) &&
+        response.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Przygotuj płatność za ofertę' }).click();
+    const paymentResponse = await paymentPrepared;
+    expect(paymentResponse.status()).toBe(200);
+    const { payment_intent_id, attempt_id } = await paymentResponse.json();
     await fillStripeCard(page);
     await page.getByRole('button', { name: /Zamawiam i płacę 25/ }).click();
     await expect
@@ -653,6 +661,32 @@ test('real client/admin panels, files, chat, production, partial/full Stripe ref
       data: { request_id: randomUUID(), amount_grosze: 1 },
     });
     expect(overRefund.status()).toBe(409);
+    const provider = stripeEvidence({ payment_intent_id, attempt_id, order_id: id });
+    expect(provider).toMatchObject({
+      payment_intent_id,
+      quote_id: attempt_id,
+      amount: 2500,
+      amount_received: 2500,
+      currency: 'pln',
+      status: 'succeeded',
+    });
+    expect(provider.refunds).toHaveLength(3);
+    expect(new Set(provider.refunds.map((refund) => refund.id)).size).toBe(3);
+    expect(provider.refunds.map((refund) => refund.amount).sort((a, b) => a - b)).toEqual([
+      500, 500, 1500,
+    ]);
+    expect(
+      provider.refunds.every(
+        (refund) => refund.status === 'succeeded' && refund.currency === 'pln',
+      ),
+    ).toBe(true);
+    expect(provider.refunds.reduce((sum, refund) => sum + refund.amount, 0)).toBe(2500);
+    const finalLedger: { id: string }[] = await (
+      await operator.request.get(`/api/admin/orders/${id}/refunds`)
+    ).json();
+    expect(provider.refunds.map((refund) => refund.ledger_refund_id).sort()).toEqual(
+      finalLedger.map((refund) => refund.id).sort(),
+    );
     await detail.getByRole('button', { name: 'Zamknij szczegóły' }).click();
     await nav.getByRole('button', { name: 'Faktury', exact: true }).click();
     await operator.getByRole('button', { name: 'Otwórz szkic', exact: true }).click();
