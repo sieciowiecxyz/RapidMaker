@@ -352,3 +352,10 @@ Rozszerzono istniejący concurrency.spec z 4 do 8 klientów, bez nowego framewor
 `eight-clients-final.json`: **1 PASS / 3,8 s** (runner 4,5 s), bez skip/flaky. Przyjęcie 90 ms, wyniki 2611 ms; cztery próbki katalogu HTTP 200 w 13/8/8/8 ms, aktywne zadania 1/1/1/0. Bezpieczny attachment zawiera tylko pomiary/liczniki, bez ID/sekretów/providerów. TypeScript, Prettier i diff PASS. Brak builda lub ponownego pełnego zestawu — zmieniono wyłącznie test już należący do core.
 
 Sol xhigh potwierdził cleanup po poprawce, bez nowej uwagi. Oceny dowodu testu: poprawność 8, bezpieczeństwo 7, kwoty 7, zasoby 6, błędy 6, współbieżność 8, dowody 8, prostota 7, utrzymanie 7, wygląd N/A. To osiem klientów API, nie osiem przeglądarek, równoczesny parsing, benchmark pojemności/RSS lub ciągły pomiar globalnego limitu. Nie ponawiano testów przez reviewera i nie jest to ocena 10/10 produktu.
+
+
+## Nieużywane zależności Rust
+
+cargo-machete 0.9.2, `cargo machete --skip-target-dir .` w backend: exit 0, nie znaleziono nieużywanych zależności. `cargo metadata --offline --locked --no-deps --format-version 1`: exit 0, 13 crate’ów workspace / 99 deklaracji zależności. Brak ignorelist machete. Główny agent potwierdził wynik osobnym uruchomieniem; zapis manifestów/SHA w prywatnym rust-dependency-audit-74bc144.json. Nie zmieniono źródeł/locka/wersji, bez instalacji, sieci lub przebudowy.
+
+Sol xhigh porównał zapisane hashe i zakres ze wszystkimi manifestami, bez konkretnej uwagi. To negatywny audyt bezpośrednich zależności; nie dowodzi braku dead code, prostoty, bezpieczeństwa lub 10/10 całego produktu. Kategorie produktowe poza tym zakresem pozostają N/A, a zapis komendy nie zastępuje surowego pełnego transkryptu. Kryterium zakończenia według wymaganego 10/10 wymaga doprecyzowania; pytanie do właściciela pozostaje otwarte, bez samodzielnego zmieniania celu lub zawyżania ocen.
