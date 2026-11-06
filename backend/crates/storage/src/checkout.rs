@@ -318,15 +318,18 @@ impl Storage {
             sqlx::query_scalar("SELECT value FROM pricing_config WHERE id=true FOR SHARE")
                 .fetch_optional(&mut *tx)
                 .await?;
-        let rows=sqlx::query("SELECT q.request,m.production_enabled,m.cost_net_grosze_per_kg FROM quotes q JOIN catalog_materials m ON m.id=q.request->>'material_id' JOIN catalog_colors c ON c.material_id=m.id AND c.code=q.request->>'color_code' WHERE q.id=ANY($1) ORDER BY m.id,c.code FOR SHARE OF m,c")
+        let rows=sqlx::query("SELECT q.request,m.production_enabled,m.cost_net_grosze_per_kg,m.source FROM quotes q JOIN catalog_materials m ON m.id=q.request->>'material_id' JOIN catalog_colors c ON c.material_id=m.id AND c.code=q.request->>'color_code' WHERE q.id=ANY($1) ORDER BY m.id,c.code FOR SHARE OF m,c")
             .bind(&ids).fetch_all(&mut *tx).await?;
         let mut valid = 0;
         for row in rows {
             let snapshot: Value = row.try_get("request")?;
             let cost: Option<i64> = row.try_get("cost_net_grosze_per_kg")?;
+            let source: Value = row.try_get("source")?;
             if row.get::<bool, _>("production_enabled")
                 && cost.is_some_and(|v| v > 0)
                 && snapshot["purchase_net_grosze_per_kg"].as_i64() == cost
+                && source["profiles_sha256"].as_str().is_some_and(hash)
+                && source["profiles_sha256"] == snapshot["profiles_sha256"]
                 && policy.as_ref().is_none_or(|p| snapshot["rates"] == *p)
             {
                 valid += 1;
@@ -743,7 +746,7 @@ mod tests {
         let id = uuid::Uuid::new_v4().to_string();
         let owner = crate::account_owner(&id);
         let material = uuid::Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO catalog_materials(id,name,density_g_cm3,cost_net_grosze_per_kg,production_enabled,source) VALUES($1,'Test',1.2,5000,true,'{}')").bind(&material).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO catalog_materials(id,name,density_g_cm3,cost_net_grosze_per_kg,production_enabled,source) VALUES($1,'Test',1.2,5000,true,$2)").bind(&material).bind(json!({"profiles_sha256":"d".repeat(64)})).execute(&db.pool).await.unwrap();
         sqlx::query("INSERT INTO catalog_colors(material_id,code,name,rgba,in_stock) VALUES($1,'test','Test','[\"#FFFFFFFF\"]',false)").bind(&material).execute(&db.pool).await.unwrap();
         let model = crate::StoredModel {
             id: uuid::Uuid::new_v4().to_string(),
@@ -765,7 +768,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap_or(json!({"version":"checkout-test"}));
-        db.save_quote(&quoteid,&json!({"purchase_net_grosze_per_kg":5000,"rates":policy,"owner_hash":owner,"model_id":model.id,"model_sha256":model.sha256,"quantity":1,"expires_at":20000,"material_id":material,"color_code":"test"}),&json!({})).await.unwrap();
+        db.save_quote(&quoteid,&json!({"purchase_net_grosze_per_kg":5000,"rates":policy,"profiles_sha256":"d".repeat(64),"owner_hash":owner,"model_id":model.id,"model_sha256":model.sha256,"quantity":1,"expires_at":20000,"material_id":material,"color_code":"test"}),&json!({})).await.unwrap();
         let draft = db
             .checkout_create(&owner, None, &json!({"parts":[]}), 10000)
             .await
@@ -825,6 +828,38 @@ mod tests {
             .execute(&db.pool)
             .await
             .unwrap();
+        // Profile imports after quote creation must invalidate the locked checkout check.
+        // Equal missing or malformed identities must not bypass that check either.
+        for (current, quoted) in [
+            (json!("e".repeat(64)), json!("d".repeat(64))),
+            (Value::Null, Value::Null),
+            (json!("invalid"), json!("invalid")),
+            (json!("d".repeat(64)), Value::Null),
+        ] {
+            sqlx::query("UPDATE catalog_materials SET source=$2 WHERE id=$1")
+                .bind(&material)
+                .bind(json!({"profiles_sha256":current}))
+                .execute(&db.pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                "UPDATE quotes SET request=jsonb_set(request,'{profiles_sha256}',$2) WHERE id=$1",
+            )
+            .bind(&quoteid)
+            .bind(&quoted)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+            assert!(db.checkout_prepare(&input, 10003).await.unwrap().is_none());
+        }
+        sqlx::query(
+            "UPDATE quotes SET request=jsonb_set(request,'{profiles_sha256}',$2) WHERE id=$1",
+        )
+        .bind(&quoteid)
+        .bind(json!("d".repeat(64)))
+        .execute(&db.pool)
+        .await
+        .unwrap();
         let (first, second) = tokio::join!(
             db.checkout_prepare(&input, 10003),
             db.checkout_prepare(&input, 10003)
