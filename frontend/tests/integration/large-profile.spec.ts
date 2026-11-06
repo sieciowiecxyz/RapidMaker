@@ -7,10 +7,62 @@ type CorpusCase = { case: number; file: string; sha256: string; size_bytes: numb
 const expectedCases = [
   { case: 8, triangles: 1_567_758, dimensions: [100, 190, 58] },
   { case: 20, triangles: 1_487_438, dimensions: [106.84888, 115.00562, 129] },
+  { case: 29, triangles: 1_993_410, dimensions: [54.999817, 55.22171, 65.87768] },
   { case: 40, triangles: 1_677_324, dimensions: [80.94293, 77.361206, 100] },
 ];
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const headers = { Origin: 'http://localhost:18437', 'Content-Type': 'application/octet-stream' };
+
+function assertExactOrientedFaces(canonical: Buffer, glb: Buffer, count: number) {
+  const document = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
+  const binary = 28 + glb.readUInt32LE(12);
+  const faces = Buffer.alloc(count * 36);
+  let offset = 0;
+  for (const primitive of document.meshes[0].primitives) {
+    const positions = document.accessors[primitive.attributes.POSITION];
+    const indices = document.accessors[primitive.indices];
+    const positionStart = binary + document.bufferViews[positions.bufferView].byteOffset;
+    const indexStart = binary + document.bufferViews[indices.bufferView].byteOffset;
+    expect(positions.componentType).toBe(5126);
+    expect(positions.type).toBe('VEC3');
+    expect([5123, 5125]).toContain(indices.componentType);
+    const width = indices.componentType === 5123 ? 2 : 4;
+    for (let i = 0; i < indices.count; i++) {
+      const address = indexStart + i * width;
+      const index = width === 2 ? glb.readUInt16LE(address) : glb.readUInt32LE(address);
+      if (
+        index >= positions.count ||
+        offset + 12 > faces.length ||
+        positionStart + index * 12 + 12 > glb.length
+      )
+        throw new Error('Invalid position span while comparing oriented faces');
+      // Copy raw f32 bits; do not share the product decoder or round coordinates.
+      glb.copy(faces, offset, positionStart + index * 12, positionStart + index * 12 + 12);
+      offset += 12;
+    }
+  }
+  expect(offset).toBe(faces.length);
+  const sourceOrder = Uint32Array.from({ length: count }, (_, i) => i);
+  const previewOrder = Uint32Array.from(sourceOrder);
+  const sorted = (bytes: Buffer, stride: number, base: number, order: Uint32Array) =>
+    order.sort((left, right) =>
+      bytes.compare(
+        bytes,
+        base + right * stride,
+        base + right * stride + 36,
+        base + left * stride,
+        base + left * stride + 36,
+      ),
+    );
+  sorted(canonical, 50, 96, sourceOrder);
+  sorted(faces, 36, 0, previewOrder);
+  for (let i = 0; i < count; i++) {
+    const a = sourceOrder[i] * 50 + 96,
+      b = previewOrder[i] * 36;
+    if (canonical.compare(faces, b, b + 36, a, a + 36) !== 0)
+      throw new Error('Preview changed an oriented triangle or its multiplicity');
+  }
+}
 
 function corpusSource(caseNumber: number) {
   const manifest = process.env.E2E_CORPUS_MANIFEST;
@@ -126,7 +178,17 @@ test.describe('opt-in large model API profile', () => {
           1e-3,
         );
 
-      if (expected.case === 20)
+      if (expected.case === 29) {
+        assertExactOrientedFaces(canonical, glb, expected.triangles);
+        test
+          .info()
+          .annotations.push({
+            type: 'exact-oriented-faces',
+            description: `${expected.triangles} full raw-f32 oriented triangles match the canonical STL, including multiplicity`,
+          });
+      }
+
+      if ([20, 29].includes(expected.case))
         await test.step('Large canonical mesh reaches the real slicer and price', async () => {
           const catalog = await (await request.get('/api/catalog/materials')).json();
           const material = catalog.materials.find((item: { id: string }) => item.id === 'GFA00');
@@ -183,7 +245,7 @@ test.describe('opt-in large model API profile', () => {
           });
           test.info().annotations.push({
             type: 'large-measured-price',
-            description: `case20: ${measurement.plates} plates; ${price.gross_grosze} grosze; explicit fixture costs, not production profitability`,
+            description: `case${expected.case}: ${measurement.plates} plates; ${price.gross_grosze} grosze; explicit fixture costs, not production profitability`,
           });
         });
 

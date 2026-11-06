@@ -120,6 +120,90 @@ pub(super) fn write_glb_bounded(
     max_bytes: usize,
     node_transform: &str,
 ) -> Result<Vec<u8>, PreviewError> {
+    match write_glb_ordered(scene, analysis, max_bytes, node_transform) {
+        Err(PreviewError::OutputTooLarge) if scene.indices.len() <= max_bytes / 2 => {
+            minimum_encoded_bytes(scene)
+                .filter(|&bytes| bytes <= max_bytes)
+                .ok_or(PreviewError::OutputTooLarge)?;
+            let reordered = spatial_order(scene);
+            write_glb_ordered(&reordered, analysis, max_bytes, node_transform)
+        }
+        result => result,
+    }
+}
+
+// Index validation has already succeeded; unused global positions cost no compact bytes.
+fn minimum_encoded_bytes(scene: &MeshScene) -> Option<usize> {
+    let mut seen = vec![false; scene.positions_mm.len()];
+    let mut referenced = 0usize;
+    for &index in &scene.indices {
+        if !seen[index as usize] {
+            seen[index as usize] = true;
+            referenced += 1;
+        }
+    }
+    referenced
+        .checked_mul(12)?
+        .checked_add(scene.indices.len().checked_mul(2)?)?
+        .checked_add(28)
+}
+
+// Quantize only sorting keys: positions and each oriented triangle remain exact.
+// f64 arithmetic keeps spans/centroids finite even for opposite f32 extremes.
+fn spatial_order(scene: &MeshScene) -> MeshScene {
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for point in &scene.positions_mm {
+        for axis in 0..3 {
+            let value = f64::from(point[axis]);
+            min[axis] = min[axis].min(value);
+            max[axis] = max[axis].max(value);
+        }
+    }
+    let mut triangles = scene
+        .indices
+        .chunks_exact(3)
+        .map(|indices| {
+            let triangle = [indices[0], indices[1], indices[2]];
+            let mut key = 0;
+            for axis in 0..3 {
+                let center = triangle
+                    .iter()
+                    .map(|&i| f64::from(scene.positions_mm[i as usize][axis]))
+                    .sum::<f64>()
+                    / 3.0;
+                let span = max[axis] - min[axis];
+                let normalized = if span > 0.0 {
+                    (center - min[axis]) / span
+                } else {
+                    0.0
+                };
+                let mut bits = (normalized.clamp(0.0, 1.0) * 1023.0) as u32;
+                bits = (bits | bits << 16) & 0x0300_00ff;
+                bits = (bits | bits << 8) & 0x0300_f00f;
+                bits = (bits | bits << 4) & 0x030c_30c3;
+                bits = (bits | bits << 2) & 0x0924_9249;
+                key |= bits << axis;
+            }
+            (key, triangle)
+        })
+        .collect::<Vec<_>>();
+    triangles.sort_unstable_by_key(|(key, _)| *key);
+    MeshScene {
+        positions_mm: scene.positions_mm.clone(),
+        indices: triangles
+            .into_iter()
+            .flat_map(|(_, triangle)| triangle)
+            .collect(),
+    }
+}
+
+fn write_glb_ordered(
+    scene: &MeshScene,
+    analysis: &PreviewAnalysis,
+    max_bytes: usize,
+    node_transform: &str,
+) -> Result<Vec<u8>, PreviewError> {
     if scene.positions_mm.is_empty() || scene.indices.is_empty() {
         return Err(PreviewError::EmptyMesh);
     }
@@ -311,6 +395,143 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    fn assert_same_oriented_faces(bytes: &[u8], scene: &MeshScene) {
+        let gltf = gltf::Gltf::from_slice(bytes).unwrap();
+        let mut actual = Vec::new();
+        for primitive in gltf.meshes().next().unwrap().primitives() {
+            let reader = primitive.reader(|_| gltf.blob.as_deref());
+            let positions = reader.read_positions().unwrap().collect::<Vec<_>>();
+            let accessor = primitive.get(&gltf::Semantic::Positions).unwrap();
+            for (bound, minimum) in [
+                (accessor.min().unwrap(), true),
+                (accessor.max().unwrap(), false),
+            ] {
+                for axis in 0..3 {
+                    let values = positions.iter().map(|point| f64::from(point[axis]));
+                    let expected = if minimum {
+                        values.fold(f64::INFINITY, f64::min)
+                    } else {
+                        values.fold(f64::NEG_INFINITY, f64::max)
+                    };
+                    assert_eq!(bound[axis].as_f64().unwrap(), expected);
+                }
+            }
+            let indices = reader
+                .read_indices()
+                .unwrap()
+                .into_u32()
+                .collect::<Vec<_>>();
+            assert!(indices.len().is_multiple_of(3));
+            actual.extend(indices.chunks_exact(3).map(|face| {
+                [face[0], face[1], face[2]].map(|i| positions[i as usize].map(f32::to_bits))
+            }));
+        }
+        let mut expected = scene
+            .indices
+            .chunks_exact(3)
+            .map(|face| {
+                [face[0], face[1], face[2]]
+                    .map(|i| scene.positions_mm[i as usize].map(f32::to_bits))
+            })
+            .collect::<Vec<_>>();
+        actual.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(actual.len(), scene.indices.len() / 3);
+        assert!(actual == expected, "oriented face multiset changed");
+    }
+
+    #[test]
+    fn spatial_lower_bound_counts_only_referenced_positions_and_rejects_irreducible_bytes() {
+        let scene = scene(4096, vec![0, 1, 2, 0, 1, 2]);
+        let analysis = analysis(&scene);
+        let minimum = 3 * 12 + 6 * 2 + 28;
+        assert_eq!(minimum_encoded_bytes(&scene), Some(minimum));
+        // Thousands of unused vertices must not make a small compact preview fail.
+        let compact = write_glb_bounded(&scene, &analysis, 1024, "").unwrap();
+        assert_same_oriented_faces(&compact, &scene);
+        assert_eq!(
+            write_glb_bounded(&scene, &analysis, minimum - 1, "").err(),
+            Some(PreviewError::OutputTooLarge)
+        );
+    }
+
+    #[test]
+    fn spatial_fallback_fits_interleaved_islands_without_losing_or_reorienting_faces() {
+        let bank = 40_002u32;
+        let mut scene = scene(2 * bank, Vec::new());
+        for (i, point) in scene.positions_mm.iter_mut().enumerate() {
+            point[0] = (i as u32 / bank * 200_000 + i as u32 % bank) as f32;
+        }
+        for _ in 0..3 {
+            for triangle in 0..bank / 3 {
+                for base in [0, bank] {
+                    let start = base + triangle * 3;
+                    scene.indices.extend([start, start + 1, start + 2]);
+                }
+            }
+        }
+        scene.indices.extend([0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0]);
+        let original_indices = scene.indices.clone();
+        let original_bits = scene
+            .positions_mm
+            .iter()
+            .map(|p| p.map(f32::to_bits))
+            .collect::<Vec<_>>();
+        let analysis = analysis(&scene);
+        let fitting = write_glb_bounded(&scene, &analysis, u32::MAX as usize, "").unwrap();
+        assert_eq!(
+            fitting,
+            write_glb_ordered(&scene, &analysis, u32::MAX as usize, "").unwrap()
+        );
+        assert_exact_triangles(&fitting, &scene);
+        assert_eq!(
+            write_glb_ordered(&scene, &analysis, 1_600_000, "").err(),
+            Some(PreviewError::OutputTooLarge)
+        );
+        let fallback = write_glb_bounded(&scene, &analysis, 1_600_000, "").unwrap();
+        assert!(fallback.len() < fitting.len());
+        assert_same_oriented_faces(&fallback, &scene);
+        assert_eq!(
+            write_glb_bounded(&scene, &analysis, fallback.len(), "").unwrap(),
+            fallback
+        );
+        assert_eq!(
+            write_glb_bounded(&scene, &analysis, fallback.len() - 1, "").err(),
+            Some(PreviewError::OutputTooLarge)
+        );
+        assert_eq!(scene.indices, original_indices);
+        assert_eq!(
+            scene
+                .positions_mm
+                .iter()
+                .map(|p| p.map(f32::to_bits))
+                .collect::<Vec<_>>(),
+            original_bits
+        );
+    }
+
+    #[test]
+    fn spatial_centroids_remain_finite_near_f32_extremes_and_keep_degenerates() {
+        let high = 2.0f32.powi(127);
+        let scene = MeshScene {
+            positions_mm: vec![
+                [high, -0., 0.1],
+                [high, 0., high],
+                [high, -0., -high / 2.],
+                [-high / 2., 0., 0.33333334],
+            ],
+            indices: vec![0, 1, 2, 3, 3, 3, 0, 1, 2, 2, 1, 0],
+        };
+        let limits = ConversionLimits {
+            max_coordinate_abs_mm: f32::MAX,
+            ..Default::default()
+        };
+        let analysis = analyze_scene(&scene, SourceFormat::StlBinary, &limits).unwrap();
+        let reordered = spatial_order(&scene);
+        let glb = write_glb_ordered(&reordered, &analysis, 64 * 1024, "").unwrap();
+        assert_same_oriented_faces(&glb, &scene);
+    }
+
     #[test]
     fn primitive_budget_accepts_64_and_falls_back_before_65() {
         let mut indices = Vec::with_capacity(64 * MAX_LOCAL_VERTICES + 3);
@@ -421,8 +642,17 @@ mod tests {
             bytes
         );
         assert_eq!(
-            write_glb_bounded(&scene, &analysis, bytes.len() - 1, transform).unwrap_err(),
+            write_glb_ordered(&scene, &analysis, bytes.len() - 1, transform).unwrap_err(),
             PreviewError::OutputTooLarge
+        );
+        // Below the original wire size, the public writer may reorder whole faces.
+        let fallback = write_glb_bounded(&scene, &analysis, bytes.len() - 1, transform).unwrap();
+        assert!(fallback.len() < bytes.len());
+        assert_same_oriented_faces(&fallback, &scene);
+        let reordered = gltf::Gltf::from_slice(&fallback).unwrap();
+        assert_eq!(
+            reordered.nodes().next().unwrap().transform().matrix(),
+            gltf.nodes().next().unwrap().transform().matrix()
         );
         let legacy = legacy_layout(&scene, &analysis, transform).unwrap();
         assert!(bytes.len() < total_len(&legacy.0, legacy.1).unwrap());
@@ -458,9 +688,12 @@ mod tests {
             bytes
         );
         assert_eq!(
-            write_glb_bounded(&scene, &analysis, bytes.len() - 1, "").unwrap_err(),
+            write_glb_ordered(&scene, &analysis, bytes.len() - 1, "").unwrap_err(),
             PreviewError::OutputTooLarge
         );
+        let fallback = write_glb_bounded(&scene, &analysis, bytes.len() - 1, "").unwrap();
+        assert!(fallback.len() < bytes.len());
+        assert_same_oriented_faces(&fallback, &scene);
     }
 
     #[test]

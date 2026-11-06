@@ -10,7 +10,16 @@ use rapidmaker_geometry::{ConversionLimits, PreviewOutput, ThreeMfLimits, source
 const MAX_INPUT_BYTES: usize = 96 * 1024 * 1024;
 
 fn probe() -> Result<PreviewOutput, String> {
-    let path = PathBuf::from(std::env::args_os().nth(1).ok_or("MissingInput")?);
+    let mut args = std::env::args_os().skip(1);
+    let path = PathBuf::from(args.next().ok_or("MissingInput")?);
+    let max_output_glb_bytes = match args.next() {
+        None => 128 * 1024 * 1024,
+        Some(flag) if flag == "--bounded-preview" => 25 * 1024 * 1024,
+        _ => return Err("InvalidArgument".into()),
+    };
+    if args.next().is_some() {
+        return Err("InvalidArgument".into());
+    }
     let filename = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -29,7 +38,7 @@ fn probe() -> Result<PreviewOutput, String> {
         &input,
         &ConversionLimits {
             max_input_bytes: MAX_INPUT_BYTES,
-            max_output_glb_bytes: 128 * 1024 * 1024,
+            max_output_glb_bytes,
             max_vertices: 4_000_000,
             max_triangles: 8_000_000,
             max_parse_seconds: 25,

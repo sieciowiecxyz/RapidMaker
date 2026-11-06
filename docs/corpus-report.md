@@ -3,7 +3,7 @@
 Przeczytaj gdy: oceniasz dowody celu lub wybierasz kolejne sprawdzenie.
 Opis: bieżące wyniki, granice i decyzje; plan w [corpus-quality.md](plans/corpus-quality.md).
 
-**Cel pozostaje otwarty.** Pełny korpus: 36 PASS/5 FAIL, w tym 20 zmierzonych cen, 11 ręcznych zgłoszeń i 5 oczekiwanych odrzuceń 413. Osobny profil dużych modeli albo pozostanie przy STL 50 MiB wymaga odpowiedzi użytkownika; odpowiedzi nie ma.
+**Cel pozostaje otwarty.** Ostatni pełny standardowy korpus: 36 PASS/5 FAIL, w tym 20 zmierzonych cen, 11 ręcznych zgłoszeń i 5 oczekiwanych odrzuceń 413. Użytkownik wybrał rozszerzenie obsługi. Dalsze wyniki opt-in opisano poniżej; domyślny profil serwera pozostaje bez zmian.
 
 Chronologiczny raport sprzed skrócenia pozostaje w Git: `30cd52a:docs/corpus-report.md` (`git show 30cd52a:docs/corpus-report.md`). Nie usunięto surowych dowodów, modeli ani testów. JSON/logi/obrazy są lokalne i ignorowane, głównie `frontend/tests/artifacts/`; modele i manifest SHA-256: `backend/test-models/makerworld/`. Licencje nie są w pełni sprawdzone, plików nie publikujemy. Bez zrzutów sekretów auth/MFA.
 
@@ -196,3 +196,13 @@ Końcowy review Sol xhigh: poprawność9/bezpieczeństwo9/kwoty9/zasoby7/błędy
 `model-removal-storage-final.json`:22PASS0skip na osobnych bazach; activelease/livehold chronione, kolejka/nowyhold nie wskrzeszają usuniętego (testy); claim wyklucza oznaczone rekordy (przegląd kodu), mark nie zwalnia kwoty przed forget, guestfallback nie narusza kont. `model-removal-standard-regression.json`:3PASS20,9s — próbki/nawigacja, advanced upload/remove, wszystkie formaty. Wcześniejsze7PASS przed dodatkowymi poprawkami;9testów8PASS/1FAIL przez zgubione body inspektora Chromium, poprawiono przechwyceniem rzeczywistego ID przed przekazaniem odpowiedzi, bez dodatkowego uploadu. PierwszyClippy2ostrzeżenia test-only clone, finalnie naprawione. Builds/Svelte0/0/ClippyAPI+storage/format/diff PASS.
 
 DELETE ma dokładnyOrigin i CSRF konta, owner-bound UUID, wspólny lockkolejki i trwały mark, fizyczne usunięcie przed metadanymi/kwotą,409 dla runningjob/holdzamówienia. Brak nowej migracji/zależności/CSS, profil large nadal niewłączony. Sol xhigh: bez konkretnego kolejnego blokera tej zmiany, oceny8/9/N/A/8/8/8/9/7/8/9 (poprawność/security/kwoty/zasoby/błędy/współbieżność/dowody/prostota/utrzymanie/wygląd), bez własnego rerunu. Retryznanych ID w pamięci strony; zamknięta strona/nieznana odpowiedź korzysta z24h retencji. Nie deklarujemy ogólnej niezawodności lub10/10; cel pozostaje otwarty.
+
+## Model29 — przestrzenny zapis bez utraty geometrii
+
+Nowy fallback sortuje całe trójkąty tylko po porażce pasujących dotychczas zapisów. Klucze Morton są przybliżone, **pozycje nie są kwantowane**: f32/winding/liczność zachowane, produkcyjny STL bez zmian, stare pasujące GLB bajtowo identyczne. Minimum referencjonowanych pozycji+indeksów pozwala odrzucić niemożliwy wynik przed klonem/sortowaniem. Nadal64bloki/64KiBJSON/25MiBGLB i ten sam sandbox.
+
+SHA29: GLB29 224 268→24 171 984B,996139vertices/1993410tri/dims54,999817×55,22171×65,87768mm bez zmian. Najnowsza diagnostyka `large-model-probe-spatial-minimum`:13,975swall,~449MiBRSS,19OutputTooLarge11,497s; brak nowej obsługi19. Pierwsza udana próba29 przed minimum:13,955s/~448MiB. Program `large_model_probe /input.3mf --bounded-preview` używa25MiB, domyślnie128; diagnostyka bez STL/metre transformu/wyceny, źródła/hashes prywatnie zachowane.
+
+API29 najpierw1PASS40,1s (4180gr), następnie1PASS46,1s z niezależnym pełnym porównaniem bitów wszystkich1 993 410 zorientowanych trójkątów GLB do STL, wraz z powtórzeniami; surowe bufory i indeksy sortowane niezależnie od produktu. Rachunek materiału/energii/obsługi/straty/marży/VAT z rzeczywistych pomiarów i stawek fixture. To drugi przebieg4178gr, bez obietnicy stałej/rentownej ceny. `spatial29-ui-price.json`:1PASS72,2s,1440/390/light/dark, wszystkie1993410tri widoczne,zeroArea0,zoom i UI4178gr zgodne z koszykiem;4ujęcia obejrzane. Podgląd zachowuje orientację pliku, nie przedstawia automatycznego ułożenia slicera.
+
+Geometry42PASS/1opcjonalnyignored, `spatial-default-models.json`8PASS7,9s. Normal app/example build, Clippygeometry/APIall-targets, format/diff PASS; brak zmian UI/shaderów/deps/.env/profilu. `spatial29-final-exact-api.json`: 1 PASS / 46,1 s na końcowym kodzie z kontrolą minimum; pełne porównanie geometrii i pomiar ceny 4178 gr. Cały cel pozostaje otwarty, zwłaszcza19/41.

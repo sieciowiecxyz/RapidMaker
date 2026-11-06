@@ -239,7 +239,12 @@ for (const item of selected) {
 // Every remaining manifest entry exercises the authored form; outcomes are observed,
 // not copied from the API corpus report. Rejections are UI evidence, never prices.
 const clientCapMiB = process.env.RAPIDMAKER_LARGE_MODELS === '1' ? 96 : 32;
-const largeTriangleCounts: Record<number, number> = { 8: 1_567_758, 20: 1_487_438, 40: 1_677_324 };
+const largeTriangleCounts: Record<number, number> = {
+  8: 1_567_758,
+  20: 1_487_438,
+  29: 1_993_410,
+  40: 1_677_324,
+};
 for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))) {
   test(`corpus GUI ${item.case}: real form render or explicit rejection`, async ({
     page,
@@ -464,7 +469,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
         );
       }
     }
-    if (largeCase && item.case === 20) {
+    if (largeCase && [20, 29].includes(item.case)) {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.locator('input[name=material][value=pla]').check();
       await page.locator('input[name=color][value=black]').check();
@@ -492,7 +497,7 @@ for (const item of cases.filter((entry) => ![5, 9, 22, 25].includes(entry.case))
       ).toBeEnabled();
       info.annotations.push({
         type: 'large-ui-price',
-        description: `case20 UI equals server cart ${priced.print_grosze} grosze; real slicer; explicit fixture costs`,
+        description: `case${item.case} UI equals server cart ${priced.print_grosze} grosze; real slicer; explicit fixture costs`,
       });
     }
     info.annotations.push({
