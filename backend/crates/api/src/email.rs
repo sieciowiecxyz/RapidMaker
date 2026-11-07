@@ -92,18 +92,16 @@ async fn process(db: &Storage, mailer: &Mailer) -> bool {
             EmailOutcome::Failed(_) => "failed",
             EmailOutcome::Deferred(_) => "deferred",
         };
-        if db
-            .finish_email(&mail, outcome, super::auth::now())
-            .await
-            .is_err()
-        {
-            tracing::error!(event = "email_finish_failed", reason = "database");
-        } else {
-            let elapsed_ms = started.elapsed().as_millis() as u64;
-            if matches!(result, "retry" | "failed" | "deferred") {
-                tracing::warn!(event = "email_processed", outcome = result, elapsed_ms);
-            } else {
-                tracing::info!(event = "email_processed", outcome = result, elapsed_ms);
+        match db.finish_email(&mail, outcome, super::auth::now()).await {
+            Err(_) => tracing::error!(event = "email_finish_failed", reason = "database"),
+            Ok(false) => tracing::warn!(event = "email_finish_failed", reason = "lease_lost"),
+            Ok(true) => {
+                let elapsed_ms = started.elapsed().as_millis() as u64;
+                if matches!(result, "retry" | "failed" | "deferred") {
+                    tracing::warn!(event = "email_processed", outcome = result, elapsed_ms);
+                } else {
+                    tracing::info!(event = "email_processed", outcome = result, elapsed_ms);
+                }
             }
         }
         if paused {

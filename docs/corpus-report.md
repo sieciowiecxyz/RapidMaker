@@ -663,3 +663,9 @@ admin-unit-rounding-baseline:1PASS/1FAIL (52/3 brak właściwej etykiety,54/3 po
 Istniejący test dwóch uploadów/natywnych wycen slicera (1 i10 kopii) rozszerzony parametrem minimum2000/50000grnetto. Jawne stawki ustawiane przed snapshotami wyłącznie w bazie rapidmaker_test_browser_*;finally odtwarza poprzednią konfigurację i sprawdza zgodność. SQL ma15s timeout. Bez zmian produktu lub nowej abstrakcji.
 
 cart-minimum-real-20261107:**2PASS/0FAIL/0SKIP/0flaky,7,24s**. Zmierzony koszt netto2942gr, zwykłe netto4203/gross5170; przy minimum50000gr:VAT11500,gross61500 wobec sumy osobnych minimów123000. Dokładny podział setup21956+pozycje13679+25865=61500. Odwrócenie kolejności zachowuje kwotę i sumę przydziałów; zmienione/obce quote409 oraz powtórzonyid400 nadal sprawdzane. Typy/Prettier/diff PASS; Sol xhigh sprawdził SQL, niezależny rachunek i raport. To rzeczywisty API/slicer/checkoutquote na stawkach testowych, bez Stripe lub potwierdzenia rentowności firmy.
+
+## 2026-11-07 — email: logowanie utraconej dzierżawy
+
+finish_email zwraca false dla starej próby, ale worker traktował każdy Ok jako zapisany wynik i mógł zalogować „sent”. Bezpośredni match oddziela database/lease_lost od zatwierdzonego wyniku. Zmiana -2LoC; bez nowych warstw/deps, bez zmiany SMTP, retry, Message-ID lub pauzowania. Nie zapewnia exactly-onceSMTP.
+
+Cargo check api/fmt/diff PASS. Istniejący durable_queue_deduplicates_recovers_leases_and_checks_preferences:**1PASS** na osobnej bazie rapidmaker_test_mail_finish_*, usuniętej wfinally. Dowodzi fence starej próby i zachowania kolejki; logów runtime nie przechwytywano. Sol xhigh sprawdził gałęzie, brak blokera. Brak wywołań dostawcy lub zmiany zwykłego API18432; to zweryfikowany kod, nie rollout. Istniejące ostrzeżenie generowanego C++/OCCT pozostaje osobnym ograniczeniem.
