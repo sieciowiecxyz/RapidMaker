@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { accounts, login, type Account } from './helpers';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -375,3 +375,396 @@ test('cross-tab logout removes protected admin selection and chat when a client 
   await observer.goto(`/konto/zamowienia/${order.id}#rozmowa`);
   await expect(observer.getByText(order.message, { exact: true })).toBeVisible();
 });
+
+function returnSourceHashes() {
+  return Object.fromEntries(
+    [
+      'src/lib/authSync.ts',
+      'src/lib/http.ts',
+      'src/Workspace.svelte',
+      'src/admin/Admin.svelte',
+      'dist/index.html',
+      'dist/admin.html',
+    ].map((file) => [
+      file,
+      createHash('sha256')
+        .update(readFileSync(resolve(file)))
+        .digest('hex'),
+    ]),
+  );
+}
+
+for (const area of ['client', 'admin'] as const) {
+  test(`remote-revoke-return ${area} clears private content after independent logout-all`, async ({
+    page,
+    browser,
+  }, info) => {
+    test.skip(
+      !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+      'Requires --local-accounts',
+    );
+    test.setTimeout(180_000);
+    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    const account = area === 'admin' ? accounts().find((a) => a.role === 'admin')! : client;
+    const remote = await browser.newContext();
+    const sources = returnSourceHashes();
+    let releaseReturn = () => {};
+    try {
+      await login(page, client);
+      const order = await createOrder(page, client, `remote-${area}-${randomUUID()}`);
+      if (area === 'admin') {
+        await page.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+        await login(page, account);
+        await page.goto(`/admin.html?order=${order.id}`);
+        await expect(page.getByText(order.filename, { exact: true }).first()).toBeVisible();
+        await page
+          .getByRole('complementary', { name: /^Szczegóły / })
+          .getByRole('button', { name: 'Wiadomości', exact: true })
+          .click();
+      }
+      await expect(page.getByText(order.message, { exact: true })).toBeVisible();
+      // A valid returning session keeps the same private subtree and unsent text.
+      const chat = page.getByText(order.message, { exact: true });
+      await chat.evaluate((element) => element.setAttribute('data-return-probe', 'retained'));
+      const draftField = page.getByLabel(area === 'admin' ? 'Twoja odpowiedź' : 'Wiadomość', {
+        exact: true,
+      });
+      await draftField.fill('Niewysłany szkic powrotu');
+      const validCheck = page.waitForResponse((response) =>
+        response.url().endsWith('/api/auth/me'),
+      );
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('blur'));
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect((await validCheck).status()).toBe(200);
+      await expect(chat).toBeVisible();
+      await expect(chat).toHaveAttribute('data-return-probe', 'retained');
+      await expect(draftField).toHaveValue('Niewysłany szkic powrotu');
+      const draft = JSON.stringify({ marker: `public-${randomUUID()}` });
+      await page.evaluate(
+        (value) => localStorage.setItem('rapidmaker.storefront.draft.v1', value),
+        draft,
+      );
+      const marker = await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'));
+      const other = await remote.newPage();
+      await login(other, account);
+      await other.bringToFront();
+      // Headless Chromium emulates focus in every context. Exercise the return
+      // handler deterministically; authentication/revocation and all DOM are real.
+      await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+      const revoked = await other.request.post('/api/auth/logout-all', {
+        headers: await headers(other),
+        data: {},
+      });
+      expect(revoked.status()).toBe(200);
+      expect((await page.request.get('/api/auth/me')).status()).toBe(401);
+      expect(await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'))).toBe(
+        marker,
+      );
+      const checks: number[] = [];
+      page.on('response', (response) => {
+        if (response.url().endsWith('/api/auth/me')) checks.push(response.status());
+      });
+      let returnCheckHeld = false;
+      let returnRequests = 0;
+      let holdReturn = true;
+      const heldReturn = new Promise<void>((resolveReturn) => {
+        releaseReturn = resolveReturn;
+      });
+      await page.route('**/api/auth/me', async (route) => {
+        returnRequests++;
+        if (!holdReturn) return route.continue();
+        holdReturn = false;
+        const response = await route.fetch();
+        returnCheckHeld = true;
+        await heldReturn;
+        await route.fulfill({ response });
+      });
+      await page.bringToFront();
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      try {
+        await expect.poll(() => returnCheckHeld).toBe(true);
+        await expect(chat).not.toBeVisible();
+        await expect(page.getByText(account.email, { exact: true })).not.toBeVisible();
+        expect(returnRequests).toBe(1);
+        releaseReturn();
+        await expect(page.getByText(order.message, { exact: true })).toHaveCount(0);
+        await expect.poll(() => checks.includes(401)).toBe(true);
+        for (const value of [order.filename, order.number, order.label, account.email])
+          await expect(page.getByText(value, { exact: false })).toHaveCount(0);
+        await expect(
+          page.getByRole('button', { name: 'Zamknij szczegóły', exact: true }),
+        ).toHaveCount(0);
+        expect(
+          await page.evaluate(() => localStorage.getItem('rapidmaker.storefront.draft.v1')),
+        ).toBe(draft);
+      } finally {
+        await info.attach('remote-revocation-observation.json', {
+          body: JSON.stringify({
+            area,
+            independentContext: true,
+            syntheticReturnEvent: true,
+            revokedSessionStatus: 401,
+            unchangedLocalMarker: true,
+            returnSessionStatuses: checks,
+            privateChatStillMounted:
+              (await page.getByText(order.message, { exact: true }).count()) > 0,
+          }),
+          contentType: 'application/json',
+        });
+      }
+    } finally {
+      releaseReturn();
+      await remote.close();
+      await info.attach('tested-source-hashes.json', {
+        body: JSON.stringify(sources),
+        contentType: 'application/json',
+      });
+      expect(returnSourceHashes(), 'Tested frontend sources/build stayed unchanged').toEqual(
+        sources,
+      );
+    }
+  });
+}
+
+for (const area of ['client', 'admin'] as const) {
+  test(`valid-return-post ${area} completes one committed chat mutation across return`, async ({
+    page,
+  }, info) => {
+    test.skip(
+      !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+      'Requires --local-accounts',
+    );
+    test.setTimeout(180_000);
+    const sources = returnSourceHashes();
+    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    let release = () => {};
+    try {
+      await login(page, client);
+      const order = await createOrder(page, client, `return-post-${area}-${randomUUID()}`);
+      if (area === 'admin') {
+        await page.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+        await login(
+          page,
+          accounts().find((a) => a.role === 'admin')!,
+        );
+        await page.goto(`/admin.html?order=${order.id}`);
+        await expect(page.getByText(order.filename, { exact: true }).first()).toBeVisible();
+        await page
+          .getByRole('complementary', { name: /^Szczegóły / })
+          .getByRole('button', { name: 'Wiadomości', exact: true })
+          .click();
+      }
+      await expect(page.getByText(order.message, { exact: true })).toBeVisible();
+      const endpoint = `/api/${area === 'admin' ? 'admin' : 'account'}/orders/${order.id}/messages`;
+      const body = `Jeden zapis przez powrót ${randomUUID()}`;
+      let committed = false;
+      let postCount = 0;
+      const held = new Promise<void>((resolveHeld) => {
+        release = resolveHeld;
+      });
+      await page.route(`**${endpoint}`, async (route) => {
+        if (route.request().method() !== 'POST') return route.continue();
+        postCount++;
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        committed = true;
+        await held;
+        await route.fulfill({ response });
+      });
+      const draft = page.getByLabel(area === 'admin' ? 'Twoja odpowiedź' : 'Wiadomość', {
+        exact: true,
+      });
+      await draft.fill(body);
+      await page
+        .getByRole('button', {
+          name: 'Wyślij wiadomość',
+          exact: true,
+        })
+        .click();
+      await expect.poll(() => committed).toBe(true);
+      const copies = async () => {
+        const response = await page.request.get(`${endpoint}?after=0&limit=50`);
+        expect(response.status()).toBe(200);
+        return (await response.json()).messages.filter(
+          (message: { body: string }) => message.body === body,
+        ).length;
+      };
+      expect(await copies()).toBe(1);
+      const checked = page.waitForResponse((response) => response.url().endsWith('/api/auth/me'));
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('blur'));
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect((await checked).status()).toBe(200);
+      await expect(draft).toBeVisible();
+      release();
+      await expect(draft).toHaveValue('');
+      await expect(page.getByText(body, { exact: true })).toHaveCount(1);
+      await expect(page.getByText('Sesja zmieniła się.', { exact: false })).toHaveCount(0);
+      expect(postCount).toBe(1);
+      await page.reload();
+      if (area === 'admin') {
+        await expect(page.getByText(order.filename, { exact: true }).first()).toBeVisible();
+        await page
+          .getByRole('complementary', { name: /^Szczegóły / })
+          .getByRole('button', { name: 'Wiadomości', exact: true })
+          .click();
+      }
+      await expect(page.getByText(body, { exact: true })).toHaveCount(1);
+      expect(await copies()).toBe(1);
+      await info.attach('committed-post-return.json', {
+        body: JSON.stringify({
+          area,
+          syntheticReturnEvent: true,
+          committedBeforeReturn: true,
+          returnStatus: 200,
+          browserPosts: postCount,
+          serverCopiesAfterReload: 1,
+        }),
+        contentType: 'application/json',
+      });
+    } finally {
+      release();
+      await info.attach('tested-source-hashes.json', {
+        body: JSON.stringify(sources),
+        contentType: 'application/json',
+      });
+      expect(returnSourceHashes(), 'Tested frontend sources/build stayed unchanged').toEqual(
+        sources,
+      );
+    }
+  });
+}
+
+for (const area of ['client', 'admin'] as const) {
+  test(`repeated-return-revoke ${area} ignores old success while newer revocation is pending`, async ({
+    page,
+    browser,
+  }, info) => {
+    test.skip(
+      !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+      'Requires --local-accounts',
+    );
+    test.setTimeout(180_000);
+    const sources = returnSourceHashes();
+    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    const account = area === 'admin' ? accounts().find((a) => a.role === 'admin')! : client;
+    const remote = await browser.newContext();
+    let releaseOld = () => {};
+    let releaseNew = () => {};
+    try {
+      await login(page, client);
+      const order = await createOrder(page, client, `repeated-${area}-${randomUUID()}`);
+      if (area === 'admin') {
+        await page.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+        await login(page, account);
+        await page.goto(`/admin.html?order=${order.id}`);
+        await expect(page.getByText(order.filename, { exact: true }).first()).toBeVisible();
+        await page
+          .getByRole('complementary', { name: /^Szczegóły / })
+          .getByRole('button', { name: 'Wiadomości', exact: true })
+          .click();
+      }
+      const chat = page.getByText(order.message, { exact: true });
+      await expect(chat).toBeVisible();
+      const other = await remote.newPage();
+      await login(other, account);
+      const marker = await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'));
+      const draft = JSON.stringify({ marker: `repeated-public-${randomUUID()}` });
+      await page.evaluate(
+        (value) => localStorage.setItem('rapidmaker.storefront.draft.v1', value),
+        draft,
+      );
+      const oldGate = new Promise<void>((resolveOld) => {
+        releaseOld = resolveOld;
+      });
+      const newGate = new Promise<void>((resolveNew) => {
+        releaseNew = resolveNew;
+      });
+      const statuses: number[] = [];
+      let checks = 0;
+      await page.route('**/api/auth/me', async (route) => {
+        const index = checks++;
+        if (index > 1) return route.continue();
+        const response = await route.fetch();
+        await response.body();
+        statuses[index] = response.status();
+        await (index === 0 ? oldGate : newGate);
+        await route.fulfill({ response });
+      });
+      const returned = () =>
+        page.evaluate(() => {
+          window.dispatchEvent(new Event('blur'));
+          window.dispatchEvent(new Event('focus'));
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+      await returned();
+      await expect.poll(() => statuses[0]).toBe(200);
+      await expect(chat).not.toBeVisible();
+      const revoked = await other.request.post('/api/auth/logout-all', {
+        headers: await headers(other),
+        data: {},
+      });
+      expect(revoked.status()).toBe(200);
+      expect((await page.request.get('/api/auth/me')).status()).toBe(401);
+      expect(await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'))).toBe(
+        marker,
+      );
+      await returned();
+      await expect.poll(() => statuses[1]).toBe(401);
+      expect(checks).toBe(2);
+      const oldReply = page.waitForResponse(
+        (response) => response.url().endsWith('/api/auth/me') && response.status() === 200,
+      );
+      releaseOld();
+      await (await oldReply).finished();
+      // Give the old response's promise handlers and Svelte rendering two frames.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolveFrame) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame())),
+          ),
+      );
+      await expect(chat).toHaveCount(1);
+      await expect(chat).not.toBeVisible();
+      await expect(page.getByText('Sprawdzanie dostępu…', { exact: true })).toBeVisible();
+      releaseNew();
+      await expect(chat).toHaveCount(0);
+      for (const value of [order.filename, order.number, order.label, account.email])
+        await expect(page.getByText(value, { exact: false })).toHaveCount(0);
+      expect(
+        await page.evaluate(() => localStorage.getItem('rapidmaker.storefront.draft.v1')),
+      ).toBe(draft);
+      await info.attach('repeated-return-observation.json', {
+        body: JSON.stringify({
+          area,
+          syntheticReturnEvent: true,
+          independentLogoutAll: true,
+          returnStatuses: statuses,
+          oldSuccessCouldNotUnshield: true,
+          privateChatRemoved: true,
+          publicDraftPreserved: true,
+        }),
+        contentType: 'application/json',
+      });
+    } finally {
+      releaseOld();
+      releaseNew();
+      await remote.close();
+      await info.attach('tested-source-hashes.json', {
+        body: JSON.stringify(sources),
+        contentType: 'application/json',
+      });
+      expect(returnSourceHashes(), 'Tested frontend sources/build stayed unchanged').toEqual(
+        sources,
+      );
+    }
+  });
+}

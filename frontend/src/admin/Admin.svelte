@@ -40,9 +40,36 @@
     type Order,
     type Stage,
   } from './data';
-  import { watchAuthChanges } from '../lib/authSync';
+  import { watchAuthChanges, watchProtectedReturn } from '../lib/authSync';
   import { getSession, logout } from '../lib/session';
   import { apiRequest, ApiError, clearAuthToken } from '../lib/http';
+  let checkingReturn = $state(false);
+  let accountId: string | null = null;
+  let returnRequest = 0;
+  async function returned() {
+    if (!authorized) return;
+    clearAuthToken();
+    const request = ++returnRequest;
+    checkingReturn = true;
+    try {
+      const session = await getSession();
+      if (request !== returnRequest) return;
+      if (session?.role !== 'admin' || !session.adminVerified) expired();
+      else if (session.id !== accountId) authChanged();
+    } catch (error) {
+      if (request !== returnRequest) return;
+      // A failed check must not restore private data without confirmation.
+      authGeneration++;
+      detailGeneration++;
+      accountId = null;
+      authorized = false;
+      orders = [];
+      selectedId = null;
+      failed(error);
+    } finally {
+      if (request === returnRequest) checkingReturn = false;
+    }
+  }
   let authorized = $state(false);
   let loading = $state(true);
   let busy = $state(false);
@@ -62,6 +89,9 @@
     }
   }
   function authChanged() {
+    accountId = null;
+    returnRequest++;
+    checkingReturn = false;
     clearAuthToken();
     authGeneration++;
     detailGeneration++;
@@ -74,6 +104,9 @@
     void load();
   }
   function expired() {
+    accountId = null;
+    returnRequest++;
+    checkingReturn = false;
     authGeneration++;
     detailGeneration++;
     authorized = false;
@@ -99,6 +132,7 @@
         expired();
         return;
       }
+      accountId = session.id;
       authorized = true;
       const data = await apiRequest<{ orders: ServerOrder[] }>('/api/admin/orders');
       if (generation !== authGeneration) return;
@@ -191,10 +225,13 @@
       : 'Nie ustalono';
   onMount(() => {
     const stopAuthSync = watchAuthChanges(authChanged);
+    const stopReturn = watchProtectedReturn(() => void returned());
     void load();
     window.addEventListener('rapidmaker:session-expired', expired);
     return () => {
       stopAuthSync();
+      stopReturn();
+      returnRequest++;
       authGeneration++;
       detailGeneration++;
       window.removeEventListener('rapidmaker:session-expired', expired);
@@ -404,8 +441,14 @@
 
 <svelte:window onkeydown={keyboard} />
 <svelte:head><title>{view} · RapidMaker Admin</title></svelte:head>
+{#if checkingReturn}<main class="workspace"><p role="status">Sprawdzanie dostępu…</p></main>{/if}
 {#if authorized}
-  <div class="admin-shell">
+  <div
+    class="admin-shell"
+    hidden={checkingReturn}
+    inert={checkingReturn}
+    style:display={checkingReturn ? 'none' : undefined}
+  >
     <aside class="sidebar">
       <a class="brand" href="/"
         ><img src="/logo.svg" alt="" />RapidMaker<span>Panel operatora</span></a

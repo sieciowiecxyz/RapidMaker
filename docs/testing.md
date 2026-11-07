@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+Testy przeglądarki wyłącznie headless, bez otwierania okien. Obie konfiguracje Playwright mają jawne `headless: true`; nie używaj `--headed`, `--ui` ani `--debug`.
+
 Testy mają pomagać dostarczać kod. Sprawdzaj zmieniony zakres najkrótszą sensowną metodą. Bez obowiązkowej Astry, testujących subagentów, wielokrotnych review i pełnych zestawów przy każdej iteracji. Zielonego wyniku nie powtarzaj bez nowej zmiany, błędu lub konkretnej wątpliwości.
 
 - UI: build i krótki przebieg zmienionego ekranu. Przy zmianie układu obejrzyj komputer i telefon; screenshoty tylko, gdy pomagają ocenić efekt.

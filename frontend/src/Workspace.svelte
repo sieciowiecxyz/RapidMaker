@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { authEpoch, watchAuthChanges } from './lib/authSync';
+  import { authEpoch, watchAuthChanges, watchProtectedReturn } from './lib/authSync';
   import { clearAuthToken } from './lib/http';
   import './app.css';
   import Header from './components/Header.svelte';
@@ -61,6 +61,18 @@
           tabs.find(([, href]) => path === href || path.startsWith(href + '/'))?.[0] ??
           'Nie znaleziono strony'),
   );
+  let checkingReturn = $state(false);
+  async function returned() {
+    if (!protectedArea || !ready || !session || pendingAdmin) return;
+    clearAuthToken();
+    checkingReturn = true;
+    const request = sessionRequest + 1;
+    try {
+      await refreshSession();
+    } finally {
+      if (request === sessionRequest) checkingReturn = false;
+    }
+  }
   let sessionRequest = 0;
   async function refreshSession() {
     const request = ++sessionRequest;
@@ -120,6 +132,7 @@
     }
   }
   function authChanged() {
+    checkingReturn = false;
     clearAuthToken();
     session = null;
     ready = false;
@@ -129,6 +142,7 @@
   function sessionExpired() {
     // A denied guest request is not an expired account; remounting would retry it forever.
     if (!session) return;
+    checkingReturn = false;
     session = null;
     ready = false;
     generation++;
@@ -162,6 +176,7 @@
   }
   onMount(() => {
     const stopAuthSync = watchAuthChanges(authChanged);
+    const stopReturn = watchProtectedReturn(() => void returned());
     void refreshSession();
     void routeChanged();
     window.addEventListener('popstate', routeChanged);
@@ -170,6 +185,7 @@
     document.addEventListener('click', localLink);
     return () => {
       stopAuthSync();
+      stopReturn();
       sessionRequest++;
       window.removeEventListener('popstate', routeChanged);
       window.removeEventListener('rapidmaker:navigate', routeChanged);
@@ -182,7 +198,14 @@
 <svelte:head><title>{pageTitle} — Rapidmaker</title></svelte:head>
 
 <a class="skip-link" href="#tresc">Przejdź do treści</a>
-<div class="site-shell" id="top">
+{#if checkingReturn}<div class="page" role="status">Sprawdzanie dostępu…</div>{/if}
+<div
+  class="site-shell"
+  id="top"
+  hidden={checkingReturn}
+  inert={checkingReturn}
+  style:display={checkingReturn ? 'none' : undefined}
+>
   <Header {session} onLogout={signedOut} />
   {#if sessionError}<div class="page">
       <p class="alert error" role="alert">{sessionError}</p>

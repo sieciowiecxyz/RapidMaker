@@ -57,3 +57,40 @@ export function watchAuthChanges(invalidate: () => void): () => void {
     listeners.delete(invalidate);
   };
 }
+
+// Revalidate protected views when returning from another tab/app/device session.
+// Keep this separate from auth-change subscribers: login/MFA must keep their flow.
+export function watchProtectedReturn(revalidate: () => void): () => void {
+  let away = document.visibilityState === 'hidden' || !document.hasFocus();
+  function leave() {
+    away = true;
+  }
+  function returned() {
+    if (!away || document.visibilityState === 'hidden') return;
+    away = false;
+    revalidate();
+  }
+  function focus(event: FocusEvent) {
+    if (event.target === window) returned();
+  }
+  function visibility() {
+    if (document.visibilityState === 'hidden') leave();
+    else returned();
+  }
+  function pageshow(event: PageTransitionEvent) {
+    if (event.persisted) {
+      away = true;
+      returned();
+    }
+  }
+  window.addEventListener('blur', leave);
+  window.addEventListener('focus', focus);
+  document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('pageshow', pageshow);
+  return () => {
+    window.removeEventListener('blur', leave);
+    window.removeEventListener('focus', focus);
+    document.removeEventListener('visibilitychange', visibility);
+    window.removeEventListener('pageshow', pageshow);
+  };
+}

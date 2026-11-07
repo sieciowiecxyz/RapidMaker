@@ -19,6 +19,7 @@ export default defineConfig({
     actionTimeout: 20_000,
     navigationTimeout: 20_000,
     browserName: 'chromium',
+    headless: true,
     viewport: { width: 1440, height: 1000 },
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE },
     screenshot: 'only-on-failure',
