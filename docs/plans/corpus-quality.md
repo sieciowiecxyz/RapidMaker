@@ -33,7 +33,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 
 ## Dalsza praca i granice
 
-Następna konkretna luka dowodowa: przerwane już uruchomione zadanie slicera i odzyskanie po lease. Nowy test queue-restart sprawdza wyłącznie queued przed startem workera; nie jest to dowód błędu ani ukończenia active-lease recovery.
+Aktywne lease ma teraz osobny dowód: queue-recovery-20261107-first1PASS/193s (naturalne180s+5s,attempts2,jeden snapshot). Końcowy cleanup po naprawie zweryfikowany oddzielnie fault2PASS i queued1PASS; nie awaria hosta lub dowód startu Bambu przed kill.
 
 1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
 2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej.

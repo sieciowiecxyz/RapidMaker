@@ -14,7 +14,7 @@ def require(condition, message):
         raise AssertionError(message)
 
 
-def run_queue_restart(root, folder, container, database, restart, evidence):
+def run_queue_restart(root, folder, container, database, restart, evidence, recovery=None):
     def sql(query):
         return subprocess.check_output([
             'podman', 'exec', container, 'psql', '-U', 'rapidmaker', '-d', database,
@@ -66,17 +66,17 @@ def run_queue_restart(root, folder, container, database, restart, evidence):
     owner_identity = [(c.name, c.value, c.domain, c.path) for c in cookies]
     require(bool(owner_identity), 'Upload did not create owner cookie')
     evidence.update(model_id=model_id, job_id=job_id, queued=queued, source_sha256=digest)
-    evidence.update(restart())
+    evidence.update(recovery(job_id, sql, request) if recovery else restart())
     # Do not bootstrap a new owner after restart: the exact existing cookie must work.
     require([(c.name, c.value, c.domain, c.path) for c in cookies] == owner_identity, 'Cookie changed during restart')
-    deadline = time.monotonic() + 160
+    deadline = evidence.pop("completion_deadline") if recovery else time.monotonic() + 160
     while time.monotonic() < deadline:
         job = json.loads(request(poll))
         if job['status'] in ('succeeded', 'failed'):
             break
         time.sleep(0.5)
     else:
-        raise AssertionError('Worker completion timeout (160s)')
+        raise AssertionError('Worker completion timeout (lease + 50s)' if recovery else 'Worker completion timeout (160s)')
     require(job['status'] == 'succeeded', f"Worker ended {job['status']}: {job.get('message')}")
     result = job['result']
     measurement = result['measurement']
@@ -84,7 +84,7 @@ def run_queue_restart(root, folder, container, database, restart, evidence):
     require(measurement['quantity'] == 1 and measurement['time_seconds'] > 0 and measurement['filament_grams'] > 0, 'Missing real slicer measurement')
     require(result['price']['gross_grosze'] > 0, 'Missing measured price')
     finished = db_state()
-    require(finished == dict(status='succeeded', attempts=1, leased=False), f'Unexpected completed state: {finished}')
+    require(finished == dict(status='succeeded', attempts=2 if recovery else 1, leased=False), f'Unexpected completed state: {finished}')
     snapshots = json.loads(sql(f"SELECT json_build_object('count',count(*),'matching',count(*) FILTER (WHERE id='{job_id}' AND result=(SELECT result FROM slicer_jobs WHERE id='{job_id}'))) FROM quotes"))
     require(snapshots == dict(count=1, matching=1), f'Unexpected snapshots: {snapshots}')
     require(json.loads(request(poll)) == job, 'Repeated GET changed completed result')
@@ -98,7 +98,8 @@ def run_queue_restart(root, folder, container, database, restart, evidence):
     request(poll, 404, client=foreign)
     require(hashlib.sha256(original.read_bytes()).hexdigest() == digest, 'Restart/slicer changed source file')
     require(db_state() == finished and sql('SELECT count(*) FROM quotes') == '1', 'Repeated access duplicated processing')
+    require([(c.name, c.value, c.domain, c.path) for c in cookies] == owner_identity, 'Owner cookie changed')
     evidence.update(finished=finished, snapshots=snapshots, measurement=measurement, price=result['price'],
                     same_owner_cookie=True, source_preserved=True, owner_glb_status=200,
                     foreign_glb_status=404, foreign_job_status=404,
-                    limits='Queued-job process restart only; no running-lease recovery, browser UI, providers or host reboot.')
+                    limits=('Active lease recovery after claimed-job event; no proof Bambu started before crash, browser UI, providers or host reboot.' if recovery else 'Queued-job process restart only; no running-lease recovery, browser UI, providers or host reboot.'))
