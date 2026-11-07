@@ -487,3 +487,9 @@ Na3519cb9 przebudowano frontend (svelte-check0/Vite PASS) i uruchomiono storage/
 Core z dokładnej listy run-all.py: **49PASS/0FAIL/0flaky/1SKIP**,392,4s, proces terminal0 (batch-core-current-3519cb9). Obejmuje pomiary cen1/10/1000, multi-model, konfigurator, wizualne zasoby/motywy/viewporty, WebGL restore, bezpieczeństwo kont, retencję i błędy/timeout uploadu. Skip: opt-in large removal — w tym przebiegu brak profilu large/prywatnego manifestu. Nie zmieniono wyniku skip na PASS. Providerów/email/refundów nie powtarzano w tej regresji.
 
 Przed core zapisano hashe śledzonych źródeł, bieżącego binarium i dist; po przebiegu identyczne (batch-core-3519cb9/result.json + sources-before.json). Pierwszy wrapper storage/core zatrzymał się na harness FAIL; jego raporty zachowane batch-regression-3519cb9/. Sol xhigh przejrzał błąd runnera, poprawkę i oba końcowe raporty: brak blokera w tym zakresie, nie akceptacja całego produktu10/10.
+
+### Osobny przebieg pominiętego dużego uploadu
+
+Na czystym7961feb: `E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=large-removal-current-7961feb python frontend/tests/run-integration.py --large-models model-removal.spec.ts --grep 'opt-in large removal'` → **1PASS/0FAIL/0SKIP,16,7s**. UI upload korpusu8, DELETE204, katalog znika/GET404, upload korpusu20 przyjęty; suma oryginałów/STL/GLB obu przekracza256MiB, więc odzyskanie quota potwierdza drugi upload. Manifest size/SHA sprawdzony, osobne DB/storage, MAIL disabled, bez zmian zwykłego localhosta.
+
+Sol xhigh przejrzał test/runner/raport/backend: wynik zatwierdzony w tym zakresie; zwolnienie quota wynika z drugiego udanego uploadu, nie bezpośredniego zapytania DB. Nie jest to test cen, współbieżności, GPU ani zachowania ponad aktualnymi limitami. Poprzedni core49PASS/1SKIP pozostaje niezmieniony, ten1PASS jest osobnym przebiegiem.
