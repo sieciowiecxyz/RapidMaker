@@ -1,4 +1,5 @@
 //! Isolated, measured P1P estimates from trusted Bambu Studio presets.
+mod mass;
 mod runtime;
 pub use runtime::runtime_sha256;
 
@@ -136,6 +137,8 @@ pub struct PlateBatch {
     pub repeat_count: u32,
     pub time_seconds: u64,
     pub filament_grams: f64,
+    #[serde(skip)]
+    filament_decimal: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -146,6 +149,19 @@ pub struct BatchEstimate {
     pub filament_grams: f64,
     pub profile_version: String,
     pub batches: Vec<PlateBatch>,
+}
+
+impl BatchEstimate {
+    /// Round the exact source decimal sum once, after all filaments and repeats.
+    /// Historical serialized estimates omit source tokens and cannot be repriced.
+    pub fn filament_milligrams(&self) -> Result<u64, Error> {
+        mass::milligrams(
+            self.batches
+                .iter()
+                .map(|b| (b.filament_decimal.as_slice(), b.repeat_count)),
+        )
+        .ok_or(Error::InvalidMeasurement)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -161,6 +177,7 @@ pub enum Error {
     UnsupportedMaterial,
     InvalidModel,
     InvalidOptions,
+    InvalidMeasurement,
     Failed(String),
 }
 impl fmt::Display for Error {
@@ -175,6 +192,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidModel => {
                 f.write_str("Expected a nonempty STL within the configured size limit")
+            }
+            Self::InvalidMeasurement => {
+                f.write_str("Slicer mass is missing or exceeds exact decimal precision")
             }
             Self::Failed(message) => f.write_str(message),
         }
@@ -370,6 +390,7 @@ pub async fn slice_job_with_limits(
             Error::UnsupportedMaterial => "unsupported_material",
             Error::InvalidModel => "invalid_model",
             Error::InvalidOptions => "invalid_options",
+            Error::InvalidMeasurement => "invalid_measurement",
             Error::Failed(_) => "slicer_failed",
         };
         tracing::warn!(
@@ -695,7 +716,7 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
     }
     #[derive(Deserialize)]
     struct Filament {
-        total_used_g: f64,
+        total_used_g: Box<serde_json::value::RawValue>,
     }
     let result: ResultFile = serde_json::from_slice(bytes)?;
     if result.return_code != 0 || result.sliced_plates.len() != 1 {
@@ -704,14 +725,23 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
         ));
     }
     let plate = &result.sliced_plates[0];
-    let grams: f64 = plate.filaments.iter().map(|f| f.total_used_g).sum();
+    if plate
+        .filaments
+        .iter()
+        .any(|f| f.total_used_g.get().len() > 128)
+    {
+        return Err(Error::InvalidMeasurement);
+    }
+    let filament_grams = plate
+        .filaments
+        .iter()
+        .map(|f| serde_json::from_str::<f64>(f.total_used_g.get()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let grams: f64 = filament_grams.iter().sum();
     if !plate.total_predication.is_finite()
         || plate.total_predication <= 0.0
         || plate.total_predication > 30.0 * 86400.0
-        || plate
-            .filaments
-            .iter()
-            .any(|f| !f.total_used_g.is_finite() || f.total_used_g <= 0.0)
+        || filament_grams.iter().any(|g| !g.is_finite() || *g <= 0.0)
         || !grams.is_finite()
         || grams <= 0.0
         || grams > 10000.0
@@ -729,6 +759,11 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
         repeat_count: 1,
         time_seconds: plate.total_predication.ceil() as u64,
         filament_grams: grams,
+        filament_decimal: plate
+            .filaments
+            .iter()
+            .map(|f| f.total_used_g.get().to_owned())
+            .collect(),
     })
 }
 
@@ -1198,6 +1233,35 @@ with open('/out/' + name, 'r+b') as lock:
         ] {
             assert!(parse_result(json.as_bytes()).is_err());
         }
+    }
+
+    #[test]
+    fn exact_mass_survives_parsing_and_repeats_but_is_not_in_public_snapshots() {
+        let exact = parse_result(br#"{"return_code":0,"sliced_plates":[{"total_predication":1,"filaments":[{"total_used_g":32.112}],"objects":[{}]}]}"#).unwrap();
+        assert_eq!(
+            mass::milligrams(std::iter::once((exact.filament_decimal.as_slice(), 1))),
+            Some(32112)
+        );
+        let mut batch = parse_result(br#"{"return_code":0,"sliced_plates":[{"total_predication":1,"filaments":[{"total_used_g":0.0004},{"total_used_g":0.0004}],"objects":[{}]}]}"#).unwrap();
+        assert_eq!(batch.filament_decimal, ["0.0004", "0.0004"]);
+        let json = serde_json::to_value(&batch).unwrap();
+        assert_eq!(json.as_object().unwrap().len(), 4);
+        assert!(json.get("filament_decimal").is_none());
+        batch.repeat_count = 3;
+        let mut estimate = BatchEstimate {
+            quantity: 3,
+            plates: 3,
+            time_seconds: 3,
+            filament_grams: 0.0024,
+            profile_version: "test".into(),
+            batches: vec![batch],
+        };
+        assert_eq!(estimate.filament_milligrams().unwrap(), 3);
+        estimate.batches = vec![serde_json::from_value(json).unwrap()];
+        assert!(matches!(
+            estimate.filament_milligrams(),
+            Err(Error::InvalidMeasurement)
+        ));
     }
     #[test]
     fn rejects_out_of_range_options() {

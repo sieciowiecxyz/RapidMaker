@@ -178,7 +178,9 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
     })?;
     let price = calculate(
         measured.time_seconds,
-        (measured.filament_grams * 1000.0).ceil() as u64,
+        measured
+            .filament_milligrams()
+            .map_err(|_| (false, "Ta konfiguracja wymaga indywidualnej wyceny."))?,
         measured.plates,
         input.purchase_net_grosze_per_kg,
         &input.rates,

@@ -899,3 +899,16 @@ Dwa rzeczywiste celowanePGtesty PASS: lease1059Some(true), ścisłe1060/1061None
 Resend: realny świeży email,61sodczekania, starykod401/nowy200, odtworzenie zużytejpendsesji401. Auth: UIpassword/email,wirtualnynativepasskey/email,adminpassword/TOTP i ograniczeniadostępuAPI. Journey: klientUIręcznaoferta,adminUIpublikacja, rzeczywistymailoferty,StripeTESTUIpayment+mailwarunków. ZwrotprzezADMINAPI z idempotentnymrequest_id,potwierdzenie+email; adminchatprzezAPI, kopiamailowa, dwieodpowiedziSMTP z jednymMessage-ID i dwoma rzeczywistymiIMAPUID: imported/duplicate,samedigest/mailbox/order,jednawiadomośćklienta poUIreload.
 
 ReviewerSolxhigh niezależniepotwierdził3scenariusze/provenance i powyższe granice. To providerowaregresja pofixpreflight; granicaleasesprawdza osobnyPGtest. Bez exactly-onceSMTP, niezależnegoStripeGET,fizycznegopasskey lub operacjinadaniaFurgonetki (odbiórosobisty). Nie deklarujemycałegoE2Esuite ani produkcyjnejcertyfikacji. Prywatneevidence `email-preflight-live-20261107/`; brak zmianproduktu.
+
+
+## 2026-11-07 — dokładne dziesiętne masy do rachunku ceny
+
+Rustprobe z produkcyjnym pricing wykazał błąd: zapis32.112g przechodził przez f64*1000/ceil jako32113mg. Przy jawnej stawcefixture62500gr/kg filament2008gr/gross3088 zamiast2007/3087. To dowód granicznyRust, nie rzeczywistyAPIupload o tej dokładnej masie. Wszystkie7istniejących pricingtestów przechodziły, więc błąd wymagał nowego przypadku.
+
+Slicer zachowuje leksykalne tokenyJSONmasy przez istniejącą cechę serde_json/raw_value; brak nowej zależności/lockchange. Prywatne serde-skippedtokeny w PlateBatch nie zmieniają czterech pól publicznego snapshotu/f64gramów. Checked-u128 sumuje wszystkie filamenty i powtórzenia przed jednym ceil do mg; worker przekazuje wynik do obecnego pricing. Brak epsilon, arbitralnej rozdzielczości lub zaokrąglania osobno sztuk/płyt. Token≤128bajtów, potęgi/skale/sumy/mnożenia kontrolowane; brak tokenów lub skrajna precyzja/overflow dają InvalidMeasurement, nie kwotę z uciętych danych.
+
+Przedfix rzeczywistytestRustFAIL2008vs2007 zachowany, po poprawce32112mg/2007grfilament/3087grgrossPASS.19slicerunitPASS/6opt-inignored i7pricingPASS, w tym2×0.0004g→1mg,powtórzenie×3→2mg,zapiswykładniczy,limity i brakprywatnychtokenów po deserializacji. BuildAPI/fmt/diff/clippy relevantalltargets-DwarningsPASS. Finalny API83117fa6: **2nativeE2EPASS/24,2s**,pięćwariantówPLA/PETG/TPU z pełnymrachunkiem oraz partie1/10/26/1000; bez zmian oracle. Wcześniejszy native2PASS przed dodatkowym lengthguard zachowany osobno; finalrun po guard odpowiada końcowymźródłom.
+
+84nettolinieproduktu, minimalny helper mass.rs,jedna metoda/jedenprywatnyDTOfield. Brak produkcyjnego deserializowania BatchEstimate do ponownej wyceny; jobs odczytują SliceInput i tnąświeżo. Dotychczasowe ukończonewyceny nie są przepisywane; ten samfingerprint może je zwrócić do istniejącego10minwygaśnięcia. Po wygaśnięciu świeży pomiar użyje dokładnegoprzeliczenia; brak natychmiastowej invalidacji fingerprint.
+
+Solxhigh potwierdził arytmetykę/kompatybilność/wire shape, bezblokera. Dowody `pricing-boundaries-20261107/` before/after/unit/native-final/provenance/source-decimals; przykłady rzeczywistychBambu wartości mają17cyfrdziesiętnych, stąd brak narzuconej3-cyfrowejrozdzielczości. NormalnyAPIbezrestartu, privateDBcleanup, brak providerów/UIzmian; headless.
