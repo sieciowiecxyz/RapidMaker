@@ -2,7 +2,7 @@
 
 Wygenerowano: `node frontend/tests/inventory-controls.mjs`. To mapa źródeł, nie wynik testów. Jedna kontrolka szablonu może tworzyć wiele opcji/wierszy; wartości i pokrycie opisują pliki e2e-*-inventory.md oraz raport. Nie klikamy automatycznie wszystkiego bez sprawdzenia skutków.
 
-Kontrolki szablonów: **445**, pliki: **44**.
+Kontrolki szablonów: **444**, pliki: **43**.
 
 ## frontend/src/App.svelte
 
@@ -14,14 +14,14 @@ Kontrolki szablonów: **445**, pliki: **44**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 166 | a | Przejdź do treści |
-| 171 | button | Spróbuj ponownie |
-| 175 | a | <a {href} aria-current={path.startsWith(href) ? 'page' : undefined}> |
-| 188 | a | Zaloguj się jako administrator |
-| 189 | a | Moje zamówienia |
-| 209 | a | Wróć na stronę główną |
-| 214 | a | rapidmaker |
-| 217 | a | Regulaminy i prywatność |
+| 200 | a | Przejdź do treści |
+| 212 | button | Spróbuj ponownie |
+| 216 | a | <a {href} aria-current={path.startsWith(href) ? 'page' : undefined}> |
+| 229 | a | Zaloguj się jako administrator |
+| 230 | a | Moje zamówienia |
+| 250 | a | Wróć na stronę główną |
+| 255 | a | rapidmaker |
+| 258 | a | Regulaminy i prywatność |
 
 ## frontend/src/admin-design/Admin.svelte
 
@@ -84,49 +84,49 @@ Kontrolki szablonów: **445**, pliki: **44**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 389 | svelte:window | <svelte:window onkeydown={keyboard} /> |
-| 394 | a | RapidMaker |
-| 399 | button | <button class:active={view === item.name} onclick={() => |
-| 412 | a | Materiały i ceny |
-| 413 | a | Ustawienia wyceny |
-| 414 | a | Bezpieczeństwo konta |
-| 415 | button | Wyloguj |
-| 416 | a | Otwórz stronę |
-| 428 | a | Konto |
-| 429 | button | Odśwież |
-| 429 | button | <button class="icon" onclick={theme} aria-label={light ? 'Włącz ciemny motyw' : 'Włącz jasny motyw'} > |
-| 453 | button | Eksport CSV |
-| 467 | button | Sprawdź kolejkę |
-| 473 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
-| 481 | input | <input bind:value={query} placeholder="Szukaj numeru, klienta, pliku…" aria-label="Szukaj zamówień" /> |
-| 485 | button | <button class="icon" onclick={() => |
-| 504 | button | <button class="order-link" onclick={(e) => |
-| 544 | button | <button class="icon" onclick={(e) => |
-| 557 | button | Wyczyść filtry |
-| 582 | button | <button class="order-link" onclick={(e) => |
-| 598 | button | <button class="secondary" disabled={busy \|\| !nextStatus(o)} onclick={() => |
-| 606 | button | Cofnij etap |
-| 618 | button | <button class="message-row" aria-label={'Rozmowa z ${o.client}, zamówienie ${o.id}'} onclick={async (e) => |
-| 649 | button | <button class="icon" aria-label="Zamknij szczegóły" onclick={close} > |
-| 659 | select | <select value={productionEditable(selected) ? 'production:' + productionFor(selected).stage : selected.state} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
-| 673 | input | <input type="date" value={selected.due} disabled={busy} onchange={(e) => |
-| 682 | button | <button class:chosen={tab === t} aria-pressed={tab === t} onclick={() => |
-| 693 | ManualOffer | <ManualOffer orderId={selected.id} offer={selected.manualOffer} adminMode onchange={load} /> |
-| 735 | input | <input type="number" value={m.price} placeholder="Indywidualnie" disabled title="Cena z zapisanej wyceny" /> |
-| 743 | input | <input type="number" min="0" max={m.qty} step="1" value={m.done} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
-| 761 | input | <input type="checkbox" checked={productionFor(selected).qc_passed} disabled={busy} onchange={(e) => |
-| 784 | Refunds | <Refunds orderId={selected.id} amountGrosze={selected.amountGrosze} paid={selected.paid} onchange={load} /> |
-| 814 | a | Pobierz |
-| 818 | button | Zmień plik |
-| 838 | button | Pokaż kolejne |
-| 843 | form | <form onsubmit={(e) => |
-| 850 | textarea | <textarea rows="5" maxlength="4000" bind:value={selected.draft} placeholder="Napisz odpowiedź dotyczącą realizacji…"> |
-| 855 | button | Wyślij wiadomość |
-| 862 | form | <form onsubmit={(e) => |
-| 869 | textarea | <textarea rows="6" maxlength="4000" bind:value={noteDraft} disabled={busy} > |
-| 872 | button | Zapisz notatkę |
-| 875 | Shipment | <Shipment orderId={selected.id} onchange={load} /> |
-| 884 | button | <button class="primary" disabled={busy \|\| !nextStatus(selected)} onclick={() => |
+| 442 | svelte:window | <svelte:window onkeydown={keyboard} /> |
+| 453 | a | RapidMaker |
+| 458 | button | <button class:active={view === item.name} onclick={() => |
+| 471 | a | Materiały i ceny |
+| 472 | a | Ustawienia wyceny |
+| 473 | a | Bezpieczeństwo konta |
+| 474 | button | Wyloguj |
+| 475 | a | Otwórz stronę |
+| 487 | a | Konto |
+| 488 | button | Odśwież |
+| 488 | button | <button class="icon" onclick={theme} aria-label={light ? 'Włącz ciemny motyw' : 'Włącz jasny motyw'} > |
+| 512 | button | Eksport CSV |
+| 526 | button | Sprawdź kolejkę |
+| 532 | button | <button class:chosen={filter === f} aria-pressed={filter === f} onclick={() => |
+| 540 | input | <input bind:value={query} placeholder="Szukaj numeru, klienta, pliku…" aria-label="Szukaj zamówień" /> |
+| 544 | button | <button class="icon" onclick={() => |
+| 563 | button | <button class="order-link" onclick={(e) => |
+| 603 | button | <button class="icon" onclick={(e) => |
+| 616 | button | Wyczyść filtry |
+| 641 | button | <button class="order-link" onclick={(e) => |
+| 657 | button | <button class="secondary" disabled={busy \|\| !nextStatus(o)} onclick={() => |
+| 665 | button | Cofnij etap |
+| 677 | button | <button class="message-row" aria-label={'Rozmowa z ${o.client}, zamówienie ${o.id}'} onclick={async (e) => |
+| 708 | button | <button class="icon" aria-label="Zamknij szczegóły" onclick={close} > |
+| 718 | select | <select value={productionEditable(selected) ? 'production:' + productionFor(selected).stage : selected.state} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
+| 732 | input | <input type="date" value={selected.due} disabled={busy} onchange={(e) => |
+| 741 | button | <button class:chosen={tab === t} aria-pressed={tab === t} onclick={() => |
+| 752 | ManualOffer | <ManualOffer orderId={selected.id} offer={selected.manualOffer} adminMode onchange={load} /> |
+| 796 | input | <input type="number" value={m.price} placeholder="Indywidualnie" disabled title="Cena z zapisanej wyceny" /> |
+| 804 | input | <input type="number" min="0" max={m.qty} step="1" value={m.done} disabled={busy \|\| !productionEditable(selected)} onchange={(e) => |
+| 822 | input | <input type="checkbox" checked={productionFor(selected).qc_passed} disabled={busy} onchange={(e) => |
+| 845 | Refunds | <Refunds orderId={selected.id} amountGrosze={selected.amountGrosze} paid={selected.paid} onchange={load} /> |
+| 875 | a | Pobierz |
+| 879 | button | Zmień plik |
+| 899 | button | Pokaż kolejne |
+| 904 | form | <form onsubmit={(e) => |
+| 911 | textarea | <textarea rows="5" maxlength="4000" bind:value={selected.draft} placeholder="Napisz odpowiedź dotyczącą realizacji…"> |
+| 916 | button | Wyślij wiadomość |
+| 923 | form | <form onsubmit={(e) => |
+| 930 | textarea | <textarea rows="6" maxlength="4000" bind:value={noteDraft} disabled={busy} > |
+| 933 | button | Zapisz notatkę |
+| 936 | Shipment | <Shipment orderId={selected.id} onchange={load} /> |
+| 945 | button | <button class="primary" disabled={busy \|\| !nextStatus(selected)} onclick={() => |
 
 ## frontend/src/admin/Finance.svelte
 
@@ -277,9 +277,9 @@ Kontrolki szablonów: **445**, pliki: **44**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 144 | button | · |
-| 161 | button | ← |
-| 162 | button | → |
+| 149 | button | · |
+| 166 | button | ← |
+| 167 | button | → |
 
 ## frontend/src/components/OrderChat.svelte
 
@@ -338,12 +338,6 @@ Kontrolki szablonów: **445**, pliki: **44**.
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
 | 20 | button | <button {type} {onclick} {disabled} class="button {variant} {className}" > |
-
-## frontend/src/components/ui/Input.svelte
-
-| Linia | Typ | Etykieta / początek deklaracji |
-| --- | --- | --- |
-| 9 | input | <input bind:value {placeholder} /> |
 
 ## frontend/src/pages/Legal.svelte
 
@@ -570,41 +564,41 @@ Kontrolki szablonów: **445**, pliki: **44**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 388 | a | Przejdź do treści |
-| 391 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
-| 392 | button | Wróć do konfiguracji |
-| 392 | a | Oferta |
-| 392 | a | Wycena |
-| 392 | a | Moje zamówienia |
-| 392 | a | Kontakt |
-| 393 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
-| 403 | Button | Spróbuj ponownie |
-| 428 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
-| 429 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
-| 432 | a | Zasady prywatności |
-| 433 | Button | <Button variant="text" onclick={() => |
-| 433 | Button | Pokaż przykład: 10 STL |
-| 441 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
-| 448 | button | <button class="remove" aria-label={'Powiel wariant ${model.name}'} title="Powiel wariant" disabled={models.length> |
-| 450 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
-| 455 | Button | Następny model |
-| 456 | Button | Ponów wysłanie modelu |
-| 460 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
-| 460 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
-| 461 | input | <input type="checkbox" bind:checked={manual} /> |
-| 473 | Button | Uzupełnij dla wszystkich |
-| 476 | Button | Uzupełnij ustawienia |
-| 479 | Button | Ponów przeliczenie |
-| 483 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
-| 496 | a | 537 320 816 |
-| 496 | a | piotr@rapidmaker.pl |
-| 496 | Button | Wczytaj mapę Google |
-| 496 | a | Wyznacz trasę |
-| 498 | summary | Narzędzia podglądu |
-| 498 | Button | Zmień motyw |
-| 498 | Button | Symuluj błąd wyceny |
-| 500 | a | Regulaminy i prywatność |
-| 500 | a | Wróć na górę |
+| 386 | a | Przejdź do treści |
+| 389 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
+| 390 | button | Wróć do konfiguracji |
+| 390 | a | Oferta |
+| 390 | a | Wycena |
+| 390 | a | Moje zamówienia |
+| 390 | a | Kontakt |
+| 391 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
+| 401 | Button | Spróbuj ponownie |
+| 426 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
+| 427 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
+| 430 | a | Zasady prywatności |
+| 431 | Button | <Button variant="text" onclick={() => |
+| 431 | Button | Pokaż przykład: 10 STL |
+| 439 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
+| 446 | button | <button class="remove" aria-label={'Powiel wariant ${model.name}'} title="Powiel wariant" disabled={models.length> |
+| 448 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
+| 453 | Button | Następny model |
+| 454 | Button | Ponów wysłanie modelu |
+| 458 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
+| 458 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
+| 459 | input | <input type="checkbox" bind:checked={manual} /> |
+| 471 | Button | Uzupełnij dla wszystkich |
+| 474 | Button | Uzupełnij ustawienia |
+| 477 | Button | Ponów przeliczenie |
+| 481 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
+| 494 | a | 537 320 816 |
+| 494 | a | piotr@rapidmaker.pl |
+| 494 | Button | Wczytaj mapę Google |
+| 494 | a | Wyznacz trasę |
+| 496 | summary | Narzędzia podglądu |
+| 496 | Button | Zmień motyw |
+| 496 | Button | Symuluj błąd wyceny |
+| 498 | a | Regulaminy i prywatność |
+| 498 | a | Wróć na górę |
 
 ## frontend/src/storefront/components/OrderPage.svelte
 

@@ -719,3 +719,9 @@ Worker/parser/GPU rzeczywiste; mockHTTP z kanonicznym GLB z pozycji/indeksów ch
 Trzy wspólne nagłówki w Vite dev/preview: CSP frame-ancestors/object-src/base-uri, XFO DENY, nosniff. Bez zmiany źródeł script/childframe/worker, wyglądu lub własnych mechanizmów backendu. Nowy security-headers.spec dołączony do contracts.
 
 frame-policy-20261107/baseline.json:**2FAIL** — cztery HTML200 bez nagłówków, aplikacja widoczna w cross-origin iframe200. fixed.json:**2PASS/0FAIL/0SKIP/0flaky,0,80s** — cztery HTML200 z polityką, Chromium blokuje ramkę przyHTTP200, komunikat o polityce i brak#app. Łączna CSP/XFO, nie niezależna certyfikacja obu.3hashe źródeł zgodne. BuildSvelte0/Vite/typy/Python/Prettier/diff PASS; test:proxy1PASS dla EPIPE/upstream413, bez nowej asercji cacheheader. Sol xhigh przejrzał source/raporty, brak blokera. Tylko lokalne headless HTTP, bez providerów. Nagłówki nie przechodzą do statycznego dist; hosting produkcyjny wymaga własnej konfiguracji.
+
+## 2026-11-07 — stare wrappery Input/Card
+
+Usunięto wyłącznie nieużywane frontend/src/components/ui/Input.svelte9linii iCard.svelte6linii. Importy Storefront wskazują inne, aktywne pliki podstorefront/components/ui; te orazrootButton iCSSzachowane. Wcześniejsza ogólna uwaga o używanych Input/Card dotyczyła zbieżnych nazw, nie tych ścieżek.
+
+Istniejący generator inventory-controls odświeżył mapę:445→444kontrolki,44→43pliki; usunięta tylko kontrolka staregoInput, reszta444wierszy semantycznie identyczna, numerylinii aktualne. Svelte0/Vite4wejścia/diff PASS; Sol xhigh niezależnie sprawdził odwołania i mapę, brak blokera. Bez E2E/providerów dla nieosiągalnych plików, bez zmiany widocznego UI lub zależności.
