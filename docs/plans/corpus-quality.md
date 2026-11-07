@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Najbliższa poprawka security: [osierocone wygasłe wyceny](../security.md#otwarte-trwałe-pozostawanie-wygasłych-wycen). Problem odtworzony na metodach Storage; brak GC poza limitem zadań. Nie usuwać kontekstu zamówień: najpierw rozwiązać wyścigi zapisu referencji i indeksy, potem mały batch GC oraz test PG. Patch jeszcze niewdrożony.
+
 Goal pozostaje otwarty. Probe inodów i64pustychplików wykonany; obecny Bubblewrap nie udostępnia kwoty `nr_inodes`. Wykrytą możliwość tworzenia kolejnych user namespaces zablokowano w obu workerach (natywne probes i API2PASS). Twarda kwota inodów oraz sumy RAM/CPU/PID potomków nadal wymagają rozwiązania mount/deployment; nie zastępować ich pollingiem ani RLIMIT_NOFILE. Zachować obecne limity i fail-closed, bez udawania ukończenia. Szczegóły i warianty: [bezpieczeństwo](../security.md#zagnieżdżone-przestrzenie-użytkownika).
 
 Dalej: pełna macierz opcji ponad jedną kostkę i wybrane materiały; fizyczny telefon/passkey i formalny kontrast; rzeczywiste koszty/rentowność firmy. Otwarte pozostają szerokie obciążenie/pentest i ogólna prostota kodu. Headless nie dowodzi natywnego BFCache ani przełączania okien. Konsultować konkretne poprawki z reviewerem według polecenia właściciela; nie wymuszać 10/10, nie traktować ocen jako blokera ani powtarzać pełnych zestawów dla wyższej liczby.

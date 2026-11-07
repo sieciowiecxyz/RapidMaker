@@ -95,3 +95,12 @@ Bubblewrap musi obsługiwać oba argumenty, a system dopuszczać początkową pr
 Ograniczony przegląd źródeł nie wykazał nowej potwierdzonej luki. Limity długości i admission IP/email/global poprzedzają Argon2; dwa sloty są trzymane wewnątrz spawn_blocking również po anulowaniu HTTP. Ustawienie hasła ma osobną kontrolę admission. Weryfikacja parametrów hasha, dummy hash nieznanego konta i limity/zużycie challenge pozostają. Nie jest to test odporności całego API/DB na zalew połączeń.
 
 Logi HTTP używają szablonu trasy i serwerowego UUID, bez surowego URI/body/headers. Filtr targetów i panic hook ograniczają przypadkowe wypisanie sekretów; MailError nie zawiera tekstu dostawcy. Dwa istniejące testy wykonane ponownie: `logging::tests::logs_are_correlated_json_without_request_or_response_secrets` i `json_filter_and_panic_hook_protect_process_output` — po1PASS. Dowody: `frontend/tests/artifacts/security-auth-cost-20261108/`. Reviewer niezależnie sprawdził źródła. Bez patcha, nowych zależności, wywołań dostawców lub zmian normalnego serwera; nie obejmuje wszystkich gałęzi błędów ani pełnego pentestu.
+
+
+## Otwarte: trwałe pozostawanie wygasłych wycen
+
+Potwierdzone 2026-11-08 na jednorazowym PostgreSQL i rzeczywistych metodach `Storage`: po wygaśnięciu wycena jest niedostępna przez `quote()`, ukończone zadanie i model są usunięte, lecz rekord `quotes` pozostaje. Sprzątanie/limit `slicer_jobs` nie obejmuje tej tabeli. Dowód: `frontend/tests/artifacts/security-public-quota-20261108/result.json`; własna baza usunięta. To problem trwałej retencji poza limitem zadań, nie dowód szybkiego DoS lub ujawnienia danych.
+
+Bezpieczna poprawka musi zachować wyceny powiązane z `order_files.quote_id` (historia i emaile także po usunięciu plików), `checkout_drafts.input.parts[].quote_id`, `checkout_drafts.quote.quote_ids[]` i legacy `orders.lines[].quote_id`. Samo wygaszenie quote lub brak modelu nie wystarcza. Docelowo sprzątanie ma działać także bez nowych uploadów, w istniejącym cyklu utrzymania, małymi partiami. Potrzebne są indeksy i sprawdzenie wyścigu z zapisem draftu; `LIMIT 100` ogranicza liczbę usunięć, nie koszt skanu, a queue lock nie obejmuje wszystkich mutacji checkoutu.
+
+Reviewer potwierdził problem i odrzucił częściowy cleanup bez ochrony referencji. Patch jeszcze **NOT IMPLEMENTED**. Następny krok: rozwiązać synchronizację referencji, dobrać indeksy i dodać celowany PG test orphan/draft/history/legacy/expiry, bez nowego workera lub zależności.
