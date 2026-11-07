@@ -770,3 +770,14 @@ Przegląd nie znalazł konkretnego błędu sprzątania w API/queue/slicerze. Dod
 Worker i agent główny osobno uruchomili filtr: **1 PASS**, około0,07s testu. Zachowany końcowy log/komenda/hash w `slicer-cancellation-20261107/`. Izolowany CARGO_TARGET_DIR w `/tmp`; wspólny target i normalne serwery bez zmian. Rustfmt/diff PASS, Sol xhigh bez blokera. Brak zmian produkcyjnej logiki, UI, zależności i stawek.
 
 Dowód obejmuje anulowanie sandboxa i jedno pokolenie potomka, nie działanie Bambu, lease/DB, crash hosta ani pełne limity zasobów. Nadal otwarte: łączne RAM/CPU/pids i bajty/inody `/out`; osobny pomiar rzeczywistych wyjść jest potrzebny przed bezpiecznym dobraniem limitów.
+
+
+## 2026-11-07 — ograniczenie danych wyjściowych slicera
+
+Cztery natywne pomiary przed zmianą: cube1/10 zajmował257082/1895452B, korpus010 (40976trójkątów)1/6szt.7896292/45493030B, zawsze dwa gotowe pliki. Requested10 w ostatniej próbie oznaczało fitted6 na pierwszej płycie; nie mierzono reszty4. Gotowy rozmiar nie wystarczył do doboru limitu:128 MiBtmpfs odmówiło eksportu (-100/exit156),256 MiB przeszło z próbkowanym10ms szczytem136433664B. Zachowane wszystkie raporty, także odmowa, w `slicer-output-20261107/`.
+
+Minimalna zmiana (~14 linii produkcyjnych): `/out` tmpfs512 MiB i bind wyłącznie prywatnego result.json (create_new/0600). Dotychczasowe FSIZE128 MiB i parser1 MiB pozostają. Daje limit640 MiB danych samego `/out`+eksportu, nie sumy RAM/tmpfs/kernel ani inodów.
+
+Nowy produkcyjny run_plate/Bambu: te same cztery płyty PASS, tylko JSON na host2098/6273/2335/4810B; degenerate cube zwrócił InvalidModel. Oddzielne natywne regresje: statvfs512 MiB/tylko hostJSON, success/missing/error; anulowanie parent/child i Workspace; istniejące mounty/dev/shm — PASS. Test argumentów, cargo check slicera, fmt i diff PASS; izolowany target, bez pełnego API/wholejob/korpusu i restartu normalnych serwerów. Adaptacja testu anulowania dodaje dwa jawne testowe bindy plików blokad, zachowując produkcyjny tmpfs. Sol xhigh bez konkretnego blokera.
+
+Nie dowodzi globalnego optimum limitu: inne dopuszczone modele mogą odmówić po ENOSPC. Inody/metadata i łączne procesy nadal bez osobnego budżetu; cgroup delegation lokalnie zaobserwowano tylko odczytem, bez konfiguracji lub testu egzekwowania. Bez zmian UI, cen, zależności i sekretów.

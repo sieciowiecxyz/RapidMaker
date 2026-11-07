@@ -71,4 +71,11 @@ Natywna regresja `cancelled_plate_kills_descendants_and_removes_workspace` bierz
 cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-slicer cancelled_plate_kills_descendants_and_removes_workspace -- --ignored --nocapture
 ```
 
-Nadal brak łącznych limitów RAM/CPU/liczby potomków i rozmiaru/liczby plików `/out`. Per-process rlimits, FSIZE pojedynczego pliku i timeout nie zastępują tych limitów. Następny krok wymaga pomiaru rzeczywistych wyjść Bambu i doboru ograniczonego katalogu roboczego; nie podnosimy ocen bezpieczeństwa na podstawie samego sprzątania.
+Nadal brak łącznych limitów RAM/CPU/liczby potomków oraz liczby plików/inodów. Per-process rlimits i timeout nie zastępują tych limitów. Bajty `/out` ograniczono osobno poniżej; nie jest to łączny limit pamięci sandboxa.
+
+
+## Pliki wyjściowe slicera
+
+`/out` to tmpfs maks.512 MiB. Host udostępnia wyłącznie prywatny `result.json` (create_new/0600); G-code i pliki postprocessingu znikają po zamknięciu sandboxa. Istniejący FSIZE128 MiB ogranicza pojedynczy plik, w tym eksportowany JSON; parser nadal przyjmuje maks.1 MiB. Dane `/out` wraz z eksportem mają więc górną granicę640 MiB. To nie obejmuje osobnych `/tmp` i `/dev/shm` po128 MiB, metadanych/inodów ani pamięci procesów.
+
+Dobór wynika z pomiaru: większa płyta korpusu010 miała45,5 MB końcowego wyjścia, lecz136,4 MB próbkowanego szczytu;128 MiB spowodowało błąd eksportu,256 MiB przeszło. Produkcyjne512 MiB sprawdzono na czterech płytach cube1/10 i model0101/6. Inne większe zadanie może przekroczyć limit i otrzymać odmowę; nie sprawdzono całego korpusu na tym limicie. Natywna regresja `native_output_tmpfs_exports_only_result_including_missing_and_failed_runs` sprawdza limit i izolację hosta oraz poprawny/brakujący/błędny wynik. Dowody: `frontend/tests/artifacts/slicer-output-20261107/`.

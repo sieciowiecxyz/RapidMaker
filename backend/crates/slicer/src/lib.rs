@@ -8,7 +8,7 @@ use std::{
     collections::BTreeMap,
     fmt, fs,
     io::Read,
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::LazyLock,
     time::Duration,
@@ -581,9 +581,11 @@ fn plate_command(
             .arg(format!("/{file}"));
     }
     command
-        .arg("--bind")
-        .arg(out)
-        .arg("/out")
+        // G-code postprocessing temporarily keeps several full copies. Only the
+        // bounded result file survives the mount; no output directory is host-writable.
+        .args(["--size", "536870912", "--tmpfs", "/out", "--bind"])
+        .arg(out.join("result.json"))
+        .arg("/out/result.json")
         .args([
             "--chdir",
             "/out",
@@ -636,6 +638,11 @@ async fn run_plate(
         fs::remove_dir_all(&out)?;
     }
     fs::create_dir(&out)?;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(out.join("result.json"))?;
     let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status")?)?;
     let mut command = plate_command(workspace, &out, &cpus, copies, cpu_seconds);
     runtime_sha256().await?;
@@ -750,6 +757,22 @@ mod tests {
             ]));
         assert!(args.contains(&"--as=4294967296"));
         assert!(args.contains(&"--cpu=60"));
+        assert!(args.contains(&"--fsize=134217728"));
+        assert!(args.windows(7).any(|args| args
+            == [
+                "--size",
+                "536870912",
+                "--tmpfs",
+                "/out",
+                "--bind",
+                "/unused-out/result.json",
+                "/out/result.json",
+            ]));
+        assert!(
+            !args
+                .windows(3)
+                .any(|args| args == ["--bind", "/unused-out", "/out"])
+        );
         assert!(args.windows(2).any(|args| args == ["--remount-ro", "/"]));
     }
 
@@ -766,6 +789,7 @@ mod tests {
         }
         let out = workspace.0.join("out");
         fs::create_dir(&out).unwrap();
+        fs::write(out.join("result.json"), b"").unwrap();
         let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status").unwrap()).unwrap();
         let production = plate_command(&workspace, &out, &cpus, 1, 60);
         let args = production.as_std().get_args().collect::<Vec<_>>();
@@ -814,6 +838,75 @@ print(json.dumps(result))"#])
         );
     }
 
+    #[tokio::test]
+    #[ignore = "requires Linux bubblewrap, installed Bambu runtime and /usr/bin/python3"]
+    async fn native_output_tmpfs_exports_only_result_including_missing_and_failed_runs() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-output-probe-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700)).unwrap();
+        for file in ["model.stl", "machine.json", "process.json", "filament.json"] {
+            fs::write(workspace.0.join(file), b"trusted probe placeholder").unwrap();
+        }
+        let out = workspace.0.join("out");
+        fs::create_dir(&out).unwrap();
+        let result = out.join("result.json");
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&result)
+            .unwrap();
+        let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status").unwrap()).unwrap();
+        let production = plate_command(&workspace, &out, &cpus, 1, 60);
+        let args = production.as_std().get_args().collect::<Vec<_>>();
+        let invocation = args
+            .iter()
+            .rposition(|arg| *arg == "/opt/bambustudio-bin/AppRun")
+            .unwrap();
+        for mode in ["success", "missing", "failed"] {
+            fs::write(&result, b"").unwrap();
+            let mut probe = tokio::process::Command::new(production.as_std().get_program());
+            probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import json, os, sys
+s = os.statvfs('/out')
+assert s.f_blocks * s.f_frsize == 536870912
+with open('/out/temporary.gcode', 'xb') as output:
+    output.write(b'x')
+mode = sys.argv[1]
+if mode != 'missing':
+    result = {'return_code': -6} if mode == 'failed' else {'return_code': 0, 'sliced_plates': [{'total_predication': 60, 'filaments': [{'total_used_g': 1}], 'objects': [{}]}]}
+    with open('/out/result.json', 'w') as output:
+        json.dump(result, output)
+sys.exit(1 if mode == 'failed' else 0)
+"#, mode]).env_clear().env("PATH", "/usr/bin:/bin")
+                .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null()).kill_on_drop(true);
+            let status = tokio::time::timeout(Duration::from_secs(5), probe.status())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(status.success(), mode != "failed");
+            assert_eq!(fs::read_dir(&out).unwrap().count(), 1);
+            assert_eq!(
+                fs::metadata(&result).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            let bytes = fs::read(&result).unwrap();
+            if mode == "success" {
+                assert_eq!(parse_result(&bytes).unwrap().copies_per_plate, 1);
+            } else {
+                assert!(parse_result(&bytes).is_err());
+                if mode == "failed" {
+                    assert_eq!(
+                        serde_json::from_slice::<Value>(&bytes).unwrap()["return_code"],
+                        -6
+                    );
+                }
+            }
+        }
+    }
+
     // Exercise the same dropped status future used by run_plate and the queue's
     // outer timeout. Locks remain observable after Workspace unlinks the files.
     #[tokio::test]
@@ -830,6 +923,7 @@ print(json.dumps(result))"#])
         let path = workspace.0.clone();
         let out = path.join("out");
         fs::create_dir(&out).unwrap();
+        fs::write(out.join("result.json"), b"").unwrap();
         let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status").unwrap()).unwrap();
         let production = plate_command(&workspace, &out, &cpus, 1, 60);
         let args = production.as_std().get_args().collect::<Vec<_>>();
@@ -838,16 +932,26 @@ print(json.dumps(result))"#])
             .rposition(|arg| *arg == "/opt/bambustudio-bin/AppRun")
             .unwrap();
         let mut probe = tokio::process::Command::new(production.as_std().get_program());
+        assert_eq!(args[invocation - 1], "--");
+        probe.args(&args[..invocation - 1]);
+        for name in ["parent", "child"] {
+            fs::write(out.join(name), b"").unwrap();
+            probe
+                .arg("--bind")
+                .arg(out.join(name))
+                .arg(format!("/out/{name}"));
+        }
         probe
-            .args(&args[..invocation])
+            .arg("--")
             .args([
                 "/usr/bin/python3",
                 "-c",
                 r#"import fcntl, os, time
 name = 'parent' if os.fork() else 'child'
-with open('/out/' + name, 'xb') as lock:
+with open('/out/' + name, 'r+b') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
-    open('/out/' + name + '.ready', 'xb').close()
+    lock.write(b'ready')
+    lock.flush()
     time.sleep(8)
 "#,
             ])
@@ -862,7 +966,10 @@ with open('/out/' + name, 'xb') as lock:
             probe.status().await
         });
         let ready = async {
-            while !out.join("parent.ready").exists() || !out.join("child.ready").exists() {
+            while ["parent", "child"]
+                .iter()
+                .any(|name| fs::metadata(out.join(name)).unwrap().len() == 0)
+            {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         };
