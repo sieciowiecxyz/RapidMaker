@@ -28,7 +28,11 @@ if request['mode'] == 'reply':
     message['To'] = 'void@sieciowiec.xyz'
     message['Subject'] = 'Re: Rapidmaker — test rozmowy'
     message['Date'] = formatdate(localtime=False)
-    message['Message-ID'] = make_msgid(domain='sieciowiec.xyz')
+    outbound_id = request.get('outbound_message_id', make_msgid(domain='sieciowiec.xyz'))
+    if 'outbound_message_id' in request and not re.fullmatch(
+            r'<[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}@sieciowiec\.xyz>', outbound_id):
+        raise SystemExit('Invalid test Message-ID')
+    message['Message-ID'] = outbound_id
     reference = request['message_id']
     if len(reference) > 512 or any(ord(c) < 32 for c in reference): raise SystemExit('Invalid test reference')
     message['In-Reply-To'] = reference
@@ -60,6 +64,7 @@ try:
             if status != 'OK' or not match: raise RuntimeError('cursor')
             print(json.dumps({'after': int(match[1]) - 1}))
         else:
+            uidvalidity = int(imap.response('UIDVALIDITY')[1][0])
             after = int(request['after'])
             deadline = time.monotonic() + 90
             while time.monotonic() < deadline:
@@ -67,6 +72,7 @@ try:
                 status, data = imap.uid('search', None, 'UID', f'{after + 1}:*')
                 if status != 'OK': raise RuntimeError('search')
                 uids = b' '.join(item for item in data if isinstance(item, bytes))
+                deliveries = []
                 for uid in [n for n in uids.split() if int(n) > after][-30:]:
                     status, sizes = imap.uid('fetch', uid, '(RFC822.SIZE)')
                     size = re.search(rb'RFC822.SIZE (\d+)', b' '.join(v for v in sizes if isinstance(v, bytes)))
@@ -75,13 +81,19 @@ try:
                     raw = next((item[1] for item in items if isinstance(item, tuple)), None)
                     if status != 'OK' or not raw: continue
                     message = email.message_from_bytes(raw, policy=default)
-                    if parseaddr(str(message.get('From', '')))[1].lower() != parseaddr(values.get('MAIL_FROM', ''))[1].lower(): continue
+                    expected_sender = 'void@sieciowiec.xyz' if request['mode'] == 'deliveries' else parseaddr(values.get('MAIL_FROM', ''))[1].lower()
+                    if parseaddr(str(message.get('From', '')))[1].lower() != expected_sender: continue
                     bodies = []
                     for part in message.walk():
                         if part.get_content_type() == 'text/plain' and part.get_content_disposition() != 'attachment':
                             bodies.append(part.get_content())
                     body = '\n'.join(bodies)
-                    if request['mode'] == 'code':
+                    if request['mode'] == 'deliveries':
+                        if (str(message.get('Message-ID', '')) == request['outbound_message_id']
+                                and parseaddr(str(message.get('To', '')))[1].lower() == 'void@sieciowiec.xyz'
+                                and request['marker'] in body):
+                            deliveries.append(int(uid))
+                    elif request['mode'] == 'code':
                         match = re.search(r'Twój kod logowania:\s*(\d{8})', body)
                         if match:
                             print(json.dumps({'code': match[1]})); sys.exit(0)
@@ -97,6 +109,8 @@ try:
                         expected = f"Stripe potwierdził zwrot {amount // 100}.{amount % 100:02d} PLN za zamówienie {request['reference']}."
                         if expected in body:
                             print(json.dumps({'received': True})); sys.exit(0)
+                if request['mode'] == 'deliveries' and len(deliveries) >= 2:
+                    print(json.dumps({'uidvalidity': uidvalidity, 'uids': deliveries})); sys.exit(0)
                 time.sleep(2)
             raise RuntimeError('mail_timeout')
 except Exception as error:

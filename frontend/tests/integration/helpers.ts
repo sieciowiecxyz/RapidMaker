@@ -51,7 +51,13 @@ export function accounts(): Account[] {
 }
 export function mail(
   input: Record<string, unknown>,
-): Promise<{ after: number; code: string; received: boolean }> {
+): Promise<{
+  after: number;
+  code: string;
+  received: boolean;
+  uidvalidity?: number;
+  uids?: number[];
+}> {
   return new Promise((resolveResult, reject) => {
     const child = spawn('python', [resolve('tests/read-test-mail.py')], {
       stdio: ['pipe', 'pipe', 'pipe'],

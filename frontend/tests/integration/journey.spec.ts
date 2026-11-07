@@ -1,8 +1,49 @@
 import { expect, test } from './fixtures';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { accounts, login, mail, fillStripeCard } from './helpers';
 import { fillAuthorContact } from './checkout-helpers';
+
+// Only inspect the disposable runner database, with validated SQL values and no mail tokens.
+function inboundReplay(order: string, uidvalidity: number, uids: number[]) {
+  const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+  if (
+    !/^rapidmaker_test_browser_[a-f0-9]{32}$/.test(database) ||
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(order) ||
+    !Number.isSafeInteger(uidvalidity) ||
+    uidvalidity <= 0 ||
+    uids.length !== 2 ||
+    new Set(uids).size !== 2 ||
+    uids.some((uid) => !Number.isSafeInteger(uid) || uid <= 0)
+  )
+    throw new Error('Inbound inspection requires the isolated database and two IMAP deliveries');
+  return JSON.parse(
+    execFileSync(
+      'podman',
+      [
+        'exec',
+        process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+        'psql',
+        '-U',
+        'rapidmaker',
+        '-d',
+        database,
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-At',
+        '-c',
+        `SELECT json_build_object(
+      'outcomes', COALESCE(json_agg(outcome ORDER BY uid), '[]'::json),
+      'same_digest', count(DISTINCT encode(digest,'hex'))=1,
+      'same_mailbox', count(DISTINCT mailbox)=1,
+      'order_matches', COALESCE(bool_or(message_id IN (SELECT id FROM order_messages WHERE order_id='${order}' AND origin='email')),false)
+    ) FROM chat_inbound WHERE uidvalidity=${uidvalidity} AND uid IN (${uids.join(',')})`,
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000 },
+    ).trim(),
+  );
+}
 
 test.use({ screenshot: 'off', trace: 'off' });
 test('real manual quote, admin publication, iCloud notice, Stripe payment/refund and email reply', async ({
@@ -13,7 +54,7 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment/refund
     process.env.RAPIDMAKER_SANDBOX !== '1',
     'Requires --sandbox; sends only to void and charges only Stripe test',
   );
-  test.setTimeout(360_000);
+  test.setTimeout(480_000);
   const fixture = accounts();
   await login(
     page,
@@ -152,7 +193,37 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment/refund
     expect(sent.status()).toBe(200);
     const copy: any = await mail({ mode: 'chat', reference: id, marker, after: mailCursor.after });
     const reply = 'Email reply ' + randomUUID();
-    await mail({ mode: 'reply', message_id: copy.message_id, body: reply });
+    const replyCursor = await mail({ mode: 'watermark' });
+    const outboundMessageId = `<${randomUUID()}@sieciowiec.xyz>`;
+    const replay = {
+      mode: 'reply',
+      message_id: copy.message_id,
+      body: reply,
+      outbound_message_id: outboundMessageId,
+    };
+    await mail(replay);
+    await mail(replay);
+    // SMTP acceptance alone is insufficient: require two actual provider deliveries.
+    const deliveries = await mail({
+      mode: 'deliveries',
+      after: replyCursor.after,
+      outbound_message_id: outboundMessageId,
+      marker: reply,
+    });
+    const { uidvalidity, uids } = deliveries;
+    if (uidvalidity === undefined || !uids) throw new Error('Missing IMAP delivery evidence');
+    expect(uids).toHaveLength(2);
+    await expect
+      .poll(() => inboundReplay(id, uidvalidity, uids), {
+        timeout: 90_000,
+        intervals: [1000, 3000],
+      })
+      .toEqual({
+        outcomes: ['imported', 'duplicate'],
+        same_digest: true,
+        same_mailbox: true,
+        order_matches: true,
+      });
     await expect
       .poll(
         async () => {
@@ -166,6 +237,9 @@ test('real manual quote, admin publication, iCloud notice, Stripe payment/refund
       .toBe(1);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByText(reply, { exact: true })).toBeVisible();
+    console.log(
+      'Email replay: two real IMAP UIDs, durable imported/duplicate, one client chat message PASS',
+    );
   } finally {
     await adminContext.close();
     await otherContext.close();
