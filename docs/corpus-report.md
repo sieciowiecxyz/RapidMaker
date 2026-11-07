@@ -657,3 +657,9 @@ Zdarzenia blur/focus/visibility są syntetyczne w headless; logowanie/TOTP, odwo
 Przegląd integerpricing/cart nie wykazał błędu pobieranej kwoty. Cena jednostkowa ceil(total/quantity) mogła jednak wyglądać na dokładną obok dokładnej sumy pozycji. Adapter porównuje grosze przed konwersją naPLN; tylko rozbieżna cena dostaje etykietę „orientacyjnie”. Bez zmiany sumy, płatności, kontrolek lub stylów.
 
 admin-unit-rounding-baseline:1PASS/1FAIL (52/3 brak właściwej etykiety,54/3 poprawne). admin-unit-rounding-fixed:**3PASS/0FAIL/0SKIP/0flaky,1,44s** — oba przypadki i istniejący admin status/chat/CSRF. To kontrakt renderowania z mockAPI, nie dowód rzeczywistej płatności. Svelte0/build/diff PASS; Sol xhigh sprawdził mapping, precyzję i raporty, brak blokera.
+
+## 2026-11-07 — minimum raz dla rzeczywistego koszyka
+
+Istniejący test dwóch uploadów/natywnych wycen slicera (1 i10 kopii) rozszerzony parametrem minimum2000/50000grnetto. Jawne stawki ustawiane przed snapshotami wyłącznie w bazie rapidmaker_test_browser_*;finally odtwarza poprzednią konfigurację i sprawdza zgodność. SQL ma15s timeout. Bez zmian produktu lub nowej abstrakcji.
+
+cart-minimum-real-20261107:**2PASS/0FAIL/0SKIP/0flaky,7,24s**. Zmierzony koszt netto2942gr, zwykłe netto4203/gross5170; przy minimum50000gr:VAT11500,gross61500 wobec sumy osobnych minimów123000. Dokładny podział setup21956+pozycje13679+25865=61500. Odwrócenie kolejności zachowuje kwotę i sumę przydziałów; zmienione/obce quote409 oraz powtórzonyid400 nadal sprawdzane. Typy/Prettier/diff PASS; Sol xhigh sprawdził SQL, niezależny rachunek i raport. To rzeczywisty API/slicer/checkoutquote na stawkach testowych, bez Stripe lub potwierdzenia rentowności firmy.
