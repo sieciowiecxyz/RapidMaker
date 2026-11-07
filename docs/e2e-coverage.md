@@ -29,6 +29,8 @@ Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijaj�
 
 ## Aktualność i pozostałe ograniczenia
 
+Aktualne kontrakty UI na c8d8514:54PASS/0FAIL/0SKIP/0flaky,12s (contracts-c8d8514/current-contracts.json). Mocki API/wire fixtures, nie rzeczywiste operacje backendu/providerów; Sol xhigh potwierdził zakres.
+
 Nowszy sandbox1ae9ed6:12PASS/1FAIL testu profile-drift (błędne założenie pustej wspólnej bazy), zero provider-blocked. Po zawężeniu liczników do własnego checkoutu celowane „zakup → profile-drift”2PASS/18s. Nie jeden czysty13-scenariuszowy przebieg; pełny nieudany raport zachowany.
 
 Nowsza wspólna regresja na3519cb9: storage25PASS po poprawce etykiety runnera (pierwsza próba24PASS/1harnessFAIL); core49PASS/0FAIL/0flaky/1SKIP,392,4s. Pominięty tylko opt-in large removal. Źródła/binarium/dist niezmienione podczas core; Sol xhigh zweryfikował raporty. Pominięty large removal uruchomiono osobno na7961feb:1PASS/0SKIP,16,7s (large-removal-current-7961feb), bez zmiany wyniku core. Nie powtarzano sandbox/email/registrations/contracts. Szczegóły i prywatne nazwy raportów w corpus-report.md.

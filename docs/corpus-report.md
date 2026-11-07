@@ -525,3 +525,9 @@ Na czystym40e8a5d: corpus41-ui-authoritative-40e8a5d-20261107T004449Z — **41PA
 437 hashów przed/po identycznych (źródła,manifest,binarium,dist), HEAD bez zmian. ReportSHA16741edf62890ca6c011c1ab5e4ccfab8cb83a1af87fb04da05b41de225283ff, prywatne report/provenance/contact obok siebie w artifacts/. Izolowana DB/storage/profile large, normalny localhost/.env nietknięte, bez poczty/providerów/pobierania nowych modeli.
 
 Reviewer zatwierdził aktualny zakres. Ten UI test sprawdza ceny przypadków9/20/29 oraz ręczną ścieżkę5/19/22/25; pozostałe podglądy nie dowodzą wyceny. Nie przypisujemy temu przebiegowi starszych24native/12manual z oddzielnego API. Wcześniejszy37PASS/4harnessFAIL+4PASS pozostaje historyczny; aktualny dowód UI jest jednym czystym41.
+
+## 2026-11-07 — aktualne kontrakty frontendu
+
+Na czystymc8d8514 `python frontend/tests/run-all.py --group contracts --no-build`: **54PASS/0FAIL/0SKIP/0flaky,12s,exit0**; raporty zachowane contracts-c8d8514/current-contracts.json i current-summary.json (poprzedni53PASS osobno). Testy obejmują parser GLB i limity, kwoty pozycji, formularze bezpieczeństwa/redirecty, CSRF w adapterach, panele, pending/retry zwrotów/nadań i operatora.
+
+Sol xhigh przejrzał raport/listę/źródła: bez konkretnego błędu do poprawienia w tym zakresie. Są to testy produkcyjnego UI/parsera z wire fixtures i mockami API, wirtualny WebAuthn; nie Rust/DB, rzeczywiste operacje Stripe/Furgonetka/iCloud ani fizyczny klucz. Te integracje mają odrębne raporty. Brak zmian kodu i deklaracji10/10 całego produktu.
