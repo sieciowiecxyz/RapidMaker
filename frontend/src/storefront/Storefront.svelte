@@ -16,7 +16,7 @@
   import PrintTransition from './components/PrintTransition.svelte';
   import OrderPage from './components/OrderPage.svelte';
   import ProductionControls from './components/ProductionControls.svelte';
-  import { IconArrowUpRight, IconArrowRight, IconUpload, IconFile3d, IconX, IconCheck, IconSun, IconMoon, IconPhone, IconMail, IconMapPin, IconCube, IconRefresh } from '@tabler/icons-svelte';
+  import { IconArrowUpRight, IconArrowRight, IconUpload, IconFile3d, IconX, IconCheck, IconSun, IconMoon, IconPhone, IconMail, IconMapPin, IconCube, IconRefresh, IconCopy } from '@tabler/icons-svelte';
   import Button from './components/ui/Button.svelte';
   import Input from './components/ui/Input.svelte';
   import Card from './components/ui/Card.svelte';
@@ -149,6 +149,18 @@
     const settings=models.find(model=>model.id===id)?.settings;
     if(settings) lastSettings={...settings};
   }
+  function duplicateModel(id:string) {
+    const model=models.find(model=>model.id===id);
+    if(!model || model.sample || model.status!=='ready' || !model.analysis || models.length>=10 || removals.has(id) || releases.has(model.analysis.id))return;
+    const copy:Model={...JSON.parse(JSON.stringify(model)),id:crypto.randomUUID()};
+    const index=models.findIndex(model=>model.id===id);
+    models=[...models.slice(0,index+1),copy,...models.slice(index+1)];
+    const file=uploadedFiles.get(id), mesh=meshCache.get(id);
+    if(file)uploadedFiles.set(copy.id,file);
+    if(mesh)meshCache.set(copy.id,mesh);
+    fileRevision++;
+    selectModel(copy.id);
+  }
   function removeModel(id:string):Promise<boolean> {
     const existing=removals.get(id);
     if(existing)return existing;
@@ -156,7 +168,7 @@
       const model=models.find(model=>model.id===id);
       try {
         if(!model)return true;
-        if(!model.sample && model.analysis?.id)await releaseRemote(model.analysis.id);
+        if(!model.sample && model.analysis?.id && !models.some(other=>other.id!==id && other.analysis?.id===model.analysis?.id))await releaseRemote(model.analysis.id);
         uploadedFiles.delete(id);meshCache.delete(id);fileRevision++;
         const index=models.findIndex(model=>model.id===id);
         models=models.filter(model=>model.id!==id);
@@ -431,7 +443,12 @@
                   <span><span class="model-name">{model.name}</span><span class="model-meta">{model.settings ? settingsSummary(model.settings,materials) : 'Wybierz ustawienia'}</span><span class="model-state">{model.status==='error' ? 'Błąd analizy modelu' : issues.length ? 'Uzupełnij ustawienia' : selectedId===model.id ? 'Edytujesz ten model' : 'Ustawienia kompletne'}</span></span>
                 </button>
                 <label class="quantity"><span class="sr-only">Liczba sztuk: {model.name}</span><Input type="number" min="1" max="1000" step="1" value={model.quantity} oninput={event => changeQuantity(model.id, event.currentTarget.valueAsNumber)} /></label>
-                <button class="remove" aria-label={`Usuń ${model.name}`} onclick={()=>removeModel(model.id)}><IconX size={17} stroke={1.7} /></button>
+                <div class="model-actions">
+                  {#if !model.sample && model.status==='ready' && model.analysis}
+                    <button class="remove" aria-label={`Powiel wariant ${model.name}`} title="Powiel wariant" disabled={models.length>=10} onclick={()=>duplicateModel(model.id)}><IconCopy size={17} stroke={1.7} /></button>
+                  {/if}
+                  <button class="remove" aria-label={`Usuń ${model.name}`} onclick={()=>removeModel(model.id)}><IconX size={17} stroke={1.7} /></button>
+                </div>
               </div>
             {/each}
           </div>

@@ -473,3 +473,6 @@ p { text-wrap: pretty; }
 
 .order-nav-back { min-height:44px; padding:0; border:0; background:transparent; color:var(--ink); font-size:13px; font-weight:600; }
 [hidden] { display:none !important; }
+
+.model-actions { display:flex; flex-direction:column; align-items:center; }
+.model-actions button:disabled { opacity:.35; cursor:not-allowed; }

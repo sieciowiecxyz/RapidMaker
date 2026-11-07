@@ -55,16 +55,12 @@ test('one server upload retains two configurations through Stripe and both order
   await page.locator('input[name=strength][value=standard]').check();
   const proceed = page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true });
   await expect(proceed).toBeEnabled({ timeout: 90_000 });
-  // There is no duplicate-existing-upload control. Only row duplication uses this seam;
-  // quantities, colors, settings, quotes, cart handoff and payment use the real UI/adapters.
-  const modelId = await page.evaluate(() => {
-    const key = 'rapidmaker.storefront.draft.v1';
-    const draft = JSON.parse(localStorage.getItem(key)!);
-    draft.models.push({ ...structuredClone(draft.models[0]), id: crypto.randomUUID() });
-    localStorage.setItem(key, JSON.stringify(draft));
-    return draft.models[0].analysis.id as string;
-  });
-  await page.reload();
+  const modelId = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1')!).models[0].analysis
+        .id as string,
+  );
+  await page.getByRole('button', { name: 'Powiel wariant cube_20mm.stl', exact: true }).click();
   const rows = page.locator('.model-row');
   await expect(rows).toHaveCount(2);
   await rows.nth(0).getByRole('spinbutton').fill('2');

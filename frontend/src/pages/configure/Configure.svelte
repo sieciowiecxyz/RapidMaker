@@ -229,7 +229,12 @@
               onclick={() => {
                 if (busy) return;
                 void mutate(async () => {
-                  if (model.analysis?.id) await api.releaseModel(model.analysis.id);
+                  if (
+                    model.analysis?.id &&
+                    !cart?.models.some(
+                      (other) => other.id !== model.id && other.analysis?.id === model.analysis?.id,
+                    )
+                  ) await api.releaseModel(model.analysis.id);
                   await api.removeModel(model.id);
                 });
               }}

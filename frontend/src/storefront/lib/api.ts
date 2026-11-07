@@ -214,7 +214,8 @@ export async function prepareCheckout(
   const resolved = models.map((model) => productionModel(model, materials, catalog));
   const oldCart = await checkout.getCart();
   for (const item of oldCart.models) await checkout.removeModel(item.id);
-  for (const draft of resolved) {
+  const savedModels: Model[] = [];
+  for (const [index, draft] of resolved.entries()) {
     const cart = await checkout.addModel(draft.name);
     const added = cart.models[cart.models.length - 1];
     if (manual || notes.trim())
@@ -226,6 +227,7 @@ export async function prepareCheckout(
         .filter(Boolean)
         .join(' ');
     await checkout.updateModel(added.id, { ...draft, id: added.id });
+    savedModels.push({ ...models[index], id: added.id });
   }
   await checkout.setDelivery(
     (['courier', 'locker', 'pickup'].includes(delivery)
@@ -235,7 +237,7 @@ export async function prepareCheckout(
         : 'courier') as DeliveryMethod,
     oldCart.postalCode,
   );
-  saveDraft(models, delivery);
+  saveDraft(savedModels, delivery);
   try {
     localStorage.setItem(CHECKOUT_READY_KEY, '1');
   } catch {
@@ -268,9 +270,7 @@ export async function restoreCheckoutDraft(): Promise<{
       const basic = Object.entries(defaults[model.options.materialId] ?? {}).find(
         ([, code]) => code === model.options.color,
       )?.[0];
-      const previous = saved.find(
-        (item) => item.analysis?.id === model.analysis?.id && item.name === model.name,
-      )?.settings;
+      const previous = saved.find((item) => item.id === model.id)?.settings;
       return {
         id: model.id,
         name: model.name,

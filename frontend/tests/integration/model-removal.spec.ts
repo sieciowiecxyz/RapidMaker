@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { accounts, login } from './helpers';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, extname, resolve, sep } from 'node:path';
@@ -116,6 +117,127 @@ test('ready UI removal deletes real files and rejects non-owner mutations', asyn
   } finally {
     await outsider.dispose();
   }
+});
+
+test('duplicate variants keep independent settings and release only the last upload reference', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await open(page);
+  let uploads = 0,
+    deletes = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/models' && request.method() === 'POST') uploads++;
+    if (
+      /\/api\/models\/[^/]+$/.test(new URL(request.url()).pathname) &&
+      request.method() === 'DELETE'
+    )
+      deletes++;
+  });
+  const id = await upload(page);
+  const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+  expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
+  const quota = () =>
+    execFileSync(
+      'podman',
+      [
+        'exec',
+        process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+        'psql',
+        '-U',
+        'rapidmaker',
+        '-d',
+        database,
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-At',
+        '-c',
+        `SELECT count(*), COALESCE(sum(source_bytes+mesh_bytes+preview_bytes),0) FROM private_models WHERE id='${id}'`,
+      ],
+      { encoding: 'utf8', timeout: 15_000, stdio: 'pipe' },
+    ).trim();
+  expect(quota()).toMatch(/^1\|[1-9][0-9]*$/);
+  for (const [name, value] of [
+    ['material', 'pla'],
+    ['color', 'black'],
+    ['quality', 'standard'],
+    ['strength', 'standard'],
+  ])
+    await page.locator(`input[name=${name}][value=${value}]`).check();
+  const proceed = page.getByRole('button', { name: 'Przejdź do zamówienia', exact: true });
+  await expect(proceed).toBeEnabled({ timeout: 90_000 });
+  const rows = page.locator('.model-row');
+  const duplicate = page.getByRole('button', { name: 'Powiel wariant cube_20mm.stl', exact: true });
+  await rows.first().getByRole('spinbutton').fill('2');
+  for (let count = 1; count < 10; count++) await duplicate.first().click();
+  await expect(rows).toHaveCount(10);
+  for (let index = 0; index < 10; index++) await expect(duplicate.nth(index)).toBeDisabled();
+  for (let count = 10; count > 2; count--) await remove(page).last().click();
+  await expect(rows).toHaveCount(2);
+  expect(deletes).toBe(0);
+  await expect(rows.nth(1).getByRole('spinbutton')).toHaveValue('2');
+  await rows.nth(1).getByRole('spinbutton').fill('3');
+  await rows.nth(1).getByRole('button', { name: 'Konfiguruj cube_20mm.stl' }).click();
+  await page.locator('input[name=color][value=white]').check();
+  await page.locator('input[name=quality][value=fine]').check();
+  await page.locator('input[name=strength][value=reinforced]').check();
+  await expect(proceed).toBeEnabled({ timeout: 90_000 });
+  await page.reload();
+  await expect(rows.nth(0)).toContainText('Czarny');
+  await expect(rows.nth(1)).toContainText('Biały');
+  await expect(rows.nth(0).getByRole('spinbutton')).toHaveValue('2');
+  await expect(rows.nth(1).getByRole('spinbutton')).toHaveValue('3');
+  await page
+    .locator('.models')
+    .screenshot({ path: test.info().outputPath('variants-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.models').screenshot({ path: test.info().outputPath('variants-mobile.png') });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const draft = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1')!),
+  );
+  expect(new Set(draft.models.map((model: { id: string }) => model.id)).size).toBe(2);
+  expect(draft.models.map((model: { analysis: { id: string } }) => model.analysis.id)).toEqual([
+    id,
+    id,
+  ]);
+  expect(
+    draft.models.map((model: { settings: { quality: string } }) => model.settings.quality),
+  ).toEqual(['standard', 'fine']);
+  await expect(proceed).toBeEnabled({ timeout: 90_000 });
+  await proceed.click();
+  await expect(page.locator('.order-summary li')).toHaveCount(2);
+  await page.goto('/wycena?restore=cart');
+  await expect(rows.nth(0)).toContainText('Czarny');
+  await expect(rows.nth(1)).toContainText('Biały');
+  await expect(rows.nth(0).getByRole('spinbutton')).toHaveValue('2');
+  await expect(rows.nth(1).getByRole('spinbutton')).toHaveValue('3');
+  await page.goto('/wycena/zaawansowana');
+  await remove(page).click();
+  await expect(page.locator('.part-row')).toHaveCount(1);
+  expect((await page.request.get(`/api/models/${id}`)).status()).toBe(200);
+  expect(existsSync(directory(id))).toBe(true);
+  expect(deletes).toBe(0);
+  await page.getByRole('link', { name: '← Wróć do konfiguratora', exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText('Biały');
+  await expect(rows.getByRole('spinbutton')).toHaveValue('3');
+  await expect(proceed).toBeEnabled({ timeout: 90_000 });
+  const deleted = deletion(page, id);
+  await remove(page).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(rows).toHaveCount(0);
+  await gone(page, id);
+  expect(deletes).toBe(1);
+  expect(quota()).toBe('0|0');
+  // A real upload still fits after physical storage and its quota record are released.
+  const replacement = await upload(page);
+  expect(replacement).not.toBe(id);
+  expect(uploads).toBe(2);
+  const cleanup = deletion(page, replacement);
+  await remove(page).click();
+  expect((await cleanup).status()).toBe(204);
+  await gone(page, replacement);
 });
 
 test('controlled DELETE 503 keeps the ready model and real retry removes it', async ({ page }) => {

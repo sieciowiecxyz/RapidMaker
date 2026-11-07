@@ -20,7 +20,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 | Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
 | Nowsza regresja3519cb9 | Storage25PASS, core49PASS/1 opt-in large SKIP, zeroFAIL/flaky; poprawiona etykieta runnera. Hashe niezmienione; sandbox/email inne osobne dowody |
 | Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |
-| Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja szkicu to jawny szew, brak przycisku powielania |
+| Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja dostępna przez UI; osobne core i Stripe po1PASS, last-reference cleanup |
 | Osiem klientów | eight-clients-final: 1 PASS/3,8 s. 16 równoczesnych estimate → 8 zadań/8 snapshotów/max prób 1; własne ceny i odmowa obcych zasobów; 4 próbki responsywności, nie szeroki load test |
 | Błędy uploadu | upload-failures-final: 2 PASS (istniejąca retencja + nowy scenariusz). Rzeczywisty ENOTDIR → 500, błąd insertu po konwersji → 503, brak nowych plików/rekordów, wcześniejszy model zachowany, następny upload 201. Nie ENOSPC |
 | Pobieranie i zawieszony upload | Konsultacja wskazała pełne buforowanie plików i brak deadline. Streaming 64 KiB/4 transfery, timeout tylko body 60 s; 10 testów Rust, HTTP 2 PASS oraz osobno 3 PASS. Bez zmiany uprawnień/wyglądu |
@@ -34,7 +34,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 
 1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
 2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej.
-3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, szew duplikacji, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.
+3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.
 
 ## Uruchamianie
 
