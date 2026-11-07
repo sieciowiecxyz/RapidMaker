@@ -559,3 +559,11 @@ Backend dodaje model_upload_busy i Retry-After1 tylko dla odmowy admission przed
 Celowane raporty: busy-upload-retry-20261107-c **11PASS** (rzeczywisty held upload → UI429 → automatyczne201/ready w obu konfiguratorach, źródłowe bytes; kontrolowane niereetrybłędy,8 prób/26s i usunięcie wiersza). d **6PASS** (prawdziwy flock marker/no-files +5 istniejących cleanup). Razem12nowych+5regresji, bez FAIL w końcowych przebiegach. Początkowe a/b FAIL harnessu przez evicted response body DevTools; test poprawiono na rzeczywisty persisted analysis ID, nie stub sukcesu; raporty zachowane.
 
 Build appRust, Svelte0/Vite, integrationTS, właściwyPrettier i diff PASS. Sol xhigh przejrzał source+raporty: bez blokera, dokładne oznaczenie tylko pewnego nieprzyjęcia. Wpis w core, opis frontend-contract. Granice:30s dotyczy planowania retry, nie limitu zaakceptowanego POST; nie loadtest. Zwykły localhost nadal ma stabilne APIed1fcd0; potrzebuje rollout nowego binarium, więc automatyczna obsługa tego markera jest na razie potwierdzona w izolacji.
+
+## 2026-11-07 — rollout nowej obsługi zajętości na localhost
+
+Zwykły API18432 aktualny7fb2a24,PID3428123,prywatne stabilne binariumSHA d0d6c5940688cacf7fcc6074a9aae8ddc36789f915f74e47dce8ae3e00a0b9b7. Poprzedni ed1fcd0 zakończony czysto; backup135199Bpg_dump zweryfikowany i2 katalogi modeli skopiowane. Bez zmian .env/katalogu/migracji/root, rollback pozostaje. Metadata prywatne local-runtime-7fb2a24/.
+
+Realne HTTP: held validprefix/100Continue → drugi429/model_upload_busy/Retry-After1/no-files; pierwszy201, ponowienie drugiego201; własne source/GLB200, cudze404, estimate202/native3705gr, oba własneDELETE204. API/proxy limit96MiB, Vite200 i aktualne moduły retry/duplicate. Początkowy probe przerwał błędny wymóg in_stock=true (wszystkie koloryfalse); katalog nietknięty. Dokładnie2 utracone własne probe IDs po weryfikacji SHA/czasu/braku zadań/holdów/nieobecności w backupie wygaszono za zgodą agenta głównego; normalny worker usunął metadata/pliki. Bez szerszego sprzątania.
+
+Sol xhigh niezależnie sprawdził live SHA i obie ścieżki limitów, przejrzał źródła i metadata: brak blokera. Normalny smoke dowodzi HTTP busy/retry, nie nowego browser E2E na zwykłym localhost; automatyczne UI retry ma wcześniejsze odizolowane testy. Bez nowych testów obciążenia/wyglądu/providerów i bez wniosku o rentowności cennikaPOC.
