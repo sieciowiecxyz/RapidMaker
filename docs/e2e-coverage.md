@@ -3,16 +3,18 @@
 Przeczytaj gdy: oceniasz pokrycie celu lub wybierasz test po zmianie.
 Opis: mapa wykonanych przebiegów i ich granic; historia i szczegóły w [raporcie](corpus-report.md).
 
-Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`. Różne HEAD-y i przebiegi nie tworzą wspólnego PASS. [Mapa 445 kontrolek/44 plików](e2e-controls.md) to spis źródeł, nie pełna macierz kombinacji.
+Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`. Różne HEAD-y i przebiegi nie tworzą wspólnego PASS. [Mapa kontrolek](e2e-controls.md) to spis źródeł, nie pełna macierz kombinacji.
 
 ## Najnowsze dowody — 2026-11-07
 
 | Zakres / raport | Wykonany wynik | Granica |
 | --- | --- | --- |
+| Zbiorczy `baad9d1`, `full-integrated-baad9d1-20261107/` | **179PASS/0FAIL/1opt-inSKIP/0flaky**,441hashy bez zmian; storage25/core65/privacy11/sandbox13/email3/rejestracje1+1/contracts60 | Osiem grup exit0, wrapper2 przez skip; katalog i ceny na jawnych stawkach testowych. Korpusu41 nie powtarzano. |
+| Large, ta sama wersja i hashe | Osobny `large.json`: **1PASS/0SKIP**,16,5s, exit0 | Ten sam pominięty przypadek, osobny profil/run; nie sumować do180PASS pełnego zestawu. |
 | Pełny zestaw `6addae4`, `full-current-6addae4-20261107/` | **170 PASS / 3 FAIL / 1 opt-in SKIP**, 0 flaky; 443 hashe niezmienione | FAIL: privacy, sandbox i email po jednym; nie zastępować wyniku celowanymi rerunami. |
 | Kontrakty w pełnym `6addae4` | 56 PASS, osobna grupa `contracts` | Mocki API/wire fixtures; nie rzeczywiste operacje backendu/providerów. |
-| Privacy po `a03f362`, `privacy-final-focus-isolated-20261107` | 11 PASS: same/cross-tab, remote revoke, mutacja w locie, opóźnione/me, iframe click i szybki powrót; własność/publiczny szkic zachowane | Natywny focus iframe w headless; zewnętrzny lifecycle syntetyczny. Bez dowodu natywnego BFCache/push-revoke stale widocznej karty. |
-| Providerzy po `a03f362` | `panels-focus-final-20261107`: 1 PASS; `journey-focus-final-20261107`: osobno 1 PASS | Panele/chat/produkcja/refundy oraz manual/email/Stripe/replay dedup; nie jeden 13 PASS ani nowy pełny PASS. |
+| Poprawka `a03f362`, `privacy-final-focus-isolated-20261107` | 11 PASS: same/cross-tab, remote revoke, mutacja w locie, opóźnione/me, iframe click i szybki powrót; własność/publiczny szkic zachowane | Natywny focus iframe w headless; zewnętrzny lifecycle syntetyczny. Bez dowodu natywnego BFCache/push-revoke stale widocznej karty. |
+| Providerzy poprawki `a03f362` | `panels-focus-final-20261107`: 1 PASS; `journey-focus-final-20261107`: osobno 1 PASS | Panele/chat/produkcja/refundy oraz manual/email/Stripe/replay dedup; te osobne reruny nie zastępują zbiorczego wyniku. |
 | Cache, `5222964`, `private-cache-access-20261107` | 1 PASS: rzeczywiste PG/router, no-store i uprawnienia prywatnych GET, me klienta/admina/anonima | Bez wczesnych Host/Origin, mutations lub dowodu BFCache; 103 GET to diagnostyka, nie 103 przypadki. |
 | Worker, `63e5387`, `preview-worker-fixed-20261107/last-run.json` | 2 PASS; po 503 Worker kończony przed zwinięciem, także po ponownym otwarciu | Marker wykonania, brak osobnego raportu JSON/hashów; mock HTTP, rzeczywisty Worker; nie pomiar RSS. |
 | Podgląd, `3aed38f`, `private-preview-restore-20261107/fixed.json` | 3 PASS: dwa natywne cykle WebGL restore bez resize, obrót, collapse i failed Worker | Rzeczywiste Worker/parser/GPU, mock HTTP/kanoniczny GLB fixture; nie konwersja backendu. Baseline FAIL zachowany; brak snapshotu hashów. |

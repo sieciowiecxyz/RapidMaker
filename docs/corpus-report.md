@@ -725,3 +725,11 @@ frame-policy-20261107/baseline.json:**2FAIL** — cztery HTML200 bez nagłówkó
 Usunięto wyłącznie nieużywane frontend/src/components/ui/Input.svelte9linii iCard.svelte6linii. Importy Storefront wskazują inne, aktywne pliki podstorefront/components/ui; te orazrootButton iCSSzachowane. Wcześniejsza ogólna uwaga o używanych Input/Card dotyczyła zbieżnych nazw, nie tych ścieżek.
 
 Istniejący generator inventory-controls odświeżył mapę:445→444kontrolki,44→43pliki; usunięta tylko kontrolka staregoInput, reszta444wierszy semantycznie identyczna, numerylinii aktualne. Svelte0/Vite4wejścia/diff PASS; Sol xhigh niezależnie sprawdził odwołania i mapę, brak blokera. Bez E2E/providerów dla nieosiągalnych plików, bez zmiany widocznego UI lub zależności.
+
+## 2026-11-07 — zbiorczy przebieg na baad9d1
+
+Po aktualnym buildzieRust/frontend: run-all --group all --no-build, wyłącznieheadless, **179PASS/0FAIL/1opt-inSKIP/0flaky**,1559,5s. Osiem grup exit0 i brakproviderblocked: storage25,core65+skip,privacy11,sandbox13,email3,rejestracja hasło1/passkey1,contracts60. Wrapperexit2 wyłącznie przez celowo pominięty „opt-in large removal returns guest quota before the next corpus upload”. Prywatne immutable raporty full-integrated-baad9d1-20261107/,441hashy źródeł/binarium/dist/manifestu przed/po identyczne, czysty HEAD. Obejmuje naprawione focusiframe, podgląd, nagłówki i cachetest; źródła zamrożone podczas przebiegu.
+
+Ten sam pominięty scenariusz uruchomiony następnie z --large-models --local-accounts i manifestem: osobnylarge.json **1PASS/0FAIL/0SKIP/0flaky,16,5s,exit0**. Wszystkie441hashy nadal zgodne. To osobny wynik, nie zmiana pełnego zestawu na180PASS/exit0. Poprzedni pełny6addae4 z170PASS/3FAIL/1SKIP pozostaje zachowany. Baseline workera przed czyszczeniem outputDir skopiowano do preview-worker-baseline-20261107/.
+
+Sol xhigh niezależnie odczytał grupy, oba snapshoty, metadane i opcjonalny raport: wynik potwierdzony. Brak nowego konkretnego błędu przepływu POC w tym przebiegu. Korpusu41 nie powtarzano; wcześniejsze24native/12manual/4wadliwe/1ponadlimitem i144ujęcia mają oddzielne HEAD-y. Model41 nie jest obsłużony w pełni, ceny fixture nie potwierdzają rentowności firmy, headless nie zastępuje fizycznych urządzeń lub pentestu. Nie deklarujemy10/10 lub ukończenia całego celu.
