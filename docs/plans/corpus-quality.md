@@ -1,48 +1,39 @@
 # Cel: rzeczywiste modele i wiarygodne E2E
 
 Przeczytaj gdy: wznawiasz goal lub oceniasz jego zamknięcie.
-Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../corpus-report.md).
+Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage.md), historia w [raporcie](../corpus-report.md).
 
 ## Wymagania
 
-- 41 prywatnych projektów MakerWorld z pochodzeniem/SHA (34×3MF, 7×STL); użytkownik zakończył pobieranie. STEP z fixtures.
-- Rzeczywisty upload, prywatny podgląd, slicer i niezależny rachunek ceny. Ręczna ścieżka/odmowa nie oznacza automatycznej wyceny lub obsługi geometrii.
-- Obrazy, opcje i interakcje Piotra bez redesignu: konfigurator, zakup/refundy, dostawa, klient/admin, MFA, chat i rzeczywisty email. [Mapa dowodów](../e2e-coverage.md), [kontrolki](../e2e-controls.md).
-- Minimalny Rust, proste API/KISS; zachować kwoty, własność, izolację i limity. Nie zmieniać oczekiwań dla zielonego raportu.
-- Po etapie Sol xhigh w dziesięciu kategoriach: poprawność, bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody, prostota, utrzymanie, wygląd. Naprawiać konkretne problemy, nie wymuszać 10/10.
+- 41 prywatnych projektów MakerWorld z pochodzeniem/SHA: 34×3MF, 7×STL; pobieranie zakończone. STEP z fixtures.
+- Rzeczywisty upload, prywatny podgląd, slicer i niezależny rachunek ceny. Ręczna oferta ani odmowa nie oznacza automatycznej wyceny/obsługi geometrii.
+- Zachować obrazy, opcje i interakcje Piotra: konfigurator, zakup/refundy, dostawa, klient/admin, MFA, chat i rzeczywisty email; bez redesignu. [Kontrakt UI](../frontend-contract.md).
+- Minimalny Rust, proste API/KISS według [architektury](../ARCHITECTURE.md); zachować kwoty, własność, izolację i limity. Nie zmieniać oczekiwań dla zielonego raportu.
+- Po etapie Sol xhigh: poprawność, bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody, prostota, utrzymanie, wygląd. Naprawiać konkretne problemy; nie wymuszać 10/10.
 
-## Checkpoint
+## Checkpoint — 2026-11-07
 
-| Zakres | Zweryfikowany stan |
+| Zakres | Ostatni dowód i granica |
 | --- | --- |
-| Korpus/API | Aktualny69bec69:corpus-api-current-69bec69,41PASS/0FAIL/0SKIP;24 ceny slicera z rachunkiem,12 uzasadnionych ręcznych,4wadliwe,1limit;36GLB,391hashów zgodnych. Dawny corpus12-manual-geometry osobno |
-| Korpus/UI | Aktualny40e8a5d:41PASS/0FAIL/0SKIP/0flaky w jednym676s przebiegu;36renderów,4wadliwe i1zasobowa odmowa.144 unikalne ujęcia obejrzane,437hashów zgodnych; ceny UI tylko9/20/29 |
-| Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
-| Zbiorcza regresja6addae4 | 170PASS/3FAIL/1opt-inSKIP,443hashy zgodne. Po naprawie fokusu iframe i synchronizacji testu: osobno privacy11PASS oraz2provider-reruny po1PASS; pełny FAIL zachowany, bez nowej deklaracji fullPASS |
-| Regresja bb67c8a | Izolowane core64PASS/1opt-inSKIP + privacy3PASS, zeroFAIL/flaky;397hashów zgodnych. Pierwotny core66PASS/1FAIL/1SKIP zachowany; poprawiono izolację baz bez osłabienia limitów auth |
-| Nowsza regresja3519cb9 | Storage25PASS, core49PASS/1 opt-in large SKIP, zeroFAIL/flaky; poprawiona etykieta runnera. Hashe niezmienione; sandbox/email inne osobne dowody |
-| Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |
-| Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja dostępna przez UI; osobne core i Stripe po1PASS, last-reference cleanup |
-| Osiem klientów | eight-clients-final: 1 PASS/3,8 s. 16 równoczesnych estimate → 8 zadań/8 snapshotów/max prób 1; własne ceny i odmowa obcych zasobów; 4 próbki responsywności, nie szeroki load test |
-| Błędy uploadu | upload-failures-final: 2 PASS (istniejąca retencja + nowy scenariusz). Rzeczywisty ENOTDIR → 500, błąd insertu po konwersji → 503, brak nowych plików/rekordów, wcześniejszy model zachowany, następny upload 201. Nie ENOSPC |
-| Chwilowo zajęty upload | Pre-acceptance marker+bounded retry,12nowych i5cleanup PASS, review bez blokera. Zwykły API zaktualizowany do7fb2a24; realny smoke HTTP busy/retry/GLB/cena/delete PASS |
-| Pobieranie i zawieszony upload | Konsultacja wskazała pełne buforowanie plików i brak deadline. Streaming 64 KiB/4 transfery, timeout tylko body 60 s; 10 testów Rust, HTTP 2 PASS oraz osobno 3 PASS. Bez zmiany uprawnień/wyglądu |
-| Trwałość uploadu | Utrwalenie katalogu nadrzędnego przed DB; typowany niepewny COMMIT zachowuje pliki. upload-commit-durability-current 1 PASS; 10 Rust PASS i Clippy. Test błędu przy COMMIT to znany rollback, nie utrata ACK/power loss; osierocone katalogi uzgadnia teraz opisany poniżej worker |
-| Profil przy płatności | Hash profilu sprawdzany pod blokadą katalogu w końcowej transakcji; regresja PG 1 PASS oraz HTTP 1 PASS (409 i brak prób płatności/zamówień), review bez blokera. Pliki runtime osobno kontroluje API |
-| Retencja orphanów | Root flock + nieblokujący fence DB, 24 h/64 wpisy z kursorem, ochrona zadań/holdów; orphan-gc-storage 23 PASS i upload regression 1 PASS. Bez migracji, nowych zależności lub endpointu; bez rotacji root na żywo |
-| Zależności Rust | Pierwotny audyt 74bc144: cargo-machete 0.9.2 bez nieużywanych zależności; 13 crate’ów, 99 deklaracji. Streaming dodaje dwa użyte bezpośrednie helpery już obecne w lockfile. Brak ignorelist i zmian; nie dowodzi to prostoty całego kodu |
-| Prywatność sesji | Cross-tab3PASS; zdalny logout-all: klient/admin, zachowanie mutacji i powtórny powrót osobno PASS. Generacje i osłona prywatnego widoku; syntetyczne lifecycle headless, bez aktywnego push-revoke. Szczegóły/FAIL harnessu w raporcie |
-| Localhost | API18432 stabilne binarium7fb2a24, Vite18430 aktualny; backup DB i2 katalogów. Upload/GLB/native wycena/delete PASS; niezależny rachunek37,05zł zgodny z obecnymi stawkami POC, rentowność niepotwierdzona |
+| Korpus API, `69bec69` | 41 PASS: 24 ceny slicera z rachunkiem, 12 ręcznych, 4 wadliwe, 1 limit; 36 GLB. Odmowa to poprawny wynik testu, nie obsługa modelu. |
+| Korpus UI, `40e8a5d` | 41 PASS, 36 renderów, 144 unikalne obejrzane ujęcia; ceny UI tylko 9/20/29. To osobny przebieg na innym HEAD. |
+| Większe modele | Pełny STL, kompaktowy/spatial GLB i jawnie uproszczony tylko podgląd; [budżety](large-models.md). Model 41 nadal ponad limitem; 14/21/32/37 poprawnie odrzucone jako wadliwe. |
+| Pełna regresja, `6addae4` | **170 PASS / 3 FAIL / 1 opt-in SKIP**, 443 hashe niezmienione. FAIL zachowany; nowszego pełnego PASS nie ma. |
+| Poprawka `a03f362` — celowane | Privacy 11 PASS; panele 1 PASS i journey 1 PASS osobno po naprawie fokusu iframe/synchronizacji. Nie sumować w nowy wynik pełnego zestawu. |
+| Nowsze zmiany | `5222964`: prywatny cache/access 1 PASS; `63e5387`: Worker 2 PASS (marker, bez osobnego JSON); `3aed38f`: podgląd 3 PASS (mock HTTP, rzeczywiste Worker/parser/GPU). |
+| Ceny i zasoby | Minimum koszyka: 2 PASS, rzeczywisty slicer na stawkach testowych. Osiem klientów: 1 PASS, próbkowane RSS drzewa 187,2 MiB; nie limit RAM ani przepustowość. |
+| Prostota | Usunięcie Badge: 71 linii w 3 plikach, w tym 31 linii komponentu, i 3 bezpośrednie devDependencies; nie sumować jako całego usuniętego kodu. Szczegóły/audyt w raporcie. |
+| Runtime | Ostatni opisany lokalny smoke: `7fb2a24`, upload/GLB/cena/delete PASS, rachunek 37,05 zł. To zapis historyczny, nie potwierdzenie obecnego procesu lub wdrożenia. |
 
 ## Dalsza praca i granice
 
-Aktywne lease ma teraz osobny dowód: queue-recovery-20261107-first1PASS/193s (naturalne180s+5s,attempts2,jeden snapshot). Końcowy cleanup po naprawie zweryfikowany oddzielnie fault2PASS i queued1PASS; nie awaria hosta lub dowód startu Bambu przed kill.
+Goal pozostaje otwarty. Konsultować dalsze działania z reviewerem według polecenia właściciela; wybierać konkretny wykonalny problem i potrzebną regresję. Same oceny nie są technicznym blokerem. Nie powtarzać pełnych zestawów tylko dla wyższej liczby.
 
-1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
-2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej. Osobny eight-clients-resources-20261107:1PASS, próbkowaneRSSdrzewa187,2MiB/max3potomków, recovery0; nie górny limit pamięci.
-3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.
+Granice: model 41 i wadliwe źródła, rzeczywiste koszty/rentowność firmy, pełna macierz opcji, fizyczny telefon/passkey, formalny kontrast, szerokie obciążenie/pentest i ogólna prostota kodu. Testy lease/restartu nie dowodzą odporności na awarię hosta/power loss; headless nie dowodzi natywnego BFCache lub przełączania okien. Scoped review nie potwierdza 10/10 produktu.
 
-## Uruchamianie
+## Uruchamianie według potrzeby
+
+Wyłącznie headless; zakres i konfiguracja w [testing](../testing.md). Poniższe komendy nie oznaczają nowego wykonania:
 
 ```sh
 python frontend/tests/run-all.py --group core --no-build
@@ -50,6 +41,4 @@ E2E_REPORT_NAME=eight-clients-current python frontend/tests/run-integration.py c
 E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=corpus41-large-current python frontend/tests/run-integration.py --large-models corpus.spec.ts
 ```
 
-Używaj nowej nazwy raportu, by zachować wcześniejsze wyniki. Konfiguracja w backend/README.md; sekrety poza raportami. Pełne zestawy i testy providerów tylko celowo. Historia etapów, błędów harnessu i review jest w corpus-report.md; starsze checkpointy także w Git.
-
-Dalsze działania zgodnie z poleceniem właściciela konsultować z reviewerem. Poprzednie blocked oparte na samych ocenach nie było techniczną przeszkodą. Konsultacja wskazała dwa konkretne problemy zasobów; oba poprawione i ponownie sprawdzone. Nie czekać na definicję oceny, gdy reviewer potrafi wskazać wykonalną poprawkę. Nie deklarować 10/10 bez dowodów ani powtarzać zestawów tylko dla wyższej liczby.
+`core` uruchamia też `privacy`; `all` zawiera privacy i grupy providerów. `--no-build` wymaga aktualnego buildu. Nadawaj nowe nazwy i zachowuj poprzednie raporty (wrapper używa stałych nazw — archiwizuj je przed ponowieniem). Pełne/providerowe zestawy tylko celowo; sekrety poza raportami. Starsze checkpointy i FAIL harnessu pozostają w raporcie oraz Git.
