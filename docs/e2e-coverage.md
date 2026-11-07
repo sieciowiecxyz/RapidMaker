@@ -7,6 +7,8 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 ## Najnowsze dowody — 2026-11-07
 
+Bieżący pełny API korpus: `corpus-early-topology-20261107/` naacbd999 — **41 PASS/0 FAIL/0 SKIP/0 flaky**,24native/12manual/4wadliwe/1resource,36GLB,486hashy bez zmian. Model37typed422w2,212s. To nowy przebieg po poprawce; poprzedni40/1 zachowany. Brak nowego dowodu renderowania UI lub kosztów firmy.
+
 | Zakres / raport | Wykonany wynik | Granica |
 | --- | --- | --- |
 | Zbiorczy `baad9d1`, `full-integrated-baad9d1-20261107/` | **179PASS/0FAIL/1opt-inSKIP/0flaky**,441hashy bez zmian; storage25/core65/privacy11/sandbox13/email3/rejestracje1+1/contracts60 | Osiem grup exit0, wrapper2 przez skip; katalog i ceny na jawnych stawkach testowych. Korpusu41 nie powtarzano. |

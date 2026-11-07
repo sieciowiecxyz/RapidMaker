@@ -812,3 +812,12 @@ Istniejący normalizator XML dostał ograniczoną wskazówkę topologii: mapa do
 Regresja rzeczywistej paczki: identyczny STL dla poprawnego roota z nieużywaną wadliwą częścią oraz alternatywnego roota z wadliwym nieużywanym plikiem nazwanym kanonicznie. Finalnie18three_mf testów PASS i4nativeAPIE2EPASS (case37,formaty,wadliwearchiwa,non-manifold→kolejnyupload). Wcześniejsze omyłkowe uruchomienie standardowego testu miliona wierzchołków w profilu large dałoFAIL201vs422; zachowane, osobne poprawne standardprofile1PASS.
 
 Końcowy worker34212cb5: dwie próby exit67,wall1,897/1,930s,user1,842/1,882s,RSS~408/410MiB; ten sam SHAmodelu,CPU25s/wall30s/AS2GiB. Case37API422~2,1s. Źródła stabilne, cleanupDB/proces/root potwierdzone, zwykłyAPIbezrestartu. Dowody `case37-performance-20261107/root-only-summary.json`, raporty/logi/probe obok. Sol xhigh ponownie zatwierdził po usunięciu blokera. To przyspieszenie odmowy konkretnej wadliwej rodziny Bambu/transform, nie naprawa modelu lub pełny zielony korpus. Pozostałe pliki nadal przechodzą dotychczasową walidację SDK; bez nowych zależności.
+
+
+## 2026-11-07 — pełny korpus po wcześniejszej walidacji roota
+
+`corpus-early-topology-20261107/report.json` naacbd999 + przypięty worker34212cb5: **41 PASS/0 FAIL/0 SKIP/0 flaky**,594,935sPlaywright/605,245swrapper,exit0.24native ceny i niezależny rachunek fixture,12manual,4wadliwe14/21/32/37,1resource41,36prywatnychGLB. Wszystkie kategorie/powody i opisy preview odpowiadają autorytatywnemu69bec69; względem zachowanego40/1 zmienił się wyłącznie37 na oczekiwane422/model_topology_invalid. Case37z21,429sbaseline i25,252spriorFAIL do2,212s. Nie jest to obsługa wadliwej geometrii ani ogólne przyspieszenie wszystkich3MF.
+
+486hashy źródeł/binarki/manifestu/fixture przed/po identyczne,41wejść identycznych z poprzednim pełnym przebiegiem. Oczekiwania corpus.spec niezmienione SHA d66f510d51d7fd66cc6814a9bb7d8eb664215baa6e4fae2e8a5562329251f283. Raport SHA7a2ac52aa8e4374cc372054138db450ed2bb928d5f56f0b0a375ef7449ca80cf. PrywatneDB/proces/katalog usunięte, normalnyserwerbezrestartu; bez providerów/mail/nowego pobierania/widocznej przeglądarki. Git czysty przez cały przebieg.
+
+Sol xhigh niezależnie potwierdził41unikalnychprzypadków, klasyfikacje, hashe i cleanup. Historyczny40PASS/1FAIL zachowany, nie zastąpiony osobnymi scopedPASS. Ten przebieg jest nowym dowodem API/slicera, nie renderowaniaGPUUI, rentowności firmy, całej macierzy opcji lub obsługi ponadlimitowego41. Cel nadal otwarty; oceny zakresowe7–9 bez wymuszania10.
