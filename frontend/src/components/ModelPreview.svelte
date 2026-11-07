@@ -41,6 +41,8 @@
     error = '';
     const fail = () => {
       if (active) {
+        abort.abort();
+        worker.terminate();
         loading = false;
         error = 'Podgląd jest niedostępny. Oryginał możesz pobrać poniżej.';
         clearTimeout(timer);

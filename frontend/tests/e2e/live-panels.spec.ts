@@ -1,6 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 const id = '00000000-0000-4000-8000-000000000001';
-async function fixture(page: Page, role = 'client', verified = true, lineTotal = 52) {
+async function fixture(
+  page: Page,
+  role = 'client',
+  verified = true,
+  lineTotal = 52,
+  preview = false,
+) {
   let stage = verified ? 'authenticated' : 'second_factor';
   let authenticated = true,
     state = 'paid',
@@ -109,6 +115,7 @@ async function fixture(page: Page, role = 'client', verified = true, lineTotal =
             quantity: 3,
             available: true,
             source_url: `${path}/model-1/source`,
+            preview_url: preview ? `${path}/model-1/preview.glb` : undefined,
             dimensions_mm: [120, 80, 45],
             options: { quality: 'fine', wall_loops: 3, infill_percent: 20 },
           },
@@ -212,6 +219,62 @@ test('password plus email code connects customer orders, files, chat and notific
       )
       .every((w) => w.csrf === 'csrf-contract'),
   ).toBe(true);
+});
+
+test('failed order preview terminates its native worker while still expanded', async ({ page }) => {
+  await fixture(page, 'client', true, 52, true);
+  let failures = 0;
+  await page.route(`**/api/account/orders/${id}/files/model-1/preview.glb`, (route) => {
+    failures++;
+    return route.fulfill({ status: 503, body: 'Preview unavailable' });
+  });
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    const live = new Set<Worker>();
+    const counts = {
+      created: 0,
+      terminated: 0,
+      get live() {
+        return live.size;
+      },
+    };
+    Object.assign(window, {
+      previewWorkers: counts,
+      Worker: class extends NativeWorker {
+        constructor(...args: ConstructorParameters<typeof Worker>) {
+          super(...args);
+          live.add(this);
+          counts.created++;
+        }
+        terminate() {
+          super.terminate();
+          if (live.delete(this)) counts.terminated++;
+        }
+      },
+    });
+  });
+  await page.goto(`/konto/zamowienia/${id}`);
+  const toggle = page.getByRole('button', { name: /podgląd.*uchwyt\.stl/ });
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (attempt > 1) await toggle.click();
+    await expect(
+      page.getByText('Podgląd jest niedostępny. Oryginał możesz pobrać poniżej.', { exact: true }),
+    ).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(failures).toBe(attempt);
+    expect(
+      await page.evaluate(() => {
+        const counts = (
+          window as Window & {
+            previewWorkers: { created: number; terminated: number; live: number };
+          }
+        ).previewWorkers;
+        return { created: counts.created, terminated: counts.terminated, live: counts.live };
+      }),
+    ).toEqual({ created: attempt, terminated: attempt, live: 0 });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  }
 });
 
 test('admin does not fetch orders before MFA despite a browser role', async ({ page }) => {
