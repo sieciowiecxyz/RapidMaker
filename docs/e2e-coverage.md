@@ -35,6 +35,8 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 | Niezależne kwoty zwrotów | `stripe-provider-proof-current`: 1 PASS; `order-identity-manual-compat`: 2500 gr, zwroty 500/1500/500; role/nadmierny zwrot odrzucone w panels | Stripe test, nie rozliczenie bankowe. |
 | Logistyka | `logistics`: nadanie/PDF/tracking/anulowanie/przekazanie i podjazd DHL | Dawny `carrierConnectionError` DPD zachowany; bez gwarancji każdego przewoźnika. |
 
+Native opcje: `pricing-options-20261107/pricingoptions20261107b.json` — 1 PASS, trzy konfiguracje standard/draft/fine i granice ścian/wypełnienia; niezależny rachunek 10 pól, snapshot/reuse i 9 odmów bez zadań. Jeden model/PLA na stawkach fixture; nie dowód pełnej macierzy lub rentowności.
+
 ## Błędy, trwałość i zasoby
 
 | Zakres / raport | Dowód | Granica |
