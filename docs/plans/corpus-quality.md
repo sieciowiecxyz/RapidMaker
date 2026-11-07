@@ -17,6 +17,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | --- | --- |
 | Korpus API, `69bec69` | 41 PASS: 24 ceny slicera z rachunkiem, 12 ręcznych, 4 wadliwe, 1 limit; 36 GLB. Odmowa to poprawny wynik testu, nie obsługa modelu. |
 | Nowy korpus API,6217076 | 40 PASS/1 FAIL: model37 upload503 po25s, pozostałe24native/12manual/36GLB jak wcześniej. Scoped37 później422/exit67; przyczyna pierwotnego503 nieustalona. Dodano bezpieczny log exit/signal, bez zmiany oczekiwań. |
+| Model37 — poprawka | Ograniczona wskazówka topologii potwierdzonego roota: exit67 około1,9s zamiast20,9s, te same limity.18unit/4nativeAPI PASS; reviewerowa regresja secondary usunięta. Pełny korpus po tej poprawce jeszcze NOT RUN. |
 | Korpus UI, `40e8a5d` | 41 PASS, 36 renderów, 144 unikalne obejrzane ujęcia; ceny UI tylko 9/20/29. To osobny przebieg na innym HEAD. |
 | Większe modele | Pełny STL, kompaktowy/spatial GLB i jawnie uproszczony tylko podgląd; [budżety](large-models.md). Model 41 nadal ponad limitem; 14/21/32/37 poprawnie odrzucone jako wadliwe. |
 | Zbiorczy `baad9d1` | **179 PASS / 0 FAIL / 1 opt-in SKIP**, 0 flaky; osiem grup exit0, wrapper2 wyłącznie przez skip.441hashy bez zmian. |

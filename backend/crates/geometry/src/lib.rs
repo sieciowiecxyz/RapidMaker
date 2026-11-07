@@ -695,7 +695,8 @@ fn geometry_package<'a>(
     check_timeout(started, limits)?;
     let mut budget = None;
     // Reject bad small actual roots before normalizing potentially large secondary parts.
-    if canonical_root_relationship(&mut source).is_some()
+    let canonical_root = canonical_root_relationship(&mut source).is_some();
+    if canonical_root
         && let Ok(mut root) = source.by_name("3D/3dmodel.model")
         && root.size() <= 64 * 1024
     {
@@ -707,7 +708,7 @@ fn geometry_package<'a>(
             .map_err(|_| PreviewError::MalformedInput)?;
         if bytes.len() <= 64 * 1024 {
             let xml = std::str::from_utf8(&bytes).map_err(|_| PreviewError::MalformedInput)?;
-            let (normalized, _) = three_mf_mirrors::normalize(xml, limits, started)?;
+            let (normalized, _) = three_mf_mirrors::normalize(xml, limits, started, true)?;
             let root = lib3mf::parser::parse_model_from_reader(
                 Cursor::new(normalized.as_deref().unwrap_or(xml).as_bytes()),
                 ParserConfig::with_all_extensions().with_spec_conformance(SpecConformance::Lenient),
@@ -733,8 +734,10 @@ fn geometry_package<'a>(
             entry
                 .read_to_string(&mut xml)
                 .map_err(|_| PreviewError::MalformedInput)?;
-            let (normalized, saved) = three_mf_mirrors::normalize(&xml, limits, started)?;
             let path = entry.name().map_err(|_| PreviewError::UnsafeContainer)?;
+            let root_topology = canonical_root && path == "3D/3dmodel.model";
+            let (normalized, saved) =
+                three_mf_mirrors::normalize(&xml, limits, started, root_topology)?;
             if budget.as_mut().is_some_and(|budget| {
                 budget
                     .add(
@@ -1513,6 +1516,62 @@ mod tests {
     }
 
     #[test]
+    fn three_mf_topology_hint_preserves_unreferenced_secondary_meshes() {
+        let triangle = r#"<triangle v1="0" v2="1" v3="2"/>"#;
+        let secondary = format!(
+            r#"<model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles>{}</triangles></mesh></object></resources><build><item objectid="1" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></build></model>"#,
+            triangle.repeat(3)
+        );
+        let limits = ConversionLimits::default();
+        let baseline = source_to_production(
+            "base.3mf",
+            THREEMF_SIMPLE,
+            &limits,
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        for alternate_root in [false, true] {
+            let mut source = zip::ZipArchive::new(Cursor::new(THREEMF_SIMPLE)).unwrap();
+            let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default();
+            for index in 0..source.len() {
+                let mut entry = source.by_index(index).unwrap();
+                let name = entry.name().unwrap().into_owned();
+                if alternate_root && (name == "3D/3dmodel.model" || name == "_rels/.rels") {
+                    let mut xml = String::new();
+                    entry.read_to_string(&mut xml).unwrap();
+                    let name = if name == "3D/3dmodel.model" {
+                        "3D/actual.model"
+                    } else {
+                        "_rels/.rels"
+                    };
+                    output.start_file(name, options).unwrap();
+                    output
+                        .write_all(
+                            xml.replace("3D/3dmodel.model", "3D/actual.model")
+                                .as_bytes(),
+                        )
+                        .unwrap();
+                } else {
+                    output.raw_copy_file(entry).unwrap();
+                }
+            }
+            let secondary_path = if alternate_root {
+                "3D/3dmodel.model"
+            } else {
+                "3D/unused.model"
+            };
+            output.start_file(secondary_path, options).unwrap();
+            output.write_all(secondary.as_bytes()).unwrap();
+            let input = output.finish().unwrap().into_inner();
+            let result =
+                source_to_production("secondary.3mf", &input, &limits, &ThreeMfLimits::default())
+                    .unwrap();
+            assert_eq!(result.stl, baseline.stl);
+        }
+    }
+
+    #[test]
     fn small_root_preflight_rejects_metadata_and_skips_large_or_noncanonical_roots() {
         for metadata in [
             r#"<metadata name="3DManufacturing:3mfVersion">1</metadata>"#,
@@ -1625,9 +1684,13 @@ mod tests {
         // Restoring must fail closed if the parser changes a count, ID or matrix.
         let xml = r#"<model><resources><object id="1"><components><component objectid="2"/></components></object></resources><build><item objectid="1" transform="-1 0 0 0 1 0 0 0 1 0 0 0"/></build></model>"#;
         for tamper in 0..3 {
-            let (normalized, saved) =
-                three_mf_mirrors::normalize(xml, &ConversionLimits::default(), Instant::now())
-                    .unwrap();
+            let (normalized, saved) = three_mf_mirrors::normalize(
+                xml,
+                &ConversionLimits::default(),
+                Instant::now(),
+                false,
+            )
+            .unwrap();
             let mut model = lib3mf::parser::parse_model_xml_with_config(
                 normalized.as_deref().unwrap(),
                 ParserConfig::with_all_extensions(),
@@ -1685,16 +1748,21 @@ mod tests {
             "{prefix}<item objectid=\"1\" transform=\"-1 0 0 0 1 0 0 0 1 0 0 0\"/>{suffix}"
         );
         let (normalized, _) =
-            three_mf_mirrors::normalize(&xml, &ConversionLimits::default(), Instant::now())
+            three_mf_mirrors::normalize(&xml, &ConversionLimits::default(), Instant::now(), false)
                 .unwrap();
         let normalized = normalized.unwrap();
         assert!(normalized.starts_with(prefix));
         assert!(normalized.ends_with(suffix));
         assert!(
-            three_mf_mirrors::normalize(&normalized, &ConversionLimits::default(), Instant::now())
-                .unwrap()
-                .0
-                .is_none()
+            three_mf_mirrors::normalize(
+                &normalized,
+                &ConversionLimits::default(),
+                Instant::now(),
+                false
+            )
+            .unwrap()
+            .0
+            .is_none()
         );
         let expired = Instant::now() - Duration::from_secs(2);
         for xml in [xml.as_str(), "<model/>"] {
@@ -1705,7 +1773,8 @@ mod tests {
                         max_parse_seconds: 1,
                         ..Default::default()
                     },
-                    expired
+                    expired,
+                    false
                 ),
                 Err(PreviewError::ParseTimeout)
             ));
