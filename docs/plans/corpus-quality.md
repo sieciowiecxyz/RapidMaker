@@ -18,6 +18,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 | Korpus/API | Aktualny69bec69:corpus-api-current-69bec69,41PASS/0FAIL/0SKIP;24 ceny slicera z rachunkiem,12 uzasadnionych ręcznych,4wadliwe,1limit;36GLB,391hashów zgodnych. Dawny corpus12-manual-geometry osobno |
 | Korpus/UI | Aktualny40e8a5d:41PASS/0FAIL/0SKIP/0flaky w jednym676s przebiegu;36renderów,4wadliwe i1zasobowa odmowa.144 unikalne ujęcia obejrzane,437hashów zgodnych; ceny UI tylko9/20/29 |
 | Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
+| Zbiorcza regresja6addae4 | 170PASS/3FAIL/1opt-inSKIP,443hashy zgodne. Po naprawie fokusu iframe i synchronizacji testu: osobno privacy11PASS oraz2provider-reruny po1PASS; pełny FAIL zachowany, bez nowej deklaracji fullPASS |
 | Regresja bb67c8a | Izolowane core64PASS/1opt-inSKIP + privacy3PASS, zeroFAIL/flaky;397hashów zgodnych. Pierwotny core66PASS/1FAIL/1SKIP zachowany; poprawiono izolację baz bez osłabienia limitów auth |
 | Nowsza regresja3519cb9 | Storage25PASS, core49PASS/1 opt-in large SKIP, zeroFAIL/flaky; poprawiona etykieta runnera. Hashe niezmienione; sandbox/email inne osobne dowody |
 | Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |

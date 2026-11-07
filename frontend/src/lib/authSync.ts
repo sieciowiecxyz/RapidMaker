@@ -62,8 +62,18 @@ export function watchAuthChanges(invalidate: () => void): () => void {
 // Keep this separate from auth-change subscribers: login/MFA must keep their flow.
 export function watchProtectedReturn(revalidate: () => void): () => void {
   let away = document.visibilityState === 'hidden' || !document.hasFocus();
+  let blurTimer: ReturnType<typeof setTimeout> | undefined;
   function leave() {
     away = true;
+  }
+  function blur() {
+    if (!document.hasFocus()) leave();
+    // Focusing an iframe blurs window while the document still owns focus.
+    // Let the browser settle focus before treating this as leaving the app.
+    clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => {
+      if (!document.hasFocus()) leave();
+    }, 0);
   }
   function returned() {
     if (!away || document.visibilityState === 'hidden') return;
@@ -83,12 +93,13 @@ export function watchProtectedReturn(revalidate: () => void): () => void {
       returned();
     }
   }
-  window.addEventListener('blur', leave);
+  window.addEventListener('blur', blur);
   window.addEventListener('focus', focus);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pageshow', pageshow);
   return () => {
-    window.removeEventListener('blur', leave);
+    clearTimeout(blurTimer);
+    window.removeEventListener('blur', blur);
     window.removeEventListener('focus', focus);
     document.removeEventListener('visibilitychange', visibility);
     window.removeEventListener('pageshow', pageshow);

@@ -367,6 +367,9 @@ test('cross-tab logout removes protected admin selection and chat when a client 
   await expect(
     observer.getByRole('button', { name: 'Zamknij szczegóły', exact: true }),
   ).toHaveCount(0);
+  await page.waitForURL('/logowanie?operator=1&next=%2Fadmin.html', {
+    waitUntil: 'domcontentloaded',
+  });
   await login(page, client);
   expect((await observer.request.get('/api/admin/orders')).status()).toBe(403);
   await expect(
@@ -394,6 +397,27 @@ function returnSourceHashes() {
   );
 }
 
+// Headless Chromium keeps every context focused. Model only the browser focus
+// lifecycle; sessions, revocation, responses and private DOM remain real.
+async function protectedLeave(page: Page) {
+  await page.evaluate(async () => {
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+    window.dispatchEvent(new Event('blur'));
+    await new Promise<void>((resolveTask) => setTimeout(resolveTask, 0));
+  });
+}
+async function protectedReturn(page: Page) {
+  await page.evaluate(() => {
+    Reflect.deleteProperty(document, 'hasFocus');
+    window.dispatchEvent(new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+}
+async function protectedRoundTrip(page: Page) {
+  await protectedLeave(page);
+  await protectedReturn(page);
+}
+
 for (const area of ['client', 'admin'] as const) {
   test(`remote-revoke-return ${area} clears private content after independent logout-all`, async ({
     page,
@@ -404,7 +428,13 @@ for (const area of ['client', 'admin'] as const) {
       'Requires --local-accounts',
     );
     test.setTimeout(180_000);
-    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    const client = accounts().find(
+      (a) =>
+        a.email ===
+        (area === 'admin'
+          ? 'browser-security-negative@example.invalid'
+          : 'browser-other@example.invalid'),
+    )!;
     const account = area === 'admin' ? accounts().find((a) => a.role === 'admin')! : client;
     const remote = await browser.newContext();
     const sources = returnSourceHashes();
@@ -433,11 +463,7 @@ for (const area of ['client', 'admin'] as const) {
       const validCheck = page.waitForResponse((response) =>
         response.url().endsWith('/api/auth/me'),
       );
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event('blur'));
-        window.dispatchEvent(new Event('focus'));
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
+      await protectedRoundTrip(page);
       expect((await validCheck).status()).toBe(200);
       await expect(chat).toBeVisible();
       await expect(chat).toHaveAttribute('data-return-probe', 'retained');
@@ -453,7 +479,7 @@ for (const area of ['client', 'admin'] as const) {
       await other.bringToFront();
       // Headless Chromium emulates focus in every context. Exercise the return
       // handler deterministically; authentication/revocation and all DOM are real.
-      await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+      await protectedLeave(page);
       const revoked = await other.request.post('/api/auth/logout-all', {
         headers: await headers(other),
         data: {},
@@ -483,10 +509,7 @@ for (const area of ['client', 'admin'] as const) {
         await route.fulfill({ response });
       });
       await page.bringToFront();
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event('focus'));
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
+      await protectedReturn(page);
       try {
         await expect.poll(() => returnCheckHeld).toBe(true);
         await expect(chat).not.toBeVisible();
@@ -542,7 +565,13 @@ for (const area of ['client', 'admin'] as const) {
     );
     test.setTimeout(180_000);
     const sources = returnSourceHashes();
-    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    const client = accounts().find(
+      (a) =>
+        a.email ===
+        (area === 'admin'
+          ? 'browser-security-negative@example.invalid'
+          : 'browser-other@example.invalid'),
+    )!;
     let release = () => {};
     try {
       await login(page, client);
@@ -597,11 +626,7 @@ for (const area of ['client', 'admin'] as const) {
       };
       expect(await copies()).toBe(1);
       const checked = page.waitForResponse((response) => response.url().endsWith('/api/auth/me'));
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event('blur'));
-        window.dispatchEvent(new Event('focus'));
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
+      await protectedRoundTrip(page);
       expect((await checked).status()).toBe(200);
       await expect(draft).toBeVisible();
       release();
@@ -654,7 +679,13 @@ for (const area of ['client', 'admin'] as const) {
     );
     test.setTimeout(180_000);
     const sources = returnSourceHashes();
-    const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+    const client = accounts().find(
+      (a) =>
+        a.email ===
+        (area === 'admin'
+          ? 'browser-security-negative@example.invalid'
+          : 'browser-other@example.invalid'),
+    )!;
     const account = area === 'admin' ? accounts().find((a) => a.role === 'admin')! : client;
     const remote = await browser.newContext();
     let releaseOld = () => {};
@@ -699,12 +730,7 @@ for (const area of ['client', 'admin'] as const) {
         await (index === 0 ? oldGate : newGate);
         await route.fulfill({ response });
       });
-      const returned = () =>
-        page.evaluate(() => {
-          window.dispatchEvent(new Event('blur'));
-          window.dispatchEvent(new Event('focus'));
-          document.dispatchEvent(new Event('visibilitychange'));
-        });
+      const returned = () => protectedRoundTrip(page);
       await returned();
       await expect.poll(() => statuses[0]).toBe(200);
       await expect(chat).not.toBeVisible();
@@ -768,3 +794,149 @@ for (const area of ['client', 'admin'] as const) {
     }
   });
 }
+
+test('iframe-focus-return preserves a protected button click without a session recheck', async ({
+  page,
+}, info) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires --local-accounts',
+  );
+  const sources = returnSourceHashes();
+  const client = accounts().find((a) => a.email === 'browser-security@example.invalid')!;
+  await login(page, client);
+  await createOrder(page, client, `iframe-${randomUUID()}`);
+  const button = page.getByRole('button', { name: 'Wyślij wiadomość', exact: true });
+  const body = `Kliknięcie po iframe ${randomUUID()}`;
+  await page.getByLabel('Wiadomość', { exact: true }).fill(body);
+  let meRequests = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/auth/me')) meRequests++;
+  });
+  await button.evaluate((element) => {
+    const probe = {
+      events: [] as {
+        event: string;
+        focused: boolean;
+        active: string | null;
+        visibility: string;
+      }[],
+      clicks: 0,
+      checking: false,
+    };
+    Object.assign(window, { iframeReturnProbe: probe });
+    const record = (event: string) =>
+      probe.events.push({
+        event,
+        focused: document.hasFocus(),
+        active: document.activeElement?.tagName ?? null,
+        visibility: document.visibilityState,
+      });
+    for (const event of ['blur', 'focus'])
+      window.addEventListener(event, () => {
+        record(event);
+        setTimeout(() => record(`${event}-settled`), 0);
+      });
+    document.addEventListener('visibilitychange', () => record('visibilitychange'));
+    element.addEventListener(
+      'click',
+      () => {
+        probe.clicks++;
+        record('click');
+      },
+      true,
+    );
+    new MutationObserver(() => {
+      if (document.body.innerText.includes('Sprawdzanie dostępu…')) probe.checking = true;
+    }).observe(document.body, { subtree: true, childList: true, attributes: true });
+    const frame = document.createElement('iframe');
+    frame.id = 'internal-focus-frame';
+    frame.title = 'Test focus inside protected view';
+    frame.srcdoc = '<input aria-label="Frame focus">';
+    element.before(frame);
+    record('initial');
+  });
+  try {
+    await page.frameLocator('#internal-focus-frame').getByLabel('Frame focus').fill('focus');
+    await page.evaluate(() => new Promise<void>((resolveTask) => setTimeout(resolveTask, 30)));
+    expect(meRequests).toBe(0);
+    await button.click();
+    await page.evaluate(() => new Promise<void>((resolveTask) => setTimeout(resolveTask, 30)));
+    const probe = await page.evaluate(
+      () =>
+        (window as unknown as { iframeReturnProbe: { clicks: number; checking: boolean } })
+          .iframeReturnProbe,
+    );
+    expect(probe.clicks).toBe(1);
+    expect(probe.checking).toBe(false);
+    // The successful chat mutation legitimately refreshes auth/CSRF via /me.
+    // A false protected-return check would shield the view and prevent this click.
+    await expect(page.getByText(body, { exact: true })).toBeVisible();
+  } finally {
+    await info.attach('iframe-focus-observation.json', {
+      body: JSON.stringify({
+        meRequests,
+        probe: await page.evaluate(
+          () => (window as unknown as { iframeReturnProbe: unknown }).iframeReturnProbe,
+        ),
+      }),
+      contentType: 'application/json',
+    });
+    await info.attach('tested-source-hashes.json', {
+      body: JSON.stringify(sources),
+      contentType: 'application/json',
+    });
+    expect(returnSourceHashes()).toEqual(sources);
+  }
+});
+
+test('instant-return-revoke rechecks a genuine session revoked before same-task blur and focus', async ({
+  page,
+}, info) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires --local-accounts',
+  );
+  const sources = returnSourceHashes();
+  const client = accounts().find((a) => a.email === 'browser-security@example.invalid')!;
+  await login(page, client);
+  const order = await createOrder(page, client, `instant-return-${randomUUID()}`);
+  // Direct HTTP revokes the real server session without the UI auth-change marker.
+  const revoked = await page.request.post('/api/auth/logout-all', {
+    headers: await headers(page),
+    data: {},
+  });
+  expect(revoked.status()).toBe(200);
+  expect((await page.request.get('/api/auth/me')).status()).toBe(401);
+  await expect(page.getByText(order.message, { exact: true })).toBeVisible();
+  const checked = page.waitForResponse((response) => response.url().endsWith('/api/auth/me'));
+  try {
+    await page.evaluate(() => {
+      // Model external focus loss and immediate return in one browser task.
+      // The deferred blur timer cannot run between these events.
+      Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+      window.dispatchEvent(new Event('blur'));
+      Reflect.deleteProperty(document, 'hasFocus');
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect((await checked).status()).toBe(401);
+    await expect(page.getByText(order.message, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(order.number, { exact: true })).toHaveCount(0);
+    await info.attach('instant-return-observation.json', {
+      body: JSON.stringify({
+        syntheticFocusLifecycle: true,
+        sameBrowserTask: true,
+        genuineServerRevocation: true,
+        returnStatus: 401,
+        privateContentRemoved: true,
+      }),
+      contentType: 'application/json',
+    });
+  } finally {
+    await info.attach('tested-source-hashes.json', {
+      body: JSON.stringify(sources),
+      contentType: 'application/json',
+    });
+    expect(returnSourceHashes()).toEqual(sources);
+  }
+});
