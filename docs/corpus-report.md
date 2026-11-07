@@ -593,3 +593,11 @@ Sol xhigh przejrzał source/raport: bez blokera, dowód rzeczywistej deduplikacj
 Na czystymbc2855f `cargo fmt --manifest-path backend/Cargo.toml --all -- --check` oraz `cargo clippy --offline --locked --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings`: **PASS/exit0**, Clippy4,42s. Wszystkie13crate’ów/default features/targety, bez zmian kodu. Prywatny zapis komend rust-workspace-check-bc2855f.json.
 
 Sol xhigh sprawdził manifesty/linty: brak szerokiego wyciszania, tylko item-scoped too_many_arguments wstorage. Wynik dotyczy włączonych lintów Rust, nie pedantic/nursery/opcjonalnych kombinacji, wykonania testów lub dowodu bezpieczeństwa. Osobno nadal emitowane wcześniejsze GCC maybe-uninitialized w wygenerowanym CXX STEP; nie wyciszano ani nie nazywamy tego wynikiem0 ostrzeżeń całego natywnego stosu. Brak konkretnego defektu do poprawienia w tym zakresie.
+
+## 2026-11-07 — zadanie queued po restarcie procesu API
+
+Dodano samodzielny `--queue-restart` do izolowanego runnera (bez przeglądarki/providerów). API z workerem external przyjmuje prawdziwy STL i estimate202; GET/DB potwierdzają queued,attempts0,braklease/snapshotu. Runner kończy własny proces SIGTERM/exit0, uruchamia innePID z tym samym DB/root/auth/rates/cookie i workerem; rzeczywisty Bambu kończy raz: attempts1,jeden zgodny snapshot,pomiar/cena. Hash oryginału zachowany, własnyGLB200/obcyGLB+job404. Nie wymusza wygaśnięcia lease.
+
+`E2E_REPORT_NAME=queue-restart-final python frontend/tests/run-integration.py --queue-restart`: **1PASS/0FAIL/0SKIP/0flaky,8,99s**, starePID2690706/nowe2691744. Po teardown worker zweryfikował brak obu PID/DB/root; main dodatkowo oba/proc nieobecne. JSON powstaje przed teardown, więc sam raport nie dowodzi cleanup. Osobny tryb odrzuca kombinację z sandbox przed DB; zajętyport sprawdza preflight.
+
+Sol xhigh przejrzał kod/raport/lifecycle: bez blokera. Po review zwiększono timeout estimate5→30s dla zimnego odczytu runtime; pozostałe HTTP5/upload40/startup30/stop30/worker160. Pythoncompile/diff PASS. Zwykły runner po refaktorze startu API: two-client-upload1PASS/2,3s (browser-runner-after-restart-20261107). Bez zmian produkcyjnego kodu/localhosta/.env. To queued-job+gracefulAPIrestart, nie aktywny lease, awaria hosta/powerloss, UI lub nowy niezależny rachunek ceny.

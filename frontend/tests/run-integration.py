@@ -7,6 +7,7 @@ import secrets
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,12 @@ root = Path(__file__).resolve().parents[2]
 artifacts = root / "frontend/tests/artifacts"
 artifacts.mkdir(parents=True, exist_ok=True)
 artifacts.chmod(0o700)
+queue_restart = "--queue-restart" in sys.argv
+if queue_restart and sys.argv[1:] != ["--queue-restart"]:
+    raise SystemExit("--queue-restart must run alone, without browser tests or other modes")
+queue_report_name = os.environ.get("E2E_REPORT_NAME", "queue-restart-" + secrets.token_hex(8))
+if queue_restart and not queue_report_name.replace("-", "").isalnum():
+    raise SystemExit("Invalid report name")
 registration = "--registration" in sys.argv
 sandbox = "--sandbox" in sys.argv
 local_accounts = "--local-accounts" in sys.argv
@@ -45,12 +52,13 @@ if not url:
 parsed = urllib.parse.urlsplit(url)
 if parsed.hostname not in ("localhost", "127.0.0.1") or parsed.port != 18434:
     raise SystemExit("Tests require the dedicated local PostgreSQL on port 18434.")
-browser_check = subprocess.run([
-    "node", "--input-type=module", "-e",
-    "import {chromium} from 'playwright'; const b=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}); await b.close();"
-], cwd=root / "frontend", capture_output=True)
-if browser_check.returncode:
-    raise SystemExit("Browser preflight failed; run `cd frontend && npx playwright install chromium` or set a valid PLAYWRIGHT_CHROMIUM_EXECUTABLE. No test database was created.")
+if not queue_restart:
+    browser_check = subprocess.run([
+        "node", "--input-type=module", "-e",
+        "import {chromium} from 'playwright'; const b=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}); await b.close();"
+    ], cwd=root / "frontend", capture_output=True)
+    if browser_check.returncode:
+        raise SystemExit("Browser preflight failed; run `cd frontend && npx playwright install chromium` or set a valid PLAYWRIGHT_CHROMIUM_EXECUTABLE. No test database was created.")
 name = "rapidmaker_test_browser_" + secrets.token_hex(16)
 
 def sql(query, database="postgres"):
@@ -83,22 +91,61 @@ try:
             raise RuntimeError("Stripe test key required; live keys refused")
         env.update(provider_values, MAIL_MODE="test", MAIL_TEST_TO="void@sieciowiec.xyz", MAIL_INBOUND_MODE="test")
     log = folder / "api.jsonl"
-    with log.open("wb") as output:
-        os.chmod(log, 0o600)
-        api = subprocess.Popen([str(binary)], cwd=root, env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
-    for _ in range(100):
-        if api.poll() is not None:
-            raise RuntimeError("Isolated API failed to start; inspect private local test report.")
-        try:
-            req = urllib.request.Request("http://127.0.0.1:18436/api/openapi.json", headers={"Host": "localhost:18437"})
-            with urllib.request.urlopen(req, timeout=1):
-                break
-        except (urllib.error.URLError, TimeoutError):
-            time.sleep(0.1)
-    else:
-        raise RuntimeError("Isolated API startup timeout")
+    def start_api():
+        # Assign immediately: finally owns this process even when readiness fails.
+        global api
+        if queue_restart:
+            # Refuse an occupied port before issuing any HTTP to another server.
+            with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                probe.bind(("127.0.0.1", 18436))
+        with log.open("ab") as output:
+            os.chmod(log, 0o600)
+            api = subprocess.Popen([str(binary)], cwd=root, env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if api.poll() is not None:
+                raise RuntimeError("Isolated API failed to start; inspect private local test report.")
+            try:
+                req = urllib.request.Request("http://127.0.0.1:18436/api/openapi.json", headers={"Host": "localhost:18437"})
+                with urllib.request.urlopen(req, timeout=1):
+                    return api.pid
+            except (urllib.error.URLError, TimeoutError):
+                time.sleep(0.1)
+        raise RuntimeError("Isolated API startup timeout (30s)")
+    if queue_restart:
+        env["SLICER_WORKER_MODE"] = "external"
+    start_api()
     # Explicit fixture costs only in this disposable database; every color remains stock=false.
     sql("UPDATE catalog_materials SET cost_net_grosze_per_kg=10000,production_enabled=true WHERE id IN ('GFA00','GFB00','GFU01','GFG02','GFB01','GFN03')", name)
+    if queue_restart:
+        from queue_restart import run_queue_restart
+        def restart_api():
+            old_pid = api.pid
+            os.killpg(old_pid, signal.SIGTERM)
+            exit_code = api.wait(timeout=30)
+            if exit_code != 0:
+                raise RuntimeError(f"Old API {old_pid} exited {exit_code}, expected graceful exit 0")
+            env["SLICER_WORKER_MODE"] = "embedded"
+            new_pid = start_api()
+            if new_pid == old_pid:
+                raise RuntimeError("Restart did not replace process")
+            return dict(old_pid=old_pid, old_exit_code=exit_code, new_pid=new_pid)
+        report = artifacts / (queue_report_name + ".json")
+        started = time.monotonic()
+        evidence = {}
+        error = None
+        try:
+            run_queue_restart(root, folder, container, name, restart_api, evidence)
+            failed = False
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            report.write_text(json.dumps(dict(stats=dict(expected=int(not failed), unexpected=int(failed), skipped=0, flaky=0, duration=round((time.monotonic()-started)*1000)), evidence=evidence, error=error), indent=2) + "\n")
+            report.chmod(0o600)
+            print("Queue restart report:", report, flush=True)
+        sys.exit(0)
     browser_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DISPLAY", "PLAYWRIGHT_CHROMIUM_EXECUTABLE", "E2E_CORPUS_MANIFEST", "E2E_CORPUS_LIMIT")}
     # Chromium otherwise drops Unicode file paths from FileList in this minimal environment.
     browser_env.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
@@ -147,7 +194,7 @@ finally:
     finally:
         try:
             if failed and (folder / "api.jsonl").exists():
-                report = root / "frontend/tests/artifacts/integration-api.jsonl"
+                report = artifacts / ((queue_report_name if queue_restart else "integration") + "-api.jsonl")
                 report.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(folder / "api.jsonl", report)
                 report.chmod(0o600)
