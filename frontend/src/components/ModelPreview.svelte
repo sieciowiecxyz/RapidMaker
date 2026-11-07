@@ -53,7 +53,10 @@
       clearTimeout(timer);
       if (!event.data.ok || !event.data.mesh) return fail();
       try {
-        renderer = createPartViewer(element);
+        let draw = () => {};
+        renderer = createPartViewer(element, (available) => {
+          if (available) draw();
+        });
         if (!renderer) return fail();
         renderer.setPart('order', event.data.mesh);
         approximate = !!event.data.mesh.approximation;
@@ -76,7 +79,7 @@
           density: 0.065,
           wall: 4,
         };
-        const draw = () => renderer?.draw(state);
+        draw = () => renderer?.draw(state);
         turn = (angle) => {
           state.yaw += angle;
           draw();

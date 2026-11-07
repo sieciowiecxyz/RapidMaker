@@ -705,3 +705,11 @@ private-cache-access-20261107:**1PASS/0FAIL/0SKIP/0flaky**; odrębna baza/modelr
 ModelPreview tworzył Worker przed pobraniemGLB;fail() poHTTP503 kasował timeout, pozostawiając bezczynny Worker do zwinięcia widoku. Dwulinijkowa poprawka abortuje fetch i kończy Worker od razu, bez zmian wyglądu lub innych warstw.
 
 Rzeczywisty Worker z licznikiem przez subclass, HTTP503 zfixture: baselineFAIL przy widocznym fallbacku i rozwiniętym podglądzie created1/terminated0/live1. Po poprawce1/1/0, po zwinięciu i ponownym otwarciu2/2/0, nadal przed zwinięciem. Worker wykonał regresję oraz istniejący panel klienta: **2PASS/1,9s,exit0**. Markerpassed skopiowany do preview-worker-fixed-20261107/last-run.json; brak osobnegoJSONraportu lub snapshotu hashów przebiegu. Baseline trace/screenshot zachowane w results/live-panels-failed-order-p-95340-worker-while-still-expanded. Svelte0/Vite4HTML/Prettier/diff PASS; Sol xhigh sprawdziłsource/artefakty, brak blokera. To test cyklu życia przy mockHTTP, nie pomiarRSS, realna awaria API lub audyt wyjątkówWebGL.
+
+## 2026-11-07 — prywatny podgląd po odzyskaniu WebGL
+
+ModelPreview nie przekazywał callbacku dostępności renderera: zasoby wracały, lecz statyczny widok rysował dopiero po obrocie/resize. Dodano callback redraw aktualnego stanu (+3netto linii), bez zmiany sharedrenderera, wyglądu lub wcześniejszego cleanupWorkera.
+
+private-preview-restore-20261107/baseline-native.json: rzeczywiste trustedlost/restored1/1, ResizeObserver1 bez zmiany, białe piksele2314→0,FAIL. Wcześniejszy baseline.json to wyłącznie odrzucony niekanoniczny fixture, zachowany osobno. fixed.json:**3PASS/0FAIL/0SKIP/0flaky,2,81s** (restore,failedworker,panel klienta). Dwa cykle2314→2314 i2356→2356, trusted2/2,resize1, późniejszy obrót zmienia sylwetkę, zwinięcie usuwa canvas, brak pageerror.
+
+Worker/parser/GPU rzeczywiste; mockHTTP z kanonicznym GLB z pozycji/indeksów checked-in fixture, testowy ciemny podkład screenshotu. To nie dowód konwersji backendu. Zrzutyinitial/restored obejrzane, main także restored2; brak formalnego snapshotu hashów. Svelte0/Vite4HTML/typy/Prettier/diff PASS; Sol xhigh przejrzał źródła, raporty i metryki, brak blokera.

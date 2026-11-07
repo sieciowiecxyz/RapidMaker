@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 const id = '00000000-0000-4000-8000-000000000001';
 async function fixture(
   page: Page,
@@ -221,6 +222,152 @@ test('password plus email code connects customer orders, files, chat and notific
   ).toBe(true);
 });
 
+test('order preview redraws after native WebGL context restoration without interaction', async ({
+  page,
+}, info) => {
+  await fixture(page, 'client', true, 52, true);
+  // Canonical wire fixture using the checked-in cube's real positions/indices.
+  // The source GLB is COLLADA2GLTF; it is not a backend private-preview response.
+  const source = readFileSync('../backend/crates/geometry/tests/fixtures/simple.glb');
+  const sourceJsonLength = source.readUInt32LE(12);
+  const sourceJson = JSON.parse(source.subarray(20, 20 + sourceJsonLength).toString());
+  const binaryStart = 28 + sourceJsonLength;
+  const position = sourceJson.accessors[2],
+    index = sourceJson.accessors[0];
+  const bytes = (accessor: typeof position) => {
+    const view = sourceJson.bufferViews[accessor.bufferView];
+    const start = binaryStart + (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    return source.subarray(start, start + accessor.count * (accessor.type === 'VEC3' ? 12 : 2));
+  };
+  const positions = bytes(position),
+    indices = bytes(index);
+  const binary = Buffer.concat([positions, indices]);
+  const json = Buffer.from(
+    JSON.stringify({
+      asset: { version: '2.0', generator: 'rapidmaker-geometry' },
+      buffers: [{ byteLength: binary.length }],
+      bufferViews: [
+        { buffer: 0, byteOffset: 0, byteLength: positions.length },
+        { buffer: 0, byteOffset: positions.length, byteLength: indices.length },
+      ],
+      accessors: [
+        { bufferView: 0, componentType: 5126, count: position.count, type: 'VEC3' },
+        { bufferView: 1, componentType: 5123, count: index.count, type: 'SCALAR' },
+      ],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, mode: 4 }] }],
+      nodes: [{ mesh: 0, scale: [0.001, 0.001, 0.001], rotation: [-0.70710678, 0, 0, 0.70710678] }],
+      scenes: [{ nodes: [0] }],
+      scene: 0,
+    }),
+  );
+  const padded = Buffer.concat([json, Buffer.alloc((4 - (json.length % 4)) % 4, 0x20)]);
+  const body = Buffer.alloc(28 + padded.length + binary.length);
+  [0x46546c67, 2, body.length, padded.length, 0x4e4f534a].forEach((value, offset) =>
+    body.writeUInt32LE(value, offset * 4),
+  );
+  padded.copy(body, 20);
+  body.writeUInt32LE(binary.length, 20 + padded.length);
+  body.writeUInt32LE(0x004e4942, 24 + padded.length);
+  binary.copy(body, 28 + padded.length);
+  await page.route(`**/api/account/orders/${id}/files/model-1/preview.glb`, (route) =>
+    route.fulfill({ contentType: 'model/gltf-binary', body }),
+  );
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(`/konto/zamowienia/${id}`);
+  const toggle = page.getByRole('button', { name: /podgląd.*uchwyt\.stl/ });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  const canvas = page.locator('.model-preview canvas');
+  await expect(page.locator('.model-preview')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByRole('button', { name: 'Obróć model w prawo' })).toBeVisible();
+  const extension = await canvas.evaluateHandle((node: HTMLCanvasElement) => {
+    const counts = { lost: 0, restored: 0, resized: 0, trusted: true };
+    Object.assign(node, { previewEvents: counts });
+    node.addEventListener('webglcontextlost', (event) => {
+      counts.lost++;
+      counts.trusted &&= event.isTrusted;
+    });
+    node.addEventListener('webglcontextrestored', (event) => {
+      counts.restored++;
+      counts.trusted &&= event.isTrusted;
+    });
+    new ResizeObserver(() => counts.resized++).observe(node);
+    return node.getContext('webgl')?.getExtension('WEBGL_lose_context');
+  });
+  expect(await extension.evaluate((value) => !!value)).toBe(true);
+  const events = () =>
+    canvas.evaluate(
+      (node) =>
+        (
+          node as HTMLCanvasElement & {
+            previewEvents: { lost: number; restored: number; resized: number; trusted: boolean };
+          }
+        ).previewEvents,
+    );
+  await expect.poll(async () => (await events()).resized).toBeGreaterThan(0);
+  const silhouette = async (name: string) => {
+    const png = await canvas.screenshot({
+      path: info.outputPath(`${name}.png`),
+      style: '.model-preview canvas { background: #101010 !important; }',
+    });
+    return page.evaluate(async (base64) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${base64}`;
+      await image.decode();
+      const probe = document.createElement('canvas');
+      probe.width = probe.height = 96;
+      const context = probe.getContext('2d')!;
+      context.drawImage(image, 0, 0, 96, 96);
+      const pixels = context.getImageData(0, 0, 96, 96).data;
+      return Array.from({ length: 96 * 96 }, (_, index) => {
+        const [r, g, b] = pixels.slice(index * 4, index * 4 + 3);
+        return Math.min(r, g, b) > 80 && Math.max(r, g, b) - Math.min(r, g, b) < 45 ? 1 : 0;
+      });
+    }, png.toString('base64'));
+  };
+  const metrics: unknown[] = [];
+  try {
+    let before = await silhouette('initial');
+    expect(before.reduce((sum, pixel) => sum + pixel, 0)).toBeGreaterThan(100);
+    for (let cycle = 1; cycle <= 2; cycle++) {
+      const resized = (await events()).resized;
+      await extension.evaluate((value) => value!.loseContext());
+      await expect.poll(async () => (await events()).lost).toBe(cycle);
+      await extension.evaluate((value) => value!.restoreContext());
+      await expect.poll(async () => (await events()).restored).toBe(cycle);
+      const restored = await silhouette(`restored-${cycle}`);
+      const pixels = restored.reduce((sum, pixel) => sum + pixel, 0);
+      metrics.push({
+        cycle,
+        beforePixels: before.reduce((sum, pixel) => sum + pixel, 0),
+        pixels,
+        events: await events(),
+      });
+      expect(await events()).toEqual({ lost: cycle, restored: cycle, resized, trusted: true });
+      expect(
+        pixels,
+        'Restored white mesh is visible before any resize or rotation',
+      ).toBeGreaterThan(100);
+      expect(restored.filter((pixel, index) => pixel !== before[index]).length).toBeLessThan(100);
+      await page.getByRole('button', { name: 'Obróć model w prawo' }).click();
+      const rotated = await silhouette(`rotated-${cycle}`);
+      expect(rotated.filter((pixel, index) => pixel !== restored[index]).length).toBeGreaterThan(
+        20,
+      );
+      before = rotated;
+    }
+    await toggle.click();
+    await expect(canvas).toHaveCount(0);
+    expect(errors).toEqual([]);
+  } finally {
+    await info.attach('native-context-pixels', {
+      body: JSON.stringify({ metrics, errors }),
+      contentType: 'application/json',
+    });
+    await extension.dispose();
+  }
+});
+
 test('failed order preview terminates its native worker while still expanded', async ({ page }) => {
   await fixture(page, 'client', true, 52, true);
   let failures = 0;
@@ -265,7 +412,7 @@ test('failed order preview terminates its native worker while still expanded', a
     expect(
       await page.evaluate(() => {
         const counts = (
-          window as Window & {
+          window as unknown as Window & {
             previewWorkers: { created: number; terminated: number; live: number };
           }
         ).previewWorkers;
