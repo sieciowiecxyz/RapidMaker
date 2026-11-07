@@ -870,3 +870,14 @@ Bezpiecznyprobe64pustychplików/statvfs potwierdził brak jawnej kwoty inodów: 
 Cztery linie produktu w dwóch konstruktorach: jawne `--unshare-user --disable-userns`. Sam `--disable-userns` nie działa z `--unshare-all` (user-try) — startupFAILzachowany. Natywne źródłoweprobeprzed/po i finalneprodukcyjne geometry standard/large+slicer: baselineunshareexit0, fixexit1/ENOSPC; normalne sandboxy/mounty/devices działają. Argumentunits2PASS, ignorednative2PASS/3obserwacje. ActualBambucube i010hardenedprefiksPASS; nowybuildAPIaf6a9553: **2nativeE2EPASS/11,4s**,STL/STEP(OCCT)/3MF/ZIP64/productionparts i3konfiguracjecenowe z rachunkiem. Fmt/check/build/diffPASS. NormalnyAPI3428123/inode oraz symlinktarget bez zmian, privatecleanup. Dowody `slicer-inode-budget-20261107/`, także wcześniejsze próby/fail. Solxhigh bezblokera.
 
 Nie wdrożono kwoty inodów ani aggregateprocessbudgets. Aktualnybwrap nie ma nr_inodes; custommounthelper/patchedbwrap lub deployment wymagają osobnego wyboru, nie zastępujemy ich liczeniem po fakcie. Jawneuserns+disable to failclosedprerequisite, nie gwarancja całej pamięci hosta. Testyignorowane mają dopisany wymóg `/usr/bin/unshare`. Bez nowych zależności/UI/providerów;headless.
+
+
+## 2026-11-07 — dokładny rachunek materiałów poza PLA
+
+Audyt potwierdził istniejące profile i natywne/UI testy wszystkich pięciu rodzin PLA/PETG/ASA/PA-CF/TPU; nie traktujemy ich jako z definicji manual-only. Każdy materiał nadal wymaga dopuszczenia operatora i jawnego kosztu. Nazwa presetu ASA z X1C nie zmienia faktu kompatybilności P1P podanej w compatible_printers; nie zmieniono drukarki lub dopuszczeń normalnejDB.
+
+Rozszerzono istniejący pricing-options.spec/oracle o PETG HF i TPU95A. Fixturekoszty10000/20000grnetto/kg wyłącznie w jednorazowejDB; BigInt przelicza wszystkie10pól ceny z rzeczywistych gramów/czasu/płyt, sprawdza utrwalony material_id/koszt/wynik i cacheID. Cofnięte dopuszczenie PETG daje422/manual_quote_required/profile przed kolejką, countjobs0; approval/kosztTPU przywracane w finally i potwierdzone. Nie wykorzystujemy in_stock jako bramki produkcyjnej.
+
+`material-pricing-20261107.json`: **1 PASS/0 FAIL/0 SKIP/0 flaky,13,1s**, pięć rzeczywistych wyników:3PLA plusPETG1461s/4,41128969g/3018gr iTPU1477s/4,42068720g/3100gr. Źródło/binaryhashy w provenance;APIaf6a9553 przed/po zgodny. Hashpinu po teardown nieodczytany i niezaliczony; po przebiegu zmieniono tylko formatowaniePrettier. FinalTS/Prettier/diffPASS, Solxhigh bezblokera i bez potrzeby ponownego native dla formatowania. Pierwszy preflight wskazywał brak/usr/bin/chromium,bezDB; właściwy przebieg użył istniejącegoPlaywrightheadless.
+
+Netto42linie testu, bez nowych plików/infrastruktury/oracleduplikacji, zmianproduktu/UI/danychfirmy. Jedna kostka i pięć konfiguracji nie dowodzą pełnej macierzy, kwalifikacji sprzętowej filamentów ani rentowności firmy. Prywatnyroot/DBsprzątnięte, normalne usługi bez zmian.

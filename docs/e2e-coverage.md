@@ -49,6 +49,8 @@ Po zmianie `/out`: `bounded-output-api-20261107/` — 3 native API PASS na build
 
 Nowszy pełny API korpus po zmianie `/out`: `corpus-output-cap-20261107/` **40 PASS/1 FAIL** (model37 upload503 zamiast422);24ceny/12manual/36GLB bez różnic. Scoped37 później1PASS/422/exit67; nie kasuje pełnegoFAIL. Nowy log exit/signal daje diagnostykę kolejnego zdarzenia, nie dowód przyczyny pierwotnej.
 
+Rozszerzony `pricing-options.spec.ts`: `material-pricing-20261107.json` — 1 native PASS, pięć rachunków PLA/PETG/TPU z jawnymi kosztami fixture i snapshotami; wyłączenie dopuszczenia PETG daje dokładny powód `profile` bez zadania. Approval i koszt przywrócone. Jeden model, nie cała macierz materiałów lub kwalifikacja drukarki.
+
 ## Błędy, trwałość i zasoby
 
 | Zakres / raport | Dowód | Granica |
