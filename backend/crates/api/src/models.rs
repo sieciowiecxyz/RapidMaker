@@ -219,6 +219,8 @@ fn isolated_worker(
             "--",
             "/usr/bin/bwrap",
             "--unshare-all",
+            "--unshare-user",
+            "--disable-userns",
             "--die-with-parent",
             "--new-session",
             "--cap-drop",
@@ -694,7 +696,7 @@ mod resource_tests {
 
     // Uses the production command; only the final worker invocation is replaced.
     #[tokio::test]
-    #[ignore = "requires Linux bubblewrap, user namespaces and /usr/bin/python3"]
+    #[ignore = "requires Linux bubblewrap, user namespaces and /usr/bin/python3 and /usr/bin/unshare"]
     async fn native_device_mounts_are_readonly_with_bounded_writable_shm() {
         let source = std::env::temp_dir().join(format!(
             "rapidmaker-mount-probe-{}.stl",
@@ -719,7 +721,7 @@ mod resource_tests {
             let args = production.as_std().get_args().collect::<Vec<_>>();
             let invocation = args.iter().rposition(|arg| *arg == "/worker").unwrap();
             let mut probe = tokio::process::Command::new(production.as_std().get_program());
-            probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os
+            probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os, subprocess
 result = {}
 for directory in ['/dev', '/dev/shm']:
     stat = os.statvfs(directory)
@@ -742,6 +744,9 @@ with open('/dev/urandom', 'rb', buffering=0) as device:
     assert len(device.read(1)) == 1
 result['device_io_bytes'] = 1
 result['mounts'] = [line.strip() for line in open('/proc/self/mountinfo') if line.split()[4] in ['/dev', '/dev/shm']]
+nested = subprocess.run(['/usr/bin/unshare', '--user', '--map-root-user', '--mount', '/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=2)
+result['nested_userns'] = {'exit_code': nested.returncode, 'stderr': nested.stderr.decode()[:1024]}
+assert nested.returncode == 1
 print(json.dumps(result))"#])
             .env_clear().env("PATH", "/usr/bin:/bin").kill_on_drop(true);
             let output = tokio::time::timeout(Duration::from_secs(10), probe.output())
@@ -796,6 +801,10 @@ print(json.dumps(result))"#])
                 "/dev"
             ]));
         assert!(args.contains(&"--as=2147483648"));
+        assert!(
+            args.windows(3)
+                .any(|args| args == ["--unshare-all", "--unshare-user", "--disable-userns"])
+        );
         assert!(args.contains(&"--cpu=25"));
         assert_eq!(
             &args[args.len() - 3..],

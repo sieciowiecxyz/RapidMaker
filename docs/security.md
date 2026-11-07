@@ -81,3 +81,10 @@ Nadal brak łącznych limitów RAM/CPU/liczby potomków oraz liczby plików/inod
 Dobór wynika z pomiaru: większa płyta korpusu010 miała45,5 MB końcowego wyjścia, lecz136,4 MB próbkowanego szczytu;128 MiB spowodowało błąd eksportu,256 MiB przeszło. Produkcyjne512 MiB sprawdzono na czterech płytach cube1/10 i model0101/6. Inne większe zadanie może przekroczyć limit i otrzymać odmowę; nie sprawdzono całego korpusu na tym limicie. Natywna regresja `native_output_tmpfs_exports_only_result_including_missing_and_failed_runs` sprawdza limit i izolację hosta oraz poprawny/brakujący/błędny wynik. Dowody: `frontend/tests/artifacts/slicer-output-20261107/`.
 
 Walidacja 3MF: normalizator może wcześniej odrzucić potwierdzony kanoniczny root z trzecim wystąpieniem krawędzi. Ograniczona mapa524288wpisów; niejednoznaczność/limit wyłącza wskazówkę, pozostałe modele nadal waliduje SDK. Części pomocnicze i alternatywny root nie dostają tej dodatkowej odmowy. Model37exit67 skrócono20,9→~1,9s bez podnoszenia budżetów; to odmowa wadliwej geometrii, nie jej obsługa/naprawa.
+
+
+## Zagnieżdżone przestrzenie użytkownika
+
+Geometria i slicer wymagają jawnego `--unshare-user --disable-userns` po `--unshare-all`. Stare prefiksy z zerowymi capabilities i NoNewPrivs nadal pozwalały na nowe user/mount namespace, dające możliwość tworzenia kolejnych tmpfs. Kontrolowany `unshare --user --map-root-user --mount true` działał przed poprawką; po niej odmawia w geometrii standard/large i slicerze. Nie zmieniono ustawień hosta.
+
+Bubblewrap musi obsługiwać oba argumenty, a system dopuszczać początkową przestrzeń użytkownika; brak wsparcia kończy się odmową, bez słabszego fallbacku. Natywne probes wymagają także `/usr/bin/unshare`. To blokada tworzenia kolejnych user namespaces, nie kwota inodów ani łączny limit RAM/CPU/PID. Istniejące tmpfs mają nadal około12mln inodów; Bubblewrap0.13.1 nie ma opcji `nr_inodes`. Rzeczywisty twardy limit wymaga osobnego rozwiązania mount/deployment — polling i RLIMIT_NOFILE go nie zastępują.

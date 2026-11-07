@@ -28,7 +28,7 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 ## Dalsza praca i granice
 
-Goal pozostaje otwarty. Najpierw domknąć budżety zasobów: w `backend/crates/slicer/src/lib.rs` funkcja `plate_command` ogranicza bajty tmpfs i zasoby pojedynczego procesu, ale nie ustala jawnej kwoty inodów ani sumy zasobów potomków. Następny krok: rozszerzyć istniejący natywny probe `/out` o kontrolowaną serię pustych plików i odczyt `statvfs` (inody), a następnie wprowadzić egzekwowaną kwotę z regresją odmowy i cleanup. Mechanizm egzekwowania pozostaje do wyboru; sam pomiar nie zamyka luki. Potem objąć łącznym budżetem potomków, bez rozluźniania obecnych limitów.
+Goal pozostaje otwarty. Probe inodów i64pustychplików wykonany; obecny Bubblewrap nie udostępnia kwoty `nr_inodes`. Wykrytą możliwość tworzenia kolejnych user namespaces zablokowano w obu workerach (natywne probes i API2PASS). Twarda kwota inodów oraz sumy RAM/CPU/PID potomków nadal wymagają rozwiązania mount/deployment; nie zastępować ich pollingiem ani RLIMIT_NOFILE. Zachować obecne limity i fail-closed, bez udawania ukończenia. Szczegóły i warianty: [bezpieczeństwo](../security.md#zagnieżdżone-przestrzenie-użytkownika).
 
 Dalej: pełna macierz opcji ponad jeden model/PLA; fizyczny telefon/passkey i formalny kontrast; rzeczywiste koszty/rentowność firmy. Otwarte pozostają szerokie obciążenie/pentest i ogólna prostota kodu. Headless nie dowodzi natywnego BFCache ani przełączania okien. Konsultować konkretne poprawki z reviewerem według polecenia właściciela; nie wymuszać 10/10, nie traktować ocen jako blokera ani powtarzać pełnych zestawów dla wyższej liczby.
 

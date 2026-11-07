@@ -534,6 +534,8 @@ fn plate_command(
         "--",
         "/usr/bin/bwrap",
         "--unshare-all",
+        "--unshare-user",
+        "--disable-userns",
         "--die-with-parent",
         "--new-session",
         "--cap-drop",
@@ -756,6 +758,10 @@ mod tests {
                 "/dev"
             ]));
         assert!(args.contains(&"--as=4294967296"));
+        assert!(
+            args.windows(3)
+                .any(|args| args == ["--unshare-all", "--unshare-user", "--disable-userns"])
+        );
         assert!(args.contains(&"--cpu=60"));
         assert!(args.contains(&"--fsize=134217728"));
         assert!(args.windows(7).any(|args| args
@@ -778,7 +784,7 @@ mod tests {
 
     // Uses the production command; only the final AppRun invocation is replaced.
     #[tokio::test]
-    #[ignore = "requires Linux bubblewrap, installed Bambu runtime and /usr/bin/python3"]
+    #[ignore = "requires Linux bubblewrap, installed Bambu runtime and /usr/bin/python3 and /usr/bin/unshare"]
     async fn native_device_mounts_are_readonly_with_bounded_writable_shm() {
         let workspace = Workspace(
             std::env::temp_dir().join(format!("rapidmaker-mount-probe-{}", uuid::Uuid::new_v4())),
@@ -798,7 +804,7 @@ mod tests {
             .rposition(|arg| *arg == "/opt/bambustudio-bin/AppRun")
             .unwrap();
         let mut probe = tokio::process::Command::new(production.as_std().get_program());
-        probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os
+        probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os, subprocess
 result = {}
 for directory in ['/dev', '/dev/shm']:
     stat = os.statvfs(directory)
@@ -821,6 +827,9 @@ with open('/dev/urandom', 'rb', buffering=0) as device:
     assert len(device.read(1)) == 1
 result['device_io_bytes'] = 1
 result['mounts'] = [line.strip() for line in open('/proc/self/mountinfo') if line.split()[4] in ['/dev', '/dev/shm']]
+nested = subprocess.run(['/usr/bin/unshare', '--user', '--map-root-user', '--mount', '/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=2)
+result['nested_userns'] = {'exit_code': nested.returncode, 'stderr': nested.stderr.decode()[:1024]}
+assert nested.returncode == 1
 print(json.dumps(result))"#])
             .env_clear().env("PATH", "/usr/bin:/bin").kill_on_drop(true);
         let output = tokio::time::timeout(Duration::from_secs(10), probe.output())
