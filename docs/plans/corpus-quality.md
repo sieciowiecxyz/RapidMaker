@@ -11,7 +11,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 - Minimalny Rust, proste API/KISS według [architektury](../ARCHITECTURE.md); zachować kwoty, własność, izolację i limity. Nie zmieniać oczekiwań dla zielonego raportu.
 - Po etapie Sol xhigh: poprawność, bezpieczeństwo, kwoty, zasoby, błędy, współbieżność, dowody, prostota, utrzymanie, wygląd. Naprawiać konkretne problemy; nie wymuszać 10/10.
 
-## Checkpoint — 2026-11-07
+## Checkpoint — 2026-11-08
 
 Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany uzupełnia wcześniejszy pełny zestaw; nie tworzy nowego wyniku całego produktu. Szczegóły i historyczne FAIL pozostają w [raporcie](../corpus-report.md).
 
@@ -24,7 +24,7 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 | Nowsza kolejka email | Wygasły claim przed SMTP odrzucany bez wysyłki i bez `skipped`, pozostaje odzyskiwalny. Dwa celowane PG testy PASS. Po poprawce osobno 3 live E2E PASS: iCloud MFA/resend, Stripe test i emaile, email→chat dedup. Wirtualny passkey; admin refund/chat przez API. Nadal bez exactly-once SMTP. |
 | Celowane regresje UI/prywatności | `a03f362`: privacy 11 PASS, panele i journey osobno po 1 PASS. Nowsze: cache/access 1 PASS (`5222964`), Worker 2 PASS (`63e5387`, marker bez osobnego JSON), podgląd 3 PASS (`3aed38f`, mock HTTP, rzeczywisty Worker/parser/GPU). |
 | Opcje, ceny i współbieżność | Standard/draft/fine, skrajne ściany/wypełnienie: 1 native PASS, pięć rachunków dziesięciu pól (3 PLA + PETG/TPU z różnymi kosztami), 9 błędnych konfiguracji oraz cofnięte dopuszczenie PETG bez zadań; jeden model. Partia 26 = 25+1: osobno 1 PASS. Minimum koszyka 2 PASS. Ośmiu klientów 1 PASS, próbkowane RSS drzewa 187,2 MiB; nie pełna macierz, limit RAM, przepustowość ani rentowność. |
-| Dokładna masa — nowsza poprawka | Tokeny dziesiętne Bambu sumowane z powtórzeniami przed jednym ceil mg; Rust boundary32.112g koryguje1gr.19slicer/7pricing i2nativeAPI PASS. Snapshoty bez zmian; stare ceny do wygaśnięcia, nie przepisane. |
+| Dokładna masa — nowsza poprawka | Tokeny dziesiętne Bambu sumowane z powtórzeniami przed jednym ceil mg; Rust boundary32.112g koryguje1gr.19slicer/7pricing i2nativeAPI PASS. Pełny API korpus na5173459:41PASS,24rachunki/36GLB bez nowych odmów,487hashy zgodne; oraclef64, tokeny surowe testowane osobnoRust. Snapshoty bez zmian; stare ceny do wygaśnięcia. |
 | Izolacja i trwałość | `/out` tmpfs 512 MiB, host JSON maks. 128 MiB; regresje błędów/cleanup i native formaty/opcje/partie PASS. Anulowanie: 1 native PASS z zaufanym forkiem, bez Bambu. Łączne budżety procesów/potomków i metadanych/inodów otwarte. Lease/restart i przypięcie binarki mają osobne dowody w [mapie](../e2e-coverage.md); nie dowodzą awarii hosta/power loss. |
 | Prostota i runtime | Usunięcie Badge i trzech bezpośrednich devDependencies opisano w raporcie; nie dowodzi to prostoty całości. Smoke `7fb2a24`: upload/GLB/cena/delete PASS, 37,05 zł. To historia localhost, bez potwierdzenia obecnego procesu lub wdrożenia. |
 

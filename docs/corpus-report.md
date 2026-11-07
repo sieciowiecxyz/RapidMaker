@@ -912,3 +912,12 @@ Przedfix rzeczywistytestRustFAIL2008vs2007 zachowany, po poprawce32112mg/2007grf
 84nettolinieproduktu, minimalny helper mass.rs,jedna metoda/jedenprywatnyDTOfield. Brak produkcyjnego deserializowania BatchEstimate do ponownej wyceny; jobs odczytują SliceInput i tnąświeżo. Dotychczasowe ukończonewyceny nie są przepisywane; ten samfingerprint może je zwrócić do istniejącego10minwygaśnięcia. Po wygaśnięciu świeży pomiar użyje dokładnegoprzeliczenia; brak natychmiastowej invalidacji fingerprint.
 
 Solxhigh potwierdził arytmetykę/kompatybilność/wire shape, bezblokera. Dowody `pricing-boundaries-20261107/` before/after/unit/native-final/provenance/source-decimals; przykłady rzeczywistychBambu wartości mają17cyfrdziesiętnych, stąd brak narzuconej3-cyfrowejrozdzielczości. NormalnyAPIbezrestartu, privateDBcleanup, brak providerów/UIzmian; headless.
+
+
+## 2026-11-08 — pełny korpus API po dokładnym przeliczaniu masy
+
+`corpus-exact-mass-20261107/` na `5173459`, przypięta binarka `83117fa6`: **41 PASS / 0 FAIL / 0 SKIP / 0 flaky**, 589,185 s (wrapper 599,007 s, exit 0). Nadal 24 automatyczne wyceny, 12 ręcznych, 4 wadliwe źródła, 1 odmowa zasobowa i 36 GLB. Brak nowych odmów parsera masy; statusy, powody i zachowane wymiary ręcznych ofert odpowiadają poprzedniemu przebiegowi macierzy. Zmieniło się 21 pomiarów i 8 kwot brutto o −5..+6 gr; raport nie izoluje przyczyny od zmienności Bambu. Wszystkie 24 rachunki kontrolne przechodzą.
+
+487 hashy źródeł/binarki/dist/manifestu/wejść przed i po identycznych, Git czysty, 41 plików i oczekiwania bez zmian. Nowy hash obejmuje mass.rs. Provenance zgodne z wcześniejszym buildem; testowa baza, proces i katalog usunięte. SHA raportu `ceedd8cfb0f291b80ad926d47910b6d736fa1c0a4c53413074b0366c79da59f3`. Sol xhigh potwierdził wyniki i zakres. Normalny serwer bez restartu, bez providerów i nowego UI, wyłącznie headless.
+
+Granica: korpusowy oracle korzysta nadal z publicznych gramów f64; próba prywatnego przechwycenia surowych wyników znalazła 0 plików. Nie przypisujemy więc temu przebiegowi niezależnej weryfikacji źródłowych tokenów dziesiętnych. Ich graniczną poprawność potwierdzają osobne testy Rust `pricing-boundaries`; full41 potwierdza zgodność i brak nowych odmów w tym korpusie.

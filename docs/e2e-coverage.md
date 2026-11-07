@@ -5,7 +5,9 @@ Opis: mapa wykonanych przebiegów i ich granic; historia i szczegóły w [raporc
 
 Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`. Różne HEAD-y i przebiegi nie tworzą wspólnego PASS. [Mapa kontrolek](e2e-controls.md) to spis źródeł, nie pełna macierz kombinacji.
 
-## Najnowsze dowody — 2026-11-07
+## Najnowsze dowody — 2026-11-08
+
+Po dokładnej masie: `corpus-exact-mass-20261107/` na5173459 — **41 PASS API**,0FAIL/SKIP/flaky;24rachunki/12manual/4invalid/1resource/36GLB,487hashy zgodne. Brak nowych odmów. Oracle tego korpusu używa publicznych f64gramów; dokładne tokeny źródłowe pokrywa osobnyRusttest, nie ten raport.
 
 Po email preflight: `emailpreflightlive20261107a.json` — **3 live PASS**,309,4s,0FAIL/SKIP/flaky na0bdf37d. Realne iCloud MFA/resend, wirtualny passkey, Stripe test/maile, zwrot admin API, SMTP→IMAP→chat dedup/reload.396źródeł/47dist/config/binary/runtime bez zmian, cleanup potwierdzony. To osobny zakres, nie cały suite/exactly-once lub fizyczny passkey.
 
