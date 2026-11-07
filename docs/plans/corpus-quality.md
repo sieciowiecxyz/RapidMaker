@@ -23,6 +23,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | Bieżący korpus UI,d560c97 | **41 PASS/0 FAIL/0 SKIP/0 flaky**,662,9s:36renderów,144unikalne obejrzane ujęcia1440/390/light/dark.486hashy zgodne. CenyUI tylko9/20/29; orientacja29 i formalny kontrast niepotwierdzone. |
 | Macierze3MF — nowsza poprawka | Trzy kolumny konstruktora poprawione: rotation/shear/nested3MF miały3FAIL, teraz22unit/2nativeAPIUI PASS. Model29upright/basebelow zgodnie ze źródłem. PełnyAPI/UI41 po tej zmianie sprawdzono poniżej. |
 | Bieżące API/UI po macierzach,0e53ffb | Osobno41PASSAPI i41PASSUI;24ceny/12manual/36GLB i144obejrzane ujęcia. Model25poprawnieprinter_fit zamiastsize_limit; staryUI40/1 zachowany, ścisłytestpowodupoprawiony.486hashy bez zmian w obu przebiegach. |
+| Ciemny viewer — nowsza zmiana | Rim0,18dark/0,11light: przed/po osobno3nativePASS;16ujęć/etap, jasne8pikselowoidentyczne. OsobnoWebGLrestore2PASS. Małe rozproszone części nadal małe; bez zmiany kolorów/style i bez nowegopełnego41. |
 | Większe modele | Pełny STL, kompaktowy/spatial GLB i jawnie uproszczony tylko podgląd; [budżety](large-models.md). Model 41 nadal ponad limitem; 14/21/32/37 poprawnie odrzucone jako wadliwe. |
 | Zbiorczy `baad9d1` | **179 PASS / 0 FAIL / 1 opt-in SKIP**, 0 flaky; osiem grup exit0, wrapper2 wyłącznie przez skip.441hashy bez zmian. |
 | Large na tym samym HEAD | Pominięty przypadek uruchomiony osobno: **1 PASS/0SKIP**,16,5s, te same441hashy. Nie zmienia wyniku wrappera. |

@@ -21,7 +21,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-uniform vec3 uColor,uOldColor;uniform float uSweep,uBuild,uMin,uMax,uLayer,uGround,uGloss,uSliced,uLow,uHigh,uClipSide,uCut,uCap,uDensity,uWall,uOpacity;
+uniform vec3 uColor,uOldColor;uniform float uRim,uSweep,uBuild,uMin,uMax,uLayer,uGround,uGloss,uSliced,uLow,uHigh,uClipSide,uCut,uCap,uDensity,uWall,uOpacity;
 uniform sampler2D uBoundary;
 varying vec3 vNormal,vPosition,vLocal;varying float vLayerSurface;
 void main(){
@@ -56,7 +56,7 @@ void main(){
  vec3 base=mix(uColor,uOldColor,smoothstep(uSweep-1.5,uSweep+1.5,vLocal.y));
  base=pow(base,vec3(2.2));
  vec3 light=base*(.24+diffuse*1.55+bounce*.42)*(1.-stripe*.42);
- light+=vec3(.8,.88,1.)*(sheen*.22+rim*.11);
+ light+=vec3(.8,.88,1.)*(sheen*.22+rim*uRim);
  float cavity=smoothstep(uMin,uMin+18.,vLocal.y);light*=.76+cavity*.24;
  float cut=1.-smoothstep(.0,1.8,abs(vLocal.y-mix(uMin,uMax,uBuild)));
  light+=vec3(.30,.50,.05)*cut*(1.-step(.999,uBuild));
@@ -81,7 +81,7 @@ export function createPartViewer(canvas:HTMLCanvasElement,onAvailabilityChange:(
  ]),gl.STATIC_DRAW);
  const position=gl.getAttribLocation(program,'aPosition'),normal=gl.getAttribLocation(program,'aNormal');gl.enableVertexAttribArray(position);gl.enableVertexAttribArray(normal);
  const uniform=(name:string)=>gl.getUniformLocation(program,name);
- const names=['uYaw','uPitch','uAspect','uFlex','uColor','uOldColor','uSweep','uBuild','uMin','uMax','uLayer','uGround','uGloss','uScale','uSliced','uLow','uHigh','uClipSide','uOffset','uCut','uCap','uDensity','uWall','uOpacity','uBoundary'];const u=Object.fromEntries(names.map(name=>[name,uniform(name)]));
+ const names=['uRim','uYaw','uPitch','uAspect','uFlex','uColor','uOldColor','uSweep','uBuild','uMin','uMax','uLayer','uGround','uGloss','uScale','uSliced','uLow','uHigh','uClipSide','uOffset','uCut','uCap','uDensity','uWall','uOpacity','uBoundary'];const u=Object.fromEntries(names.map(name=>[name,uniform(name)]));
  return {vs,fs,program,buffer,ground,cap,position,normal,u};
  }
  let {vs,fs,program,buffer,ground,cap,position,normal,u}=createResources();
@@ -117,7 +117,7 @@ export function createPartViewer(canvas:HTMLCanvasElement,onAvailabilityChange:(
  }
  const bind=(buf:WebGLBuffer)=>{gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.vertexAttribPointer(position,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(normal,3,gl.FLOAT,false,24,12);};
  function draw(state:ViewerState){if(lost)return;gl!.viewport(0,0,canvas.width,canvas.height);gl!.clearColor(0,0,0,0);gl!.clear(gl!.COLOR_BUFFER_BIT|gl!.DEPTH_BUFFER_BIT|gl!.STENCIL_BUFFER_BIT);gl!.useProgram(program);
- gl!.uniform1f(u.uOpacity,1);gl!.depthMask(true);gl!.uniform1f(u.uSliced,state.explode>.001?1:0);gl!.uniform1f(u.uClipSide,0);gl!.uniform1f(u.uOffset,0);gl!.uniform1f(u.uCap,0);gl!.uniform1f(u.uDensity,state.density);gl!.uniform1f(u.uWall,state.wall);gl!.uniform1i(u.uBoundary,0);
+ gl!.uniform1f(u.uRim,document.documentElement.dataset.theme==='dark'?.18:.11);gl!.uniform1f(u.uOpacity,1);gl!.depthMask(true);gl!.uniform1f(u.uSliced,state.explode>.001?1:0);gl!.uniform1f(u.uClipSide,0);gl!.uniform1f(u.uOffset,0);gl!.uniform1f(u.uCap,0);gl!.uniform1f(u.uDensity,state.density);gl!.uniform1f(u.uWall,state.wall);gl!.uniform1i(u.uBoundary,0);
  gl!.uniform1f(u.uScale,(kind==='pla'?1.38:kind==='tpu'?1.4:1.04)*(1-state.explode*.16)*state.zoom);gl!.uniform1f(u.uYaw,state.yaw);gl!.uniform1f(u.uPitch,state.pitch);gl!.uniform1f(u.uAspect,canvas.width/canvas.height);gl!.uniform1f(u.uFlex,kind==='tpu'?state.flex:0);
  gl!.uniform3f(u.uColor,state.r,state.g,state.b);gl!.uniform3f(u.uOldColor,state.oldR,state.oldG,state.oldB);gl!.uniform1f(u.uSweep,min+(max-min+8)*state.sweep);gl!.uniform1f(u.uBuild,state.build);gl!.uniform1f(u.uMin,min);gl!.uniform1f(u.uMax,max);gl!.uniform1f(u.uLayer,state.layer);gl!.uniform1f(u.uGloss,kind==='pa'?65:kind==='tpu'?25:45);
  gl!.enable(gl!.BLEND);gl!.blendFunc(gl!.SRC_ALPHA,gl!.ONE_MINUS_SRC_ALPHA);gl!.disable(gl!.DEPTH_TEST);gl!.uniform1f(u.uGround,1);bind(ground);gl!.drawArrays(gl!.TRIANGLES,0,6);
