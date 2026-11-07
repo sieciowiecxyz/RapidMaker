@@ -7,6 +7,8 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 ## Najnowsze dowody — 2026-11-07
 
+Bieżący pełny UI: `corpus-ui-current-20261107/` na d560c97 — **41 PASS/0 FAIL/0 SKIP/0 flaky**,36renderów/144obejrzane ujęcia desktop/mobile/light/dark;486hashy niezmienione. CenyUI9/20/29, manualUI5/19/22/25. Rozproszone części ciemne/małe; orientacja29 i formalny kontrast pozostają niepotwierdzone. Brak nowego redesignu.
+
 Bieżący pełny API korpus: `corpus-early-topology-20261107/` naacbd999 — **41 PASS/0 FAIL/0 SKIP/0 flaky**,24native/12manual/4wadliwe/1resource,36GLB,486hashy bez zmian. Model37typed422w2,212s. To nowy przebieg po poprawce; poprzedni40/1 zachowany. Brak nowego dowodu renderowania UI lub kosztów firmy.
 
 | Zakres / raport | Wykonany wynik | Granica |

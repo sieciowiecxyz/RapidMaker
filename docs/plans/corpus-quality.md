@@ -20,6 +20,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | Model37 — poprawka | Ograniczona wskazówka topologii potwierdzonego roota: exit67 około1,9s zamiast20,9s, te same limity.18unit/4nativeAPI PASS; reviewerowa regresja secondary usunięta. Pełny korpus acbd999 sprawdzony poniżej. |
 | Bieżący korpus API,acbd999 | **41 PASS/0 FAIL/0 SKIP/0 flaky**,594,9s:24native/12manual/4wadliwe/1limit i36GLB. Model37typed422 w2,212s.486hashy i oczekiwania bez zmian; osobny przebieg, nie nowy dowód UI. |
 | Korpus UI, `40e8a5d` | 41 PASS, 36 renderów, 144 unikalne obejrzane ujęcia; ceny UI tylko 9/20/29. To osobny przebieg na innym HEAD. |
+| Bieżący korpus UI,d560c97 | **41 PASS/0 FAIL/0 SKIP/0 flaky**,662,9s:36renderów,144unikalne obejrzane ujęcia1440/390/light/dark.486hashy zgodne. CenyUI tylko9/20/29; orientacja29 i formalny kontrast niepotwierdzone. |
 | Większe modele | Pełny STL, kompaktowy/spatial GLB i jawnie uproszczony tylko podgląd; [budżety](large-models.md). Model 41 nadal ponad limitem; 14/21/32/37 poprawnie odrzucone jako wadliwe. |
 | Zbiorczy `baad9d1` | **179 PASS / 0 FAIL / 1 opt-in SKIP**, 0 flaky; osiem grup exit0, wrapper2 wyłącznie przez skip.441hashy bez zmian. |
 | Large na tym samym HEAD | Pominięty przypadek uruchomiony osobno: **1 PASS/0SKIP**,16,5s, te same441hashy. Nie zmienia wyniku wrappera. |

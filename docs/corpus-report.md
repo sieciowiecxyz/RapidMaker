@@ -821,3 +821,12 @@ Końcowy worker34212cb5: dwie próby exit67,wall1,897/1,930s,user1,842/1,882s,RS
 486hashy źródeł/binarki/manifestu/fixture przed/po identyczne,41wejść identycznych z poprzednim pełnym przebiegiem. Oczekiwania corpus.spec niezmienione SHA d66f510d51d7fd66cc6814a9bb7d8eb664215baa6e4fae2e8a5562329251f283. Raport SHA7a2ac52aa8e4374cc372054138db450ed2bb928d5f56f0b0a375ef7449ca80cf. PrywatneDB/proces/katalog usunięte, normalnyserwerbezrestartu; bez providerów/mail/nowego pobierania/widocznej przeglądarki. Git czysty przez cały przebieg.
 
 Sol xhigh niezależnie potwierdził41unikalnychprzypadków, klasyfikacje, hashe i cleanup. Historyczny40PASS/1FAIL zachowany, nie zastąpiony osobnymi scopedPASS. Ten przebieg jest nowym dowodem API/slicera, nie renderowaniaGPUUI, rentowności firmy, całej macierzy opcji lub obsługi ponadlimitowego41. Cel nadal otwarty; oceny zakresowe7–9 bez wymuszania10.
+
+
+## 2026-11-07 — bieżący pełny korpus UI po poprawkach backendu
+
+`corpus-ui-current-20261107/report.json` na d560c97/pinned34212cb5: **41 PASS/0 FAIL/0 SKIP/0 flaky**,662,894s,exit0.36renderów i144unikalne ujęcia (1440/390px × light/dark),5odmów14/21/32/37/41. SHAraportu4e509e9bf5b1803b102876f4a97e3a74039549c088f514422b39ec4c809c6128.486hashy źródeł/binarki/dist/manifestu/41wejść przed/po identyczne,Gitczysty.159wspólnychhashy frontendu/config/package/dist odpowiada udanemu buildowi baad9d1; nie zakładano aktualności dist tylko z historii commita. PrywatneDB/proces/root usunięte. Bez przebudowy/providerów/mail/pobierania lub restartu zwykłych serwerów, wyłącznie headless.
+
+Worker i agent główny obejrzeli wszystkie6plansz kontaktowych; Solxhigh niezależnie1/5/6 oraz obecny/historyczny29mobilelight. Nie znaleziono nowej pustej sceny, oczywistego clippingu lub zasłoniętych kontrolek. Rozproszone złożenia2/16/18/24/31 pozostają małe/ciemne, szczególnie dark. Model29 ma bazę powyżej odwróconej postaci także w dawnym przebiegu; zgodność z intencją pliku źródłowego niepotwierdzona, nie traktujemy podobieństwa historycznego jako poprawności orientacji. Brak formalnego pomiaru kontrastu/fizycznego telefonu.
+
+CenyUI sprawdzane wyłącznie9/20/29 względem serwera, manualUI5/19/22/25.24native/12manual to osobny bieżący raportAPI, nie ten przebiegUI. Hashy obrazów użyto do kontroli odrębności, nie jako zastępstwa oględzin. Wynik nie dowodzi pełnej macierzy, wszystkich urządzeń, rentowności ani zakończenia goal; reviewer7–9/10 bez wymuszania10. Wygląd produktu bez zmian.
