@@ -921,3 +921,12 @@ Solxhigh potwierdził arytmetykę/kompatybilność/wire shape, bezblokera. Dowod
 487 hashy źródeł/binarki/dist/manifestu/wejść przed i po identycznych, Git czysty, 41 plików i oczekiwania bez zmian. Nowy hash obejmuje mass.rs. Provenance zgodne z wcześniejszym buildem; testowa baza, proces i katalog usunięte. SHA raportu `ceedd8cfb0f291b80ad926d47910b6d736fa1c0a4c53413074b0366c79da59f3`. Sol xhigh potwierdził wyniki i zakres. Normalny serwer bez restartu, bez providerów i nowego UI, wyłącznie headless.
 
 Granica: korpusowy oracle korzysta nadal z publicznych gramów f64; próba prywatnego przechwycenia surowych wyników znalazła 0 plików. Nie przypisujemy więc temu przebiegowi niezależnej weryfikacji źródłowych tokenów dziesiętnych. Ich graniczną poprawność potwierdzają osobne testy Rust `pricing-boundaries`; full41 potwierdza zgodność i brak nowych odmów w tym korpusie.
+
+
+## 2026-11-08 — granica podziału maksymalnej kwoty
+
+Jeden nowy test `maximum_gross_allocations_conserve_money_and_reject_the_next_cent` w pricing/lib.rs, bez zmian części produkcyjnej. Używa rzeczywistych wyników calculate i poprawnych stawek fixture (margin1bps,VAT0,setup1), bez zamaskowania minimum. Koszt4294537798gr po marży daje dokładnieu32::MAXbrutto; koszt+1gr wymaga zakresu większego o1 i kończycombinebłędem.
+
+Sprawdzono10pozycji (limitHTTP) i1000 (limitbiblioteki), wariantyquantity1 i1000 z odwróceniem zróżnicowanych wag. Suma setup+line totals liczona niezależnieu64 pozostajeu32::MAX. Przybliżoneunit×quantity mogą przewyższyćfaktycznesumy — nie są naliczaniem dodatkowychgroszy. Ilość nie mnoży drugi raz zmierzonych kosztów. Wariant odwraca kolejność razem ze zmianąilości; nie jest pełnym niezależnym testem kolejności dla tej samejilości. Nie uruchamiaHTTP/DB.
+
+Wszystkie8pricingtestówPASS,fmt/diffPASS, Solxhigh niezależnie sprawdził rachunek i uznał test za zasadny.67linii wyłącznie testu, bez nowejwarstwy/zależności, brak znalezionego nowego błęduproduktu. Dowód `pricing-boundaries-20261108/provenance.json` i pricing-tests.log; nie powtarzano zielonych native/API/providerów.

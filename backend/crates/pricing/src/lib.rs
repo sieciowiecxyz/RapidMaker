@@ -396,6 +396,73 @@ mod tests {
     }
 
     #[test]
+    fn maximum_gross_allocations_conserve_money_and_reject_the_next_cent() {
+        let rates = Rates {
+            setup_grosze: 1,
+            handling_per_plate_grosze: 0,
+            machine_per_hour_grosze: 0,
+            energy_per_kwh_grosze: 0,
+            loss_bps: 0,
+            margin_bps: 1,
+            vat_bps: 0,
+            minimum_net_grosze: 0,
+            ..rates()
+        };
+        // Synthetic boundary invoice: cost 4_294_537_798 with 1 bps margin
+        // rounds to u32::MAX net/gross; cost+1 rounds to u32::MAX+1.
+        // Ten parts is the HTTP cart limit; 1000 is combine's library limit.
+        for count in [10, 1000] {
+            let filament_total = 4_294_537_797_u32;
+            let low = calculate(1, 1_000_000, 1, filament_total / count, &rates).unwrap();
+            let high = calculate(1, 1_000_000, 1, filament_total / count + 1, &rates).unwrap();
+            let ids: Vec<_> = (0..count).map(|i| format!("part-{i}")).collect();
+            let mut parts: Vec<_> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| OrderPart {
+                    model_id: id,
+                    quantity: 1,
+                    price: if i < (filament_total % count) as usize {
+                        &high
+                    } else {
+                        &low
+                    },
+                })
+                .collect();
+            for quantity in [1, 1000] {
+                if quantity == 1000 {
+                    parts.reverse();
+                }
+                for part in &mut parts {
+                    part.quantity = quantity;
+                }
+                let order = combine(&parts, &rates).unwrap();
+                assert_eq!(order.price.gross_grosze, u32::MAX);
+                assert_eq!(order.lines.len(), count as usize);
+                let total: u64 = order.lines.iter().map(|p| u64::from(p.total_grosze)).sum();
+                assert_eq!(u64::from(order.setup_grosze) + total, u64::from(u32::MAX));
+                let mut rounded_total = 0_u64;
+                for line in &order.lines {
+                    assert_eq!(line.quantity, quantity);
+                    let rounded = u64::from(line.unit_grosze) * u64::from(quantity);
+                    let total = u64::from(line.total_grosze);
+                    assert!(rounded >= total && rounded - total < u64::from(quantity));
+                    rounded_total += rounded;
+                }
+                if quantity == 1000 {
+                    assert!(rounded_total > total);
+                }
+            }
+            // Reversal put a lower-cost part first: add exactly one cost cent.
+            parts[0].price = &high;
+            assert!(matches!(
+                combine(&parts, &rates),
+                Err("Price exceeds supported range")
+            ));
+        }
+    }
+
+    #[test]
     fn allocations_preserve_cents_and_zero_cost_minimum_without_overflow() {
         let mut rates = rates();
         let mut price = calculate(1, 1, 1, 1, &rates).unwrap();
