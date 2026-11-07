@@ -1,3 +1,5 @@
+import { announceAuthChange, authEpoch, watchAuthChanges } from './authSync';
+
 // Session secrets stay in HttpOnly cookies; only the CSRF token lives in memory.
 let csrfToken: string | null = null;
 let csrfLoading: Promise<void> | null = null;
@@ -18,6 +20,7 @@ export function clearAuthToken() {
   csrfLoading = null;
   generation++;
 }
+watchAuthChanges(clearAuthToken);
 function rememberToken(data: unknown) {
   if (
     data &&
@@ -51,7 +54,26 @@ async function loadCsrf() {
   }
   await csrfLoading;
 }
+// These successful endpoints replace/remove the session cookie. Email start only
+// sets an attempt cookie; passkey start already replaces the session with primary.
+const sessionChanges = new Set([
+  '/api/auth/password/login',
+  '/api/auth/verify',
+  '/api/auth/factor/verify',
+  '/api/auth/passkey/login/start',
+  '/api/auth/passkey/login/finish',
+  '/api/auth/logout',
+  '/api/auth/logout-all',
+  '/api/auth/passkey/register/finish',
+  '/api/account/password',
+  '/api/account/totp/confirm',
+  '/api/account/totp',
+]);
+function assertCurrent(epoch: number) {
+  if (epoch !== authEpoch()) throw new ApiError(0, 'Sesja zmieniła się. Odśwież widok.');
+}
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const epoch = authEpoch();
   const url = new URL(path, location.origin);
   if (
     !path.startsWith('/api/') ||
@@ -75,6 +97,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     if (!csrfToken) await loadCsrf();
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
+  assertCurrent(epoch);
   const response = await fetch(url, {
     ...init,
     method,
@@ -83,6 +106,15 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     redirect: 'error',
     cache: 'no-store',
   });
+  assertCurrent(epoch);
+  if (
+    response.ok &&
+    ['POST', 'PUT', 'DELETE'].includes(method) &&
+    sessionChanges.has(url.pathname)
+  ) {
+    clearAuthToken();
+    announceAuthChange();
+  }
   if (response.status === 401) {
     clearAuthToken();
     if (!url.pathname.startsWith('/api/auth/'))
@@ -97,7 +129,9 @@ export async function apiRequest<T>(path: string, method = 'GET', body?: unknown
       ? {}
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
+  const epoch = authEpoch();
   const data = response.status === 204 ? undefined : await response.json().catch(() => undefined);
+  assertCurrent(epoch);
   if (!response.ok)
     throw new ApiError(
       response.status,

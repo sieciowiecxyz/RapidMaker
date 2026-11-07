@@ -189,3 +189,189 @@ test('UI logout A then login B in the same tab isolates orders, chat and private
     contentType: 'application/json',
   });
 });
+
+test('cross-tab cookie changes remove private A detail and chat before B can use the old route', async ({
+  page,
+  context,
+  browser,
+}, info) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires --local-accounts',
+  );
+  test.setTimeout(180_000);
+  const clientA = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+  const clientB = accounts().find((a) => a.email === 'browser-security@example.invalid')!;
+  const setup = await browser.newContext();
+  let orderB: Awaited<ReturnType<typeof createOrder>>;
+  try {
+    const seed = await setup.newPage();
+    await login(seed, clientB);
+    orderB = await createOrder(seed, clientB, `tabs-B-${randomUUID()}`);
+  } finally {
+    await setup.close();
+  }
+  await login(page, clientA);
+  const orderA = await createOrder(page, clientA, `tabs-A-${randomUUID()}`);
+  const observer = await context.newPage();
+  await observer.goto(`/konto/zamowienia/${orderA.id}#rozmowa`);
+  await expect(observer.getByText(orderA.message, { exact: true })).toBeVisible();
+  await expect(observer.getByText(orderA.filename, { exact: true }).first()).toBeVisible();
+  // Rejected credentials do not replace the cookie or invalidate the other view.
+  await page.goto('/logowanie?reauth=1');
+  const signalBefore = await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'));
+  await page.getByLabel('Adres email', { exact: true }).fill(clientA.email);
+  await page.getByLabel('Hasło', { exact: true }).fill('deliberately-wrong-password');
+  const rejected = page.waitForResponse((r) => r.url().endsWith('/api/auth/password/login'));
+  await page.getByRole('button', { name: 'Zaloguj hasłem', exact: true }).click();
+  expect((await rejected).status()).toBe(401);
+  expect(await page.evaluate(() => localStorage.getItem('rapidmaker:auth-change'))).toBe(
+    signalBefore,
+  );
+  await expect(observer.getByText(orderA.message, { exact: true })).toBeVisible();
+  // Public browser-local drafts are deliberately unrelated to account credentials.
+  const draft = JSON.stringify({
+    models: [{ id: 'local-example', name: 'Lokalny przykład', quantity: 3 }],
+    delivery: 'pickup',
+  });
+  await observer.evaluate(
+    (value) => localStorage.setItem('rapidmaker.storefront.draft.v1', value),
+    draft,
+  );
+  // Delay an actual A response from the chat's reload until B is authenticated.
+  // Nothing is synthesized: route.fetch obtains the authorized 200 before logout.
+  let release!: () => void;
+  let captured!: () => void;
+  let delivered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const done = new Promise<void>((resolve) => {
+    delivered = resolve;
+  });
+  let intercepted = false;
+  await observer.route(`**/api/account/orders/${orderA.id}`, async (route) => {
+    if (intercepted || route.request().method() !== 'GET') return route.continue();
+    intercepted = true;
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    captured();
+    await gate;
+    await route.fulfill({ response });
+    delivered();
+  });
+  await observer.getByLabel('Wiadomość', { exact: true }).fill(`Spóźniony odczyt ${orderA.label}`);
+  await observer.getByRole('button', { name: 'Wyślij wiadomość', exact: true }).click();
+  await held;
+  try {
+    const loggedOut = page.waitForResponse((r) => r.url().endsWith('/api/auth/logout'));
+    await page.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+    expect((await loggedOut).status()).toBe(200);
+    expect((await observer.request.get('/api/auth/me')).status()).toBe(401);
+    await info.attach('cross-tab-logout-observation.json', {
+      body: JSON.stringify({
+        sharedCookieLoggedOut: true,
+        oldPrivateChatStillVisible: await observer
+          .getByText(orderA.message, { exact: true })
+          .isVisible(),
+      }),
+      contentType: 'application/json',
+    });
+    await expect(observer.getByText(orderA.message, { exact: true })).toHaveCount(0);
+    await expect(observer.getByText(orderA.number, { exact: true })).toHaveCount(0);
+    await observer.evaluate(
+      (forbidden) => {
+        const probe = { leaked: false };
+        Object.assign(window, { privateViewProbe: probe });
+        new MutationObserver(() => {
+          if (forbidden.some((value) => document.body.innerText.includes(value)))
+            probe.leaked = true;
+        }).observe(document.body, { childList: true, subtree: true, characterData: true });
+      },
+      [orderA.message, orderA.filename, orderA.number, orderA.label, clientA.email],
+    );
+    await login(page, clientB);
+    const noA = async () => {
+      for (const text of [
+        orderA.message,
+        orderA.filename,
+        orderA.number,
+        orderA.label,
+        clientA.email,
+      ])
+        await expect(observer.getByText(text, { exact: false })).toHaveCount(0);
+    };
+    await expect(
+      observer.getByRole('heading', { name: 'Nie można otworzyć zamówienia' }),
+    ).toBeVisible();
+    release();
+    await done;
+    await noA();
+    expect(
+      await observer.evaluate(
+        () =>
+          (window as unknown as { privateViewProbe: { leaked: boolean } }).privateViewProbe.leaked,
+      ),
+    ).toBe(false);
+    for (const path of orderA.privatePaths)
+      expect((await observer.request.get(path)).status()).toBe(404);
+    await observer.goto(`/konto/zamowienia/${orderB.id}#rozmowa`);
+    await expect(observer.getByText(orderB.message, { exact: true })).toBeVisible();
+    await expect(observer.getByText(orderB.filename, { exact: true }).first()).toBeVisible();
+    await noA();
+    expect(
+      await observer.evaluate(() => localStorage.getItem('rapidmaker.storefront.draft.v1')),
+    ).toBe(draft);
+  } finally {
+    release();
+  }
+});
+
+test('cross-tab logout removes protected admin selection and chat when a client signs in', async ({
+  page,
+  context,
+  browser,
+}) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires --local-accounts',
+  );
+  test.setTimeout(180_000);
+  const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+  const admin = accounts().find((a) => a.role === 'admin')!;
+  const setup = await browser.newContext();
+  let order: Awaited<ReturnType<typeof createOrder>>;
+  try {
+    const seed = await setup.newPage();
+    await login(seed, client);
+    order = await createOrder(seed, client, `tabs-admin-${randomUUID()}`);
+  } finally {
+    await setup.close();
+  }
+  await login(page, admin);
+  const observer = await context.newPage();
+  await observer.goto(`/admin.html?order=${order.id}`);
+  await expect(observer.getByText(order.filename, { exact: true }).first()).toBeVisible();
+  await observer
+    .getByRole('complementary', { name: /^Szczegóły / })
+    .getByRole('button', { name: 'Wiadomości', exact: true })
+    .click();
+  await expect(observer.getByText(order.message, { exact: true })).toBeVisible();
+  const loggedOut = page.waitForResponse((r) => r.url().endsWith('/api/auth/logout'));
+  await page.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+  expect((await loggedOut).status()).toBe(200);
+  await expect(observer.getByText(order.message, { exact: true })).toHaveCount(0);
+  await expect(
+    observer.getByRole('button', { name: 'Zamknij szczegóły', exact: true }),
+  ).toHaveCount(0);
+  await login(page, client);
+  expect((await observer.request.get('/api/admin/orders')).status()).toBe(403);
+  await expect(
+    observer.getByRole('button', { name: 'Zamknij szczegóły', exact: true }),
+  ).toHaveCount(0);
+  await observer.goto(`/konto/zamowienia/${order.id}#rozmowa`);
+  await expect(observer.getByText(order.message, { exact: true })).toBeVisible();
+});

@@ -52,3 +52,5 @@ Tożsamość danych: checkout `print_lines.model_id` pozostaje lokalnym ID pozyc
 Upload: wspólny adapter automatycznie ponawia tylko HTTP429 z `code=model_upload_busy` i dokładnym `Retry-After: 1`. Backend oznacza tak wyłącznie odmowę admission przed odczytem body lub zajęty flock katalogu przed utworzeniem UUID/pliku. Limit:8 prób, maks.30s na planowanie ponowień, odstępy1/2/4s + jitter≤250ms; rozpoczętego POST nie przerywamy (zaakceptowany model wymaga sprzątania). Limity magazynu/parser429, auth,5xx i niepewny błąd sieci nie są ponawiane. Usunięcie lokalnego wiersza zatrzymuje kolejne próby; spóźnione zaakceptowane odpowiedzi zachowują dotychczasowe sprzątanie.
 
 Zmiana materiału zachowuje wybrany kolor/odcień (także wybrany przed materiałem); wyjątek PA-CF wymusza czarny. Odcień palety PLA na innym materiale pozostaje preferencją do ręcznego potwierdzenia, nie deklaracją dostępnego kodu katalogowego.
+
+Zmiana sesji w innej karcie usuwa prywatny widok i wymaga świeżego/me; opóźniona odpowiedź poprzedniego konta nie może przywrócić danych. Sygnał między kartami to losowy marker, bez danych użytkownika; szkice przeglądarki pozostają.

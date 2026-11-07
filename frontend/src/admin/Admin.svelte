@@ -40,8 +40,9 @@
     type Order,
     type Stage,
   } from './data';
+  import { watchAuthChanges } from '../lib/authSync';
   import { getSession, logout } from '../lib/session';
-  import { apiRequest, ApiError } from '../lib/http';
+  import { apiRequest, ApiError, clearAuthToken } from '../lib/http';
   let authorized = $state(false);
   let loading = $state(true);
   let busy = $state(false);
@@ -59,6 +60,18 @@
     } catch (error) {
       failed(error);
     }
+  }
+  function authChanged() {
+    clearAuthToken();
+    authGeneration++;
+    detailGeneration++;
+    authorized = false;
+    orders = [];
+    selectedId = null;
+    linkedOrderOpened = false;
+    feedback = '';
+    noteDraft = '';
+    void load();
   }
   function expired() {
     authGeneration++;
@@ -110,13 +123,14 @@
         else if (id) feedback = 'Nie znaleziono zamówienia na dostępnej liście.';
       }
     } catch (error) {
+      if (generation !== authGeneration) return;
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         expired();
         return;
       }
       storageError = error instanceof Error ? error.message : 'Nie udało się pobrać zamówień.';
     } finally {
-      loading = false;
+      if (generation === authGeneration) loading = false;
     }
   }
   let view = $state('Zamówienia');
@@ -176,9 +190,11 @@
         )
       : 'Nie ustalono';
   onMount(() => {
+    const stopAuthSync = watchAuthChanges(authChanged);
     void load();
     window.addEventListener('rapidmaker:session-expired', expired);
     return () => {
+      stopAuthSync();
       authGeneration++;
       detailGeneration++;
       window.removeEventListener('rapidmaker:session-expired', expired);

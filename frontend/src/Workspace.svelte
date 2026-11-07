@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { authEpoch, watchAuthChanges } from './lib/authSync';
+  import { clearAuthToken } from './lib/http';
   import './app.css';
   import Header from './components/Header.svelte';
   import Login from './pages/Login.svelte';
@@ -59,11 +61,17 @@
           tabs.find(([, href]) => path === href || path.startsWith(href + '/'))?.[0] ??
           'Nie znaleziono strony'),
   );
+  let sessionRequest = 0;
   async function refreshSession() {
+    const request = ++sessionRequest;
+    const epoch = authEpoch();
     sessionError = '';
     try {
-      session = await getSession();
+      const current = await getSession();
+      if (request !== sessionRequest || epoch !== authEpoch()) return;
+      session = current;
     } catch (error) {
+      if (request !== sessionRequest || epoch !== authEpoch()) return;
       session = null;
       sessionError = 'Nie udało się sprawdzić sesji. Sprawdź połączenie z serwerem.';
     }
@@ -111,6 +119,13 @@
       sessionError = 'Nie udało się wylogować. Sprawdź połączenie z serwerem i spróbuj ponownie.';
     }
   }
+  function authChanged() {
+    clearAuthToken();
+    session = null;
+    ready = false;
+    generation++;
+    void refreshSession();
+  }
   function sessionExpired() {
     // A denied guest request is not an expired account; remounting would retry it forever.
     if (!session) return;
@@ -146,6 +161,7 @@
     navigate(url.pathname + url.search + url.hash);
   }
   onMount(() => {
+    const stopAuthSync = watchAuthChanges(authChanged);
     void refreshSession();
     void routeChanged();
     window.addEventListener('popstate', routeChanged);
@@ -153,6 +169,8 @@
     window.addEventListener('rapidmaker:session-expired', sessionExpired);
     document.addEventListener('click', localLink);
     return () => {
+      stopAuthSync();
+      sessionRequest++;
       window.removeEventListener('popstate', routeChanged);
       window.removeEventListener('rapidmaker:navigate', routeChanged);
       window.removeEventListener('rapidmaker:session-expired', sessionExpired);
@@ -179,7 +197,7 @@
     </nav>
   {/if}
   <main id="tresc" class="app-main">
-    {#key path + query + generation}
+    {#key path + query + generation + (session?.id ?? '')}
       {#if !ready}<div class="page" role="status">Wczytywanie…</div>
       {:else if protectedArea && (!session || pendingAdmin)}<Login onSession={signedIn} />
       {:else if !allowed}<section class="page empty-state">

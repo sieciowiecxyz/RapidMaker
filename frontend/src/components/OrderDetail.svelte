@@ -81,7 +81,7 @@
       assign(await action());
       success = message;
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) order = null;
+      if (e instanceof ApiError && [401, 403, 404].includes(e.status)) order = null;
       error = (e as Error).message;
     } finally {
       busy = false;
