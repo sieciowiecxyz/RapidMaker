@@ -939,3 +939,12 @@ Audyt nie potwierdził błędu wiązania koszyka/quote/oferty/płatności w back
 Headless scopedplik **3PASS**, finalnie8,5s. Negatywna kontrola usuwa guard !cancelled&&requestId===revision wyłącznie w kodzie serwowanym przez izolowanyVitepretransform: ten sam test **FAIL**, oczekiwane73,00/otrzymane36,50. Produkcyjne źródło nigdy nie było edytowane; before/afterSHA zarówno Storefront.svelte jak testu zgodne. Reviewer źródła/Prettier/diff bezblokera. Po uwadze o braku pełnych zapisów ponowiono oba krótkie przebiegi i zachowano rawJSON/stdout/exitcodes/served-mutation.diff/hash w `cart-consistency-20261108/`; własny harness przeniesiono zfrontend/.codex do standardowego katalogu artefaktów, bez usuwania cudzych plików.
 
 Fixture kontroluje HTTP; nie jest to nowy dowód slicera/API/DB. Uwalnia wszystkie starehandlery, ale test czeka na co najmniej jedną ukończoną odpowiedźA — nie dowodzi ukończenia wszystkich starychrequestów. Negatywna kontrola faktycznie rozróżnia brakguarda dla tego scenariusza. Brak zmianproduktu/layoutu/providerów/normalnychserwerów, portizolowany18591sprzątnięty.
+
+
+## 2026-11-08 — częściowe zwroty od dwóch administratorów
+
+Audyt nie wykazał błędu produktu: rezerwacje uwzględniają pending/unknown/manual_review, wznowienie po niepewnej odpowiedzi nie uwalnia środków, idempotencja i zakres administratora są sprawdzane. Istniejące PG/HTTP testy konkurencji używały jednego operatora, więc jego blokada mogła wcześniej serializować żądania.
+
+Rozszerzono wyłącznie istniejący test storage/refunds.rs (+22/−3): dwóch aktywnych administratorów i niezależne Storage/pool. Po rezerwacji600 z1000 konkurują400+400: dokładnie jeden sukces, drugi Amount, dwa wpisy/suma1000. Równoczesne ponowienie pierwotnego request_id przez obu adminów zwraca oryginalny refundID, bez trzeciego wpisu. Rzeczywisty jednorazowyPGtest1PASS,fmt/diffPASS, własneDBusunięte. Brak operacjiStripe/HTTP/UI lub zmianprodukcyjnych.
+
+Istotna granica: negatywna kopia źródła bez orderFORUPDATE przeszła5/5. Nie wymuszono harmonogramu kolizji, więc ten smoke nie dowodzi wykrywania usunięcia blokady ani pełnej atomowości. Nie dodano frameworku blokad tylko dla tej próby; zachowano wszystkiewyniki w `refund-concurrency-20261108/` (positive i negative logs/result). Solxhigh zatwierdził w tym wąskim zakresie, bez deklaracji10/10.

@@ -540,10 +540,17 @@ mod tests {
         );
         let db = Storage::connect(&url).await.unwrap();
         let actor = uuid::Uuid::new_v4().to_string();
+        let other_actor = uuid::Uuid::new_v4().to_string();
         let order = uuid::Uuid::new_v4().to_string();
         sqlx::query("INSERT INTO users(id,email,role,created_at) VALUES($1,$2,'admin',1000)")
             .bind(&actor)
             .bind(format!("{actor}@example.invalid"))
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO users(id,email,role,created_at) VALUES($1,$2,'admin',1000)")
+            .bind(&other_actor)
+            .bind(format!("{other_actor}@example.invalid"))
             .execute(&db.pool)
             .await
             .unwrap();
@@ -579,15 +586,27 @@ mod tests {
         );
         let request2 = uuid::Uuid::new_v4().to_string();
         let request3 = uuid::Uuid::new_v4().to_string();
+        let other_db = Storage::connect(&url).await.unwrap();
         let (a, b) = tokio::join!(
             db.refund_prepare(&order, &request2, 400, &actor, 1002),
-            db.refund_prepare(&order, &request3, 400, &actor, 1002)
+            other_db.refund_prepare(&order, &request3, 400, &other_actor, 1002)
         );
+        let (a, b) = (a.unwrap(), b.unwrap());
         assert_eq!(
-            usize::from(a.unwrap().is_ok()) + usize::from(b.unwrap().is_ok()),
+            usize::from(a.is_ok()) + usize::from(b.is_ok()),
             1,
-            "concurrent requests cannot spend the same remainder"
+            "different admins cannot spend the same remainder"
         );
+        assert_eq!(a.err().or(b.err()), Some(RefundPrepareError::Amount));
+        let (a, b) = tokio::join!(
+            db.refund_prepare(&order, &request, 600, &actor, 1002),
+            other_db.refund_prepare(&order, &request, 600, &other_actor, 1002)
+        );
+        assert_eq!(a.unwrap().unwrap().id, first.id);
+        assert_eq!(b.unwrap().unwrap().id, first.id);
+        let refunds = db.refund_list(&order).await.unwrap();
+        assert_eq!(refunds.len(), 2);
+        assert_eq!(refunds.iter().map(|r| r.amount_grosze).sum::<i64>(), 1000);
         let leased = db
             .refund_lease(Some(&first.id), 1002)
             .await
