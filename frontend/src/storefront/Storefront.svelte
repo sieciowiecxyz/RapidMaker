@@ -351,7 +351,7 @@
         await retryCleanup();
         if(uploadedFiles.get(id)!==file || !models.some(model=>model.id===id))return;
         models=models.map(model=>model.id===id?{...model,status:'analyzing',error:undefined}:model);
-        const analysis=await api.analyzeFile(file);
+        const analysis=await api.analyzeFile(file,()=>uploadedFiles.get(id)===file && models.some(model=>model.id===id));
         if(uploadedFiles.get(id)!==file || !models.some(model=>model.id===id)){
           await cleanupUpload(analysis.id);
           return;
@@ -361,7 +361,6 @@
         const message=error instanceof Error?error.message:'Nie udało się wysłać modelu.';
         if(pendingCleanup.size)fileError=message;
         if(uploadedFiles.get(id)===file && models.some(model=>model.id===id))models=models.map(model=>model.id===id?{...model,status:'error',error:message}:model);
-        else fileError=message;
       }finally{uploads.delete(id);}
     });
     uploadTail=task;

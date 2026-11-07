@@ -443,13 +443,35 @@ export async function releaseModel(id: string): Promise<void> {
   );
 }
 
-export async function analyzeModel(file: File) {
-  const response = await apiFetch('/api/models', {
-    method: 'POST',
-    headers: { 'X-Model-Filename': encodeURIComponent(file.name) },
-    body: file,
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message ?? 'Nie udało się przeanalizować modelu.');
-  return data as NonNullable<import('./types').PrintModel['analysis']>;
+export async function analyzeModel(file: File, shouldRetry: () => boolean = () => true) {
+  const deadline = performance.now() + 30_000;
+  let lastError: ApiError | undefined;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    // Never abort an in-flight POST: it may already own a model requiring cleanup.
+    if (!shouldRetry()) throw new Error('Przesyłanie modelu anulowane.');
+    if (attempt && performance.now() >= deadline) throw lastError;
+    const response = await apiFetch('/api/models', {
+      method: 'POST',
+      headers: { 'X-Model-Filename': encodeURIComponent(file.name) },
+      body: file,
+    });
+    const data = await response.json();
+    if (response.ok) return data as NonNullable<import('./types').PrintModel['analysis']>;
+    lastError = new ApiError(
+      response.status,
+      data.message ?? 'Nie udało się przeanalizować modelu.',
+      data.code,
+    );
+    if (
+      response.status !== 429 ||
+      data.code !== 'model_upload_busy' ||
+      response.headers.get('Retry-After') !== '1' ||
+      attempt === 7
+    )
+      throw lastError;
+    const delay = Math.min(1000 * 2 ** attempt, 4000) + Math.random() * 250;
+    if (performance.now() + delay >= deadline) throw lastError;
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+  }
+  throw lastError;
 }

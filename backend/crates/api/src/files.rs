@@ -83,11 +83,7 @@ async fn admit_upload(State(state): State<FileState>, request: Request, next: Ne
         return error.into_response();
     }
     let Ok(_permit) = UPLOAD_BUSY.try_acquire() else {
-        return error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Trwa przesyłanie modelu. Spróbuj za chwilę.",
-        )
-        .into_response();
+        return upload_busy();
     };
     let (parts, body) = request.into_parts();
     // Bound ingestion only: cancelling a handler during a database commit can
@@ -119,6 +115,19 @@ async fn upload_body(request: Request) -> Result<Bytes, Response> {
         )
         .into_response()),
     }
+}
+
+// Only refusals known to precede model creation are safe for automatic resends.
+fn upload_busy() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(header::RETRY_AFTER, "1")],
+        Json(json!({
+            "code": "model_upload_busy",
+            "message": "Trwa przesyłanie modelu. Spróbuj za chwilę."
+        })),
+    )
+        .into_response()
 }
 
 fn error(status: StatusCode, message: &str) -> Error {
@@ -497,19 +506,15 @@ async fn upload(
         (format!("{:x}", Sha256::digest(token.as_bytes())), None)
     };
     // Declared before PendingDirectory so rollback removes files before unlocking.
-    let _root_lock = lock_model_root(&state.root)
-        .map_err(|_| {
-            error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Nie można zapisać modelu.",
-            )
-        })?
-        .ok_or_else(|| {
-            error(
-                StatusCode::TOO_MANY_REQUESTS,
-                "Trwa przesyłanie modelu. Spróbuj za chwilę.",
-            )
-        })?;
+    let Some(_root_lock) = lock_model_root(&state.root).map_err(|_| {
+        error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Nie można zapisać modelu.",
+        )
+    })?
+    else {
+        return Ok(upload_busy());
+    };
     let id = Uuid::new_v4().to_string();
     let directory = state.root.join(&id);
     DirBuilder::new()
