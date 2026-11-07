@@ -1,7 +1,117 @@
 import { expect, test } from './fixtures';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+
+// Linux-only evidence for this runner-owned API. RSS sums may double-count shared pages;
+// sampled peaks are observations, not a hard memory bound or simultaneous HWM sums.
+function resourceMeter() {
+  const pid = Number(process.env.RAPIDMAKER_TEST_API_PID);
+  if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Missing runner-owned API PID');
+  const begin = Date.now();
+  let phase = 'baseline_before_uploads';
+  let identity: string | undefined;
+  const evidence = {
+    pid,
+    interval_ms: 100,
+    started_at: new Date(begin).toISOString(),
+    identity_before: '',
+    identity_after: '',
+    sample_count: 0,
+    elapsed_ms: 0,
+    transient_missing_reads: 0,
+    read_errors: [] as string[],
+    note: 'KiB; tree RSS includes API; shared pages may be double-counted; sampled peak is not a hard bound; HWM is API-only',
+    phases: {} as Record<string, Record<string, number>>,
+  };
+  const proc = <T>(path: string, required: boolean, operation: (path: string) => T) => {
+    try {
+      return operation(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!required && ['ENOENT', 'ESRCH'].includes(code ?? '')) {
+        evidence.transient_missing_reads++;
+        return undefined;
+      }
+      evidence.read_errors.push(`${path}: ${code ?? 'unknown'}`);
+      throw new Error(`Resource measurement failed: ${path}: ${code}`);
+    }
+  };
+  const read = (path: string, required: boolean) =>
+    proc(path, required, (p) => readFileSync(p, 'utf8'));
+  const sample = () => {
+    const stat = read(`/proc/${pid}/stat`, true)!;
+    const start = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
+    if (!start || !/^\d+$/.test(start)) throw new Error('Invalid API stat starttime');
+    identity ??= start;
+    evidence.identity_before = identity;
+    evidence.identity_after = start;
+    if (start !== identity) throw new Error('Runner API process identity changed');
+    const seen = new Set<number>([pid]);
+    let apiRss = 0,
+      apiHwm = 0,
+      treeRss = 0,
+      rssRead = 0;
+    for (const child of seen) {
+      const status = read(`/proc/${child}/status`, child === pid);
+      if (status === undefined) continue;
+      const rss = status.match(/^VmRSS:\s+(\d+) kB$/m);
+      if (rss) {
+        treeRss += Number(rss[1]);
+        rssRead++;
+      } else if (child === pid) throw new Error('API VmRSS missing');
+      else evidence.transient_missing_reads++; // Exited/zombie children have no RSS field.
+      if (child === pid) {
+        apiRss = Number(rss![1]);
+        const hwm = status.match(/^VmHWM:\s+(\d+) kB$/m);
+        if (!hwm) throw new Error('API VmHWM missing');
+        apiHwm = Number(hwm[1]);
+      }
+      const tids = proc(`/proc/${child}/task`, child === pid, (p) => readdirSync(p)) ?? [];
+      for (const tid of tids) {
+        const children = read(`/proc/${child}/task/${tid}/children`, false);
+        for (const value of children?.trim().split(/\s+/) ?? []) if (value) seen.add(Number(value));
+      }
+    }
+    const elapsed = Date.now() - begin;
+    const values = {
+      api_rss_kib: apiRss,
+      api_hwm_kib: apiHwm,
+      tree_rss_kib: treeRss,
+      descendants: seen.size - 1,
+      rss_read_count: rssRead,
+    };
+    const previous = evidence.phases[phase];
+    const summary = previous ?? { samples: 0, first_ms: elapsed, last_ms: elapsed, max_gap_ms: 0 };
+    summary.max_gap_ms = Math.max(summary.max_gap_ms, elapsed - summary.last_ms);
+    summary.last_ms = elapsed;
+    summary.samples++;
+    for (const [key, value] of Object.entries(values))
+      summary[key + '_max'] = Math.max(summary[key + '_max'] ?? 0, value);
+    evidence.phases[phase] = summary;
+    evidence.sample_count++;
+    evidence.elapsed_ms = elapsed;
+    return { elapsed_ms: elapsed, ...values };
+  };
+  return {
+    evidence,
+    sample,
+    phase: (value: string) => {
+      phase = value;
+    },
+  };
+}
+
+function fingerprints(pid: number) {
+  return Object.fromEntries(
+    Object.entries({
+      binary: `/proc/${pid}/exe`,
+      spec: resolve('tests/integration/concurrency.spec.ts'),
+      runner: resolve('tests/run-integration.py'),
+    }).map(([name, path]) => [name, createHash('sha256').update(readFileSync(path)).digest('hex')]),
+  );
+}
 
 test('concurrent guests deduplicate their own slicer jobs without sharing models or prices', async ({
   playwright,
@@ -21,7 +131,25 @@ test('concurrent guests deduplicate their own slicer jobs without sharing models
   let acceptanceMs = 0;
   let completedMs = 0;
   let deduplicatedJobs = 0;
+  let resources: ReturnType<typeof resourceMeter> | undefined;
+  let resourceTimer: ReturnType<typeof setInterval> | undefined;
+  let resourceFailure: unknown;
+  let baseline, recovery;
+  let hashesBefore, hashesAfter;
+  let recoveryProbeStatus: number | undefined;
   try {
+    resources = resourceMeter();
+    hashesBefore = fingerprints(resources.evidence.pid);
+    baseline = resources.sample();
+    resourceTimer = setInterval(() => {
+      try {
+        resources!.sample();
+      } catch (error) {
+        resourceFailure = error;
+        clearInterval(resourceTimer);
+      }
+    }, 100);
+    resources.phase('uploads');
     const models: { id: string; preview_url: string }[] = [];
     // Upload sequentially: this test exercises the quote queue, not conversion admission limits.
     for (const client of clients) {
@@ -72,8 +200,9 @@ test('concurrent guests deduplicate their own slicer jobs without sharing models
           '-c',
           query,
         ],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000 },
       ).trim();
+    resources.phase('jobs');
     started = Date.now();
     const pending = clients.map((client, index) =>
       Promise.all(
@@ -173,6 +302,8 @@ test('concurrent guests deduplicate their own slicer jobs without sharing models
       }),
     );
     completedMs = Date.now() - started;
+    resources.sample();
+    resources.phase('recovery');
     stopProbe = true;
     await probe;
     expect(probeFailure).toBeUndefined();
@@ -218,7 +349,24 @@ test('concurrent guests deduplicate their own slicer jobs without sharing models
         `SELECT (SELECT count(*) ${ownJobs}), (SELECT count(*) FROM quotes WHERE request->>'model_id' IN (${modelIds})), max(attempts) ${ownJobs}`,
       ),
     ).toBe(`${clients.length}|${clients.length}|1`);
+    await expect
+      .poll(
+        () => {
+          recovery = resources!.sample();
+          return recovery.descendants;
+        },
+        { timeout: 10_000, intervals: [100, 250] },
+      )
+      .toBe(0);
+    recoveryProbeStatus = (await clients[0].get('/api/catalog/materials')).status();
+    expect(recoveryProbeStatus).toBe(200);
+    hashesAfter = fingerprints(resources.evidence.pid);
+    expect(hashesAfter).toEqual(hashesBefore);
+    expect(resources.evidence.identity_after).toBe(resources.evidence.identity_before);
+    expect(resourceFailure).toBeUndefined();
+    expect(resources.evidence.sample_count).toBeGreaterThan(1);
   } finally {
+    clearInterval(resourceTimer);
     stopProbe = true;
     await probe;
     const latencies = samples.map((sample) => sample.latency_ms).sort((a, b) => a - b);
@@ -226,6 +374,15 @@ test('concurrent guests deduplicate their own slicer jobs without sharing models
       await testInfo.attach('eight-client-queue-evidence', {
         contentType: 'application/json',
         body: JSON.stringify({
+          resources: {
+            ...resources?.evidence,
+            baseline,
+            recovery,
+            recovery_probe_status: recoveryProbeStatus,
+            failure: resourceFailure instanceof Error ? resourceFailure.message : resourceFailure,
+            sha256_before: hashesBefore,
+            sha256_after: hashesAfter,
+          },
           clients: clients.length,
           estimate_requests: clients.length * 2,
           deduplicated_jobs: deduplicatedJobs,

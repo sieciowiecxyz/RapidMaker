@@ -38,7 +38,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 Aktywne lease ma teraz osobny dowód: queue-recovery-20261107-first1PASS/193s (naturalne180s+5s,attempts2,jeden snapshot). Końcowy cleanup po naprawie zweryfikowany oddzielnie fault2PASS i queued1PASS; nie awaria hosta lub dowód startu Bambu przed kill.
 
 1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
-2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej.
+2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej. Osobny eight-clients-resources-20261107:1PASS, próbkowaneRSSdrzewa187,2MiB/max3potomków, recovery0; nie górny limit pamięci.
 3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.
 
 ## Uruchamianie

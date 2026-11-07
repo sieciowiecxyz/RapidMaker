@@ -669,3 +669,11 @@ cart-minimum-real-20261107:**2PASS/0FAIL/0SKIP/0flaky,7,24s**. Zmierzony koszt n
 finish_email zwraca false dla starej próby, ale worker traktował każdy Ok jako zapisany wynik i mógł zalogować „sent”. Bezpośredni match oddziela database/lease_lost od zatwierdzonego wyniku. Zmiana -2LoC; bez nowych warstw/deps, bez zmiany SMTP, retry, Message-ID lub pauzowania. Nie zapewnia exactly-onceSMTP.
 
 Cargo check api/fmt/diff PASS. Istniejący durable_queue_deduplicates_recovers_leases_and_checks_preferences:**1PASS** na osobnej bazie rapidmaker_test_mail_finish_*, usuniętej wfinally. Dowodzi fence starej próby i zachowania kolejki; logów runtime nie przechwytywano. Sol xhigh sprawdził gałęzie, brak blokera. Brak wywołań dostawcy lub zmiany zwykłego API18432; to zweryfikowany kod, nie rollout. Istniejące ostrzeżenie generowanego C++/OCCT pozostaje osobnym ograniczeniem.
+
+## 2026-11-07 — zasoby podczas ośmiu równoczesnych wycen
+
+Istniejący concurrency rozszerzony bez zmiany produktu: runner przekazuje własny PID, sampler/proc sprawdza starttime API i potomków wszystkich wątków; RSS/HWM/fazy/readerrors i hashe binarium/spec/runner w prywatnym załączniku. Nie odczytuje environ lub sekretów.
+
+eight-clients-resources-20261107:**1PASS/0FAIL/0SKIP/0flaky,4,84s**.8 gości/16zapytań→8 rzeczywistych zadań,maxrunning1; akceptacja117ms,zakończenie2641ms,4probyHTTP200max/p9514ms.28próbek/3949ms: APIbaseline67064KiB,jobspeak96568KiB,recovery97520KiB; próbkowana sumaRSSdrzewa191656KiB,max3potomków,recovery0/samestarttime/HTTP200.0missing/0readerrors;3hasheprzed/po zgodne.
+
+Żądane100ms miało rzeczywistą przerwę318ms (synchroniczny odczytDB); drzewo nieatomowe, RSS liczy współdzielone strony wielokrotnie, peak nie jest górnym limitem. WyższeRSSrecovery nie dowodzi wycieku. To mała próba z sekwencyjnymi uploadami, bez SLA/pomiaru przepustowości. Binariumd0d6c594 było sprzed ostatniej poprawki logowania email; raport jej nie waliduje. Python/TS/Prettier/diff PASS; Sol xhigh przejrzał źródła i raport, brak blokera.
