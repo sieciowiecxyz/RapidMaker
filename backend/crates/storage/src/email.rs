@@ -218,10 +218,15 @@ impl Storage {
         .transpose()
     }
 
-    /// Recheck preferences immediately before SMTP, including changes after enqueue.
-    pub async fn email_allowed(&self, mail: &QueuedEmail) -> Result<bool, StorageError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM email_outbox e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1 AND e.status='sending' AND e.attempts=$2 AND e.locked_until=$3 AND CASE WHEN e.user_id IS NULL THEN (e.optional_enabled OR e.kind IN ('order_confirmed','payment_received','refund_succeeded','legal_documents')) ELSE u.disabled_at IS NULL AND CASE e.kind WHEN 'shipment_dispatched' THEN u.email_order_updates WHEN 'status_changed' THEN u.email_order_updates WHEN 'chat_message' THEN u.email_chat_messages AND u.email=e.recipient AND (NOT COALESCE(e.chat_operator,false) OR u.role='admin') ELSE true END END AND (e.reply_route IS NULL OR EXISTS(SELECT 1 FROM chat_reply_routes r JOIN orders o ON o.id=r.order_id WHERE r.id=e.reply_route AND r.revoked_at IS NULL AND r.expires_at>extract(epoch from now())::bigint AND (r.operator OR o.user_id=r.user_id OR (o.user_id IS NULL AND r.user_id IS NULL)))))")
-            .bind(&mail.id).bind(mail.attempts).bind(mail.locked_until).fetch_one(&self.pool).await?)
+    /// Recheck a live claim and preferences immediately before SMTP.
+    /// None leaves an expired or reclaimed attempt available for recovery.
+    pub async fn email_allowed(
+        &self,
+        mail: &QueuedEmail,
+        now: i64,
+    ) -> Result<Option<bool>, StorageError> {
+        Ok(sqlx::query_scalar("SELECT CASE WHEN e.user_id IS NULL THEN (e.optional_enabled OR e.kind IN ('order_confirmed','payment_received','refund_succeeded','legal_documents')) ELSE u.disabled_at IS NULL AND CASE e.kind WHEN 'shipment_dispatched' THEN u.email_order_updates WHEN 'status_changed' THEN u.email_order_updates WHEN 'chat_message' THEN u.email_chat_messages AND u.email=e.recipient AND (NOT COALESCE(e.chat_operator,false) OR u.role='admin') ELSE true END END AND (e.reply_route IS NULL OR EXISTS(SELECT 1 FROM chat_reply_routes r JOIN orders o ON o.id=r.order_id WHERE r.id=e.reply_route AND r.revoked_at IS NULL AND r.expires_at>$4 AND (r.operator OR o.user_id=r.user_id OR (o.user_id IS NULL AND r.user_id IS NULL)))) FROM email_outbox e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1 AND e.status='sending' AND e.attempts=$2 AND e.locked_until=$3 AND e.locked_until>$4")
+            .bind(&mail.id).bind(mail.attempts).bind(mail.locked_until).bind(now).fetch_optional(&self.pool).await?)
     }
 
     /// The attempt/lease comparison prevents a late worker overwriting a reclaimed job.
@@ -350,24 +355,37 @@ mod tests {
         tx.commit().await.unwrap();
         let first = db.claim_email(1000).await.unwrap().unwrap();
         assert!(db.claim_email(1059).await.unwrap().is_none());
+        assert_eq!(db.email_allowed(&first, 1059).await.unwrap(), Some(true));
+        // Expiry alone makes preflight stale, even before another worker reclaims.
+        assert_eq!(db.email_allowed(&first, 1060).await.unwrap(), None);
+        assert_eq!(db.email_allowed(&first, 1061).await.unwrap(), None);
+        let state: (String, i32, Option<i64>, Option<i64>) = sqlx::query_as(
+            "SELECT status,attempts,locked_until,finished_at FROM email_outbox WHERE id=$1",
+        )
+        .bind(&first.id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(state, ("sending".into(), 1, Some(1060), None));
         // A separate Storage instance recovers after process loss.
         let restarted = Storage::connect(&std::env::var("TEST_DATABASE_URL").unwrap())
             .await
             .unwrap();
         let second = restarted.claim_email(1060).await.unwrap().unwrap();
         assert_eq!(second.attempts, 2);
+        assert_eq!(db.email_allowed(&first, 1061).await.unwrap(), None);
         assert!(
             !db.finish_email(&first, EmailOutcome::Sent, 1061)
                 .await
                 .unwrap()
         );
-        assert!(db.email_allowed(&second).await.unwrap());
+        assert_eq!(db.email_allowed(&second, 1061).await.unwrap(), Some(true));
         sqlx::query("UPDATE users SET email_order_updates=false WHERE id=$1")
             .bind(uid)
             .execute(&db.pool)
             .await
             .unwrap();
-        assert!(!db.email_allowed(&second).await.unwrap());
+        assert_eq!(db.email_allowed(&second, 1061).await.unwrap(), Some(false));
         db.finish_email(&second, EmailOutcome::Skipped, 1061)
             .await
             .unwrap();
@@ -393,7 +411,7 @@ mod tests {
         );
         tx.commit().await.unwrap();
         let receipt = db.claim_email(1100).await.unwrap().unwrap();
-        assert!(db.email_allowed(&receipt).await.unwrap());
+        assert_eq!(db.email_allowed(&receipt, 1100).await.unwrap(), Some(true));
         db.finish_email(&receipt, EmailOutcome::Retry("transient"), 1101)
             .await
             .unwrap();

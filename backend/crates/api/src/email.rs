@@ -56,8 +56,12 @@ async fn process(db: &Storage, mailer: &Mailer) -> bool {
     };
     async {
         let started = std::time::Instant::now();
-        let allowed = match db.email_allowed(&mail).await {
-            Ok(v) => v,
+        let allowed = match db.email_allowed(&mail, super::auth::now()).await {
+            Ok(Some(v)) => v,
+            Ok(None) => {
+                tracing::warn!(event = "email_preflight_failed", reason = "lease_lost");
+                return false;
+            }
             Err(_) => {
                 tracing::error!(event = "email_preferences_failed", reason = "database");
                 return false;

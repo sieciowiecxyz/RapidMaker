@@ -581,7 +581,10 @@ mod tests {
         );
         assert!(db.chat_reply_route(&route, now).await.unwrap().is_some());
         let queued = db.claim_email(now + 60).await.unwrap().unwrap();
-        assert!(db.email_allowed(&queued).await.unwrap());
+        assert_eq!(
+            db.email_allowed(&queued, now + 60).await.unwrap(),
+            Some(true)
+        );
         assert!(
             db.finish_email(
                 &queued,

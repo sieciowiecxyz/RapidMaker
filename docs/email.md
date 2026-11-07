@@ -66,6 +66,8 @@ Zapis zdarzenia biznesowego i outboxa w jednej transakcji PostgreSQL. Wyjątek f
 
 Jeden worker w obecnym procesie: krótka transakcja pobiera rekordy przez `FOR UPDATE SKIP LOCKED`, ustawia lease 60 s, kończy transakcję; SMTP poza blokadą. Po wysyłce zapisuje wynik. Wygasły lease pozwala wznowić po restarcie. Aktualizacja wyniku wymaga tej samej wersji próby/lease, aby spóźniony worker nie nadpisał nowej próby.
 
+Bezpośrednio przed SMTP sprawdzamy bieżącą próbę, niewygasły lease i aktualne preferencje. Brak ważnego claimu kończy ten worker bez SMTP i bez oznaczania wiadomości jako pominiętej; może ją odzyskać następny worker. Wyłączone preferencje mają osobny wynik `skipped`. Zawieszenie procesu po sprawdzeniu nadal może przekroczyć lease — ta kontrola nie daje exactly-once.
+
 Maks. 5 prób; opóźnienia 1/5/30/120 min z małym jitterem, tylko przy błędach przejściowych lub niepewnym wyniku. Trwałe odrzucenie kończy rekord jako `failed`; błąd konfiguracji/autoryzacji zatrzymuje wysyłkę do naprawy. Stały `Message-ID` na rekord. Awaria po przyjęciu SMTP, przed zapisem wyniku może dać duplikat — SMTP nie zapewnia exactly-once.
 
 Worker ma ograniczoną partię i tempo (na start 10 wiadomości/min, do dostrojenia), przyrost kolejki podlega limitom zdarzeń biznesowych. Zaległości i trwałe błędy są widoczne operatorowi. Zatrzymanie aplikacji kończy bieżącą próbę lub pozostawia lease do odzyskania. Dane zakończonych rekordów usuwaj po 30 dniach małymi partiami; nie kasuj po cichu oczekujących.

@@ -881,3 +881,12 @@ Rozszerzono istniejący pricing-options.spec/oracle o PETG HF i TPU95A. Fixturek
 `material-pricing-20261107.json`: **1 PASS/0 FAIL/0 SKIP/0 flaky,13,1s**, pięć rzeczywistych wyników:3PLA plusPETG1461s/4,41128969g/3018gr iTPU1477s/4,42068720g/3100gr. Źródło/binaryhashy w provenance;APIaf6a9553 przed/po zgodny. Hashpinu po teardown nieodczytany i niezaliczony; po przebiegu zmieniono tylko formatowaniePrettier. FinalTS/Prettier/diffPASS, Solxhigh bezblokera i bez potrzeby ponownego native dla formatowania. Pierwszy preflight wskazywał brak/usr/bin/chromium,bezDB; właściwy przebieg użył istniejącegoPlaywrightheadless.
 
 Netto42linie testu, bez nowych plików/infrastruktury/oracleduplikacji, zmianproduktu/UI/danychfirmy. Jedna kostka i pięć konfiguracji nie dowodzą pełnej macierzy, kwalifikacji sprzętowej filamentów ani rentowności firmy. Prywatnyroot/DBsprzątnięte, normalne usługi bez zmian.
+
+
+## 2026-11-07 — wygasła dzierżawa przed wysyłką emaila
+
+Audyt wykrył i odtworzył konkretny błąd: claimemail ma60slease, ale dotychczasowe email_allowed sprawdzało tylko zgodność attempt/locked_until, nie aktualność. Wygasły jeszcze nieprzejęty claim nadal pozwalał wejść wSMTP. Przedfix exactSQLprobe na jednorazowejDB: expired_first_still_authorized=true; po reclaim staryfalse/nowytrue. Dowód i snapshot staregoSQL w `email-retry-20261107/`, bez wysyłki/providerów.
+
+Minimalna poprawka: `email_allowed(mail,now)->Option<bool>` zwraca preferencje wyłącznie dla zgodnej żywej próby (`locked_until>now`). None kończy workerlogiem lease_lost bezSMTP/finish; Somefalse nadal legalnie pomija wiadomość. Dzięki rozróżnieniu wygasły claim nie zostaje błędnie oznaczony skipped i zachowuje recoverability. Replyroute używa tego samego przekazanego czasu. Bez migracji, zależności, nowych warstw/UI lub zmian normalnejDB.
+
+Dwa rzeczywiste celowanePGtesty PASS: lease1059Some(true), ścisłe1060/1061None bezreclaim, niezmienionysending/attempt/lock/finished, restartreclaimattempt2, staryNone/nowytrue, zmienioneprefsfalse/staryfinishfence; drugi chatroutecasecallsite. BuildAPI/fmt/diffPASS,DBusunięte. Solxhigh bezblokera, mapowanie NULL/FKprzejrzane. To nieSMTPtest ani exactly-once: zawieszenie po preflight nadal może przekroczyćlease, a niepewne przyjęcieSMTP może daćduplikat mimo stałegoMessage-ID. Normalne usługi/sekrety nietknięte.
