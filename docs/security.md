@@ -88,3 +88,10 @@ Walidacja 3MF: normalizator może wcześniej odrzucić potwierdzony kanoniczny r
 Geometria i slicer wymagają jawnego `--unshare-user --disable-userns` po `--unshare-all`. Stare prefiksy z zerowymi capabilities i NoNewPrivs nadal pozwalały na nowe user/mount namespace, dające możliwość tworzenia kolejnych tmpfs. Kontrolowany `unshare --user --map-root-user --mount true` działał przed poprawką; po niej odmawia w geometrii standard/large i slicerze. Nie zmieniono ustawień hosta.
 
 Bubblewrap musi obsługiwać oba argumenty, a system dopuszczać początkową przestrzeń użytkownika; brak wsparcia kończy się odmową, bez słabszego fallbacku. Natywne probes wymagają także `/usr/bin/unshare`. To blokada tworzenia kolejnych user namespaces, nie kwota inodów ani łączny limit RAM/CPU/PID. Istniejące tmpfs mają nadal około12mln inodów; Bubblewrap0.13.1 nie ma opcji `nr_inodes`. Rzeczywisty twardy limit wymaga osobnego rozwiązania mount/deployment — polling i RLIMIT_NOFILE go nie zastępują.
+
+
+## 2026-11-08 — koszt auth i prywatność logów
+
+Ograniczony przegląd źródeł nie wykazał nowej potwierdzonej luki. Limity długości i admission IP/email/global poprzedzają Argon2; dwa sloty są trzymane wewnątrz spawn_blocking również po anulowaniu HTTP. Ustawienie hasła ma osobną kontrolę admission. Weryfikacja parametrów hasha, dummy hash nieznanego konta i limity/zużycie challenge pozostają. Nie jest to test odporności całego API/DB na zalew połączeń.
+
+Logi HTTP używają szablonu trasy i serwerowego UUID, bez surowego URI/body/headers. Filtr targetów i panic hook ograniczają przypadkowe wypisanie sekretów; MailError nie zawiera tekstu dostawcy. Dwa istniejące testy wykonane ponownie: `logging::tests::logs_are_correlated_json_without_request_or_response_secrets` i `json_filter_and_panic_hook_protect_process_output` — po1PASS. Dowody: `frontend/tests/artifacts/security-auth-cost-20261108/`. Reviewer niezależnie sprawdził źródła. Bez patcha, nowych zależności, wywołań dostawców lub zmian normalnego serwera; nie obejmuje wszystkich gałęzi błędów ani pełnego pentestu.
