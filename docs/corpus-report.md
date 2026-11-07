@@ -930,3 +930,12 @@ Jeden nowy test `maximum_gross_allocations_conserve_money_and_reject_the_next_ce
 Sprawdzono10pozycji (limitHTTP) i1000 (limitbiblioteki), wariantyquantity1 i1000 z odwróceniem zróżnicowanych wag. Suma setup+line totals liczona niezależnieu64 pozostajeu32::MAX. Przybliżoneunit×quantity mogą przewyższyćfaktycznesumy — nie są naliczaniem dodatkowychgroszy. Ilość nie mnoży drugi raz zmierzonych kosztów. Wariant odwraca kolejność razem ze zmianąilości; nie jest pełnym niezależnym testem kolejności dla tej samejilości. Nie uruchamiaHTTP/DB.
 
 Wszystkie8pricingtestówPASS,fmt/diffPASS, Solxhigh niezależnie sprawdził rachunek i uznał test za zasadny.67linii wyłącznie testu, bez nowejwarstwy/zależności, brak znalezionego nowego błęduproduktu. Dowód `pricing-boundaries-20261108/provenance.json` i pricing-tests.log; nie powtarzano zielonych native/API/providerów.
+
+
+## 2026-11-08 — opóźniona odpowiedź nie cofa wyceny UI
+
+Audyt nie potwierdził błędu wiązania koszyka/quote/oferty/płatności w backendzie: pełna konfiguracja, własność, ważność i niezmienna kwota są ponownie sprawdzane. Uzupełniono istniejący quote-feedback.spec o kontrolowany overlap HTTP/UI: A(quantity1,36,50zł) zatrzymane, B(quantity2,73,00zł) zakończone; po ukończonej udanej odpowiedzi A i dwóch klatkach przeglądarki nadal obowiązuje B/2szt./aktywneCTA oraz73,00zł na ekranie zamówienia.
+
+Headless scopedplik **3PASS**, finalnie8,5s. Negatywna kontrola usuwa guard !cancelled&&requestId===revision wyłącznie w kodzie serwowanym przez izolowanyVitepretransform: ten sam test **FAIL**, oczekiwane73,00/otrzymane36,50. Produkcyjne źródło nigdy nie było edytowane; before/afterSHA zarówno Storefront.svelte jak testu zgodne. Reviewer źródła/Prettier/diff bezblokera. Po uwadze o braku pełnych zapisów ponowiono oba krótkie przebiegi i zachowano rawJSON/stdout/exitcodes/served-mutation.diff/hash w `cart-consistency-20261108/`; własny harness przeniesiono zfrontend/.codex do standardowego katalogu artefaktów, bez usuwania cudzych plików.
+
+Fixture kontroluje HTTP; nie jest to nowy dowód slicera/API/DB. Uwalnia wszystkie starehandlery, ale test czeka na co najmniej jedną ukończoną odpowiedźA — nie dowodzi ukończenia wszystkich starychrequestów. Negatywna kontrola faktycznie rozróżnia brakguarda dla tego scenariusza. Brak zmianproduktu/layoutu/providerów/normalnychserwerów, portizolowany18591sprzątnięty.
