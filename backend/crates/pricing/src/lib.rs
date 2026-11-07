@@ -342,6 +342,24 @@ mod tests {
     }
 
     #[test]
+    fn gross_overflow_is_rejected_even_when_net_and_vat_each_fit() {
+        let mut rates = rates();
+        rates.minimum_net_grosze = 4_000_000_000;
+        rates.vat_bps = 0;
+        assert_eq!(
+            calculate(1, 1, 1, 100, &rates).unwrap().gross_grosze,
+            4_000_000_000
+        );
+        // Independent invoice: 4,000,000,000 net + 920,000,000 VAT exceeds u32.
+        assert!(4_000_000_000_u64 + 920_000_000 > u64::from(u32::MAX));
+        rates.vat_bps = 2300;
+        assert!(matches!(
+            calculate(1, 1, 1, 100, &rates),
+            Err("Price exceeds supported range")
+        ));
+    }
+
+    #[test]
     fn order_combines_costs_before_setup_minimum_margin_and_vat() {
         let mut rates = rates();
         rates.minimum_net_grosze = 10_000;

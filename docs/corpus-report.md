@@ -509,3 +509,9 @@ Dodano niewielką akcję „Powiel wariant” obok usuwania, bez redesignu Piotr
 Nowy core w model-removal: **1PASS/13,6s** (duplicate-variant-core-retry): limit10, niezależna edycja, reload/powrót z checkoutu, advanced usuwa pierwszy wariant bez DELETE, drugi nadal wyceniany, ostatnie usunięcie daje204/404, katalog znika, DBquota0|0 i następny upload działa. Pierwszy przebieg FAIL przez nawigację przed końcem asynchronicznego usuwania; dodano oczekiwanie na liczbę wierszy, raport retained duplicate-variant-core.
 
 Zmodyfikowany same-upload-configs używa rzeczywistego przycisku zamiast wstrzyknięcia localStorage: **1PASS/21,7s** (duplicate-variant-same-upload), prawdziwy slicer/Stripe test, osobne konfiguracje/kwoty i oba panele. Build/Svelte0, integrationTS/diff PASS. Obejrzano desktop/390px; main dodatkowo390px. Sol xhigh: bez blokera, refs/deepcopy/rowID zweryfikowane. Bez testu wielu kart jednocześnie lub fizycznego telefonu; starsze wpisy o brakującym przycisku opisują stan historyczny.
+
+## 2026-11-07 — granica kwoty brutto
+
+Sol xhigh przejrzał pricing/cumulative allocation, cart snapshot i limity checkoutu; nie wykrył błędu arytmetyki. Dodano celowany test gross_overflow_is_rejected_even_when_net_and_vat_each_fit: kontrola VAT0 przy netto4_000_000_000gr działa; VAT23%=920_000_000gr również mieści się w u32, lecz brutto4_920_000_000gr przekracza typ i wycena zwraca błąd. Niezależna stała faktury odróżnia ten przypadek od dotychczasowego przepełnienia wcześniejszych pól. Bez zmian produkcyjnego algorytmu/cennika/UI.
+
+`cargo test --offline --locked --manifest-path backend/Cargo.toml -p rapidmaker-pricing`: **7PASS/0FAIL/0SKIP**, rustfmt/diff PASS. Reviewer sprawdził rzeczywisty nowy test: potwierdza końcową konwersję brutto, bez blokera. To test granicy typu, nie cena dopuszczona w checkout (ma niższy limit), kalibracja kosztów firmy ani dowód rentowności.
