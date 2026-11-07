@@ -890,3 +890,12 @@ Audyt wykrył i odtworzył konkretny błąd: claimemail ma60slease, ale dotychcz
 Minimalna poprawka: `email_allowed(mail,now)->Option<bool>` zwraca preferencje wyłącznie dla zgodnej żywej próby (`locked_until>now`). None kończy workerlogiem lease_lost bezSMTP/finish; Somefalse nadal legalnie pomija wiadomość. Dzięki rozróżnieniu wygasły claim nie zostaje błędnie oznaczony skipped i zachowuje recoverability. Replyroute używa tego samego przekazanego czasu. Bez migracji, zależności, nowych warstw/UI lub zmian normalnejDB.
 
 Dwa rzeczywiste celowanePGtesty PASS: lease1059Some(true), ścisłe1060/1061None bezreclaim, niezmienionysending/attempt/lock/finished, restartreclaimattempt2, staryNone/nowytrue, zmienioneprefsfalse/staryfinishfence; drugi chatroutecasecallsite. BuildAPI/fmt/diffPASS,DBusunięte. Solxhigh bezblokera, mapowanie NULL/FKprzejrzane. To nieSMTPtest ani exactly-once: zawieszenie po preflight nadal może przekroczyćlease, a niepewne przyjęcieSMTP może daćduplikat mimo stałegoMessage-ID. Normalne usługi/sekrety nietknięte.
+
+
+## 2026-11-07 — rzeczywiste emaile po poprawce preflight
+
+`emailpreflightlive20261107a.json` na0bdf37d/currentbuildf82ddf41: dokładny runner `--sandbox auth.spec.ts auth-resend.spec.ts journey.spec.ts`, bez client-totp, **3 PASS/0 FAIL/0 SKIP/0 flaky**,309,4s,retry0. JednorazoweDB/modelroot iAPIpin; tylko void@sieciowiec.xyz/iCloudtest,StripeTEST,headless. BuildlockedPASS;396sourcehashy/47dist/configuration/binary/normalAPIprzedipozgodne,Gitczysty. WłasnePID/root/DBusunięte, zwykłyserwer3428123bezrestartu.
+
+Resend: realny świeży email,61sodczekania, starykod401/nowy200, odtworzenie zużytejpendsesji401. Auth: UIpassword/email,wirtualnynativepasskey/email,adminpassword/TOTP i ograniczeniadostępuAPI. Journey: klientUIręcznaoferta,adminUIpublikacja, rzeczywistymailoferty,StripeTESTUIpayment+mailwarunków. ZwrotprzezADMINAPI z idempotentnymrequest_id,potwierdzenie+email; adminchatprzezAPI, kopiamailowa, dwieodpowiedziSMTP z jednymMessage-ID i dwoma rzeczywistymiIMAPUID: imported/duplicate,samedigest/mailbox/order,jednawiadomośćklienta poUIreload.
+
+ReviewerSolxhigh niezależniepotwierdził3scenariusze/provenance i powyższe granice. To providerowaregresja pofixpreflight; granicaleasesprawdza osobnyPGtest. Bez exactly-onceSMTP, niezależnegoStripeGET,fizycznegopasskey lub operacjinadaniaFurgonetki (odbiórosobisty). Nie deklarujemycałegoE2Esuite ani produkcyjnejcertyfikacji. Prywatneevidence `email-preflight-live-20261107/`; brak zmianproduktu.

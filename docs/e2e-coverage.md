@@ -7,6 +7,8 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 ## Najnowsze dowody — 2026-11-07
 
+Po email preflight: `emailpreflightlive20261107a.json` — **3 live PASS**,309,4s,0FAIL/SKIP/flaky na0bdf37d. Realne iCloud MFA/resend, wirtualny passkey, Stripe test/maile, zwrot admin API, SMTP→IMAP→chat dedup/reload.396źródeł/47dist/config/binary/runtime bez zmian, cleanup potwierdzony. To osobny zakres, nie cały suite/exactly-once lub fizyczny passkey.
+
 Po korekcie macierzy: `corpus-matrix-api-20261107/` **41PASSAPI**, `corpus-matrix-ui-20261107/final-report.json` osobno **41PASSUI**, bezFAIL/SKIP/flaky.24native/12manual/36GLB,144obejrzane ujęcia;486hashy bez zmian. Model25terazprinter_fit, ścisłytest422/reason/message zaktualizowany po zachowanymUI40/1. Kwotyfixture/wymiary mogą się zmienić po poprawnym obrocie; wszystkie rachunkiAPI nadal przechodzą.
 
 Nowsza poprawka macierzy3MF: `preview-visibility-20261107/` — baseline3FAIL/1PASS, po poprawce22unitPASS i scopedAPI/UI2PASS, model29upright zgodnie ze źródłem/specyfikacją. Pełne powtórzenie na poprawce opisano poniżej.
