@@ -9,7 +9,7 @@ import signal
 import sys
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--group', choices=('all', 'storage', 'core', 'contracts', 'sandbox', 'email', 'registration'), default='all')
+parser.add_argument('--group', choices=('all', 'storage', 'core', 'contracts', 'sandbox', 'email', 'registration', 'privacy'), default='all')
 parser.add_argument('--no-build', action='store_true')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
@@ -30,7 +30,8 @@ if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABL
 
 suites = {
     'storage': [],
-    'core': ['--local-accounts', 'account-switch.spec.ts', 'models.spec.ts', 'upload-failures.spec.ts', 'upload-timeout.spec.ts', 'model-removal.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'two-client-upload.spec.ts', 'upload-busy-retry.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'manual-publication.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
+    'core': ['--local-accounts', 'models.spec.ts', 'upload-failures.spec.ts', 'upload-timeout.spec.ts', 'model-removal.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'two-client-upload.spec.ts', 'upload-busy-retry.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'manual-publication.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
+    'privacy': ['--local-accounts', 'account-switch.spec.ts'],
     'sandbox': ['--sandbox', '--client-totp', 'same-upload-configs.spec.ts', 'profile-drift.spec.ts', 'payment-resume.spec.ts', 'guest-claim.spec.ts', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'auth-resend.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],
@@ -38,7 +39,7 @@ suites = {
     'contracts': ['checkout-line-prices.spec.ts', 'glb-parser.spec.ts', 'model-limits.spec.ts', 'admin-csv.spec.ts', 'auth-factors.spec.ts', 'legal.spec.ts', 'live-panels.spec.ts', 'operations.spec.ts', 'operator.spec.ts'],
 }
 results = []
-selected = list(suites) if args.group == 'all' else ['registration-password', 'registration-passkey'] if args.group == 'registration' else [args.group]
+selected = list(suites) if args.group == 'all' else ['registration-password', 'registration-passkey'] if args.group == 'registration' else ['core', 'privacy'] if args.group == 'core' else [args.group]
 for name in selected:
     report = artifacts / f'{name}.json'
     report.unlink(missing_ok=True)

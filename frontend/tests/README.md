@@ -4,8 +4,9 @@ Pełny zestaw: `npm --prefix frontend run test:all`. Pierwszy krok buduje Rust i
 
 | Grupa | Komenda po buildzie | Co naprawdę sprawdza |
 | --- | --- | --- |
-| storage | `python frontend/tests/run-all.py --group storage` | Ignorowane testy DB: storage (obecnie 18), katalog API i granice dostępu API (łącznie 20); świeża osobna baza dla każdego testu, bez przeglądarki i dostawców |
-| core | `python frontend/tests/run-all.py --group core --no-build` | Prawdziwe API/DB/parser/slicer, konfigurator, modele, współbieżne wyceny, motywy/zasoby i bezpieczeństwo; bez dostawców |
+| storage | `python frontend/tests/run-all.py --group storage` | Ignorowane testy DB: storage, katalog/MFA/retencja i granice dostępu API; świeża osobna baza dla każdego testu, bez przeglądarki i dostawców |
+| core | `python frontend/tests/run-all.py --group core --no-build` | Prawdziwe API/DB/parser/slicer, konfigurator, modele, współbieżne wyceny, motywy/zasoby i bezpieczeństwo; bez dostawców; uruchamia także privacy w osobnej bazie |
+| privacy | `python frontend/tests/run-all.py --group privacy --no-build` | Zmiana konta i synchronizacja kart; osobna baza/API, bez resetowania limitów logowania |
 | sandbox | `python frontend/tests/run-all.py --group sandbox --no-build` | Stripe test, Furgonetka sandbox, kurier/paczkomaty, panele/refundy/logistyka, porzucona płatność |
 | email | `python frontend/tests/run-all.py --group email --no-build` | Hasło/passkey + email, admin TOTP, oferta → płatność → warunki/email → odpowiedź chat |
 | registration | `python frontend/tests/run-all.py --group registration --no-build` | Osobne bazy dla pierwszego hasła i pierwszego passkey, prawdziwe potwierdzenie emaila |

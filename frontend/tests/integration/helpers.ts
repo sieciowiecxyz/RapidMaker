@@ -119,7 +119,11 @@ export async function login(page: Page, account: Account) {
   await page.goto('/logowanie', { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Adres email', { exact: true }).fill(account.email);
   await page.getByLabel('Hasło', { exact: true }).fill(account.password);
+  const primary = page.waitForResponse(
+    (r) => r.url().endsWith('/api/auth/password/login') && r.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: 'Zaloguj hasłem', exact: true }).click();
+  expect((await primary).status(), 'Primary login must succeed before MFA').toBe(200);
   const code = page.getByLabel(account.totp_uri ? 'Kod z aplikacji' : 'Kod z emaila', {
     exact: true,
   });
