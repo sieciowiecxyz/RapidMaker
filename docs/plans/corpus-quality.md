@@ -25,6 +25,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | Nowsze zmiany | `5222964`: prywatny cache/access 1 PASS; `63e5387`: Worker 2 PASS (marker, bez osobnego JSON); `3aed38f`: podgląd 3 PASS (mock HTTP, rzeczywiste Worker/parser/GPU). |
 | Ceny i zasoby | Minimum koszyka: 2 PASS, rzeczywisty slicer na stawkach testowych. Osiem klientów: 1 PASS, próbkowane RSS drzewa 187,2 MiB; nie limit RAM ani przepustowość. |
 | Prostota | Usunięcie Badge: 71 linii w 3 plikach, w tym 31 linii komponentu, i 3 bezpośrednie devDependencies; nie sumować jako całego usuniętego kodu. Szczegóły/audyt w raporcie. |
+| Launcher — celowane | Przypięcie binarki: baseline upload201→503 po podmianie, fix201→201 z tym samym PID/inode/SHA; 8 unit, 4 native integration i osobny queue-restart1 PASS. Bez restartu zwykłego API. |
 | Runtime | Ostatni opisany lokalny smoke: `7fb2a24`, upload/GLB/cena/delete PASS, rachunek 37,05 zł. To zapis historyczny, nie potwierdzenie obecnego procesu lub wdrożenia. |
 
 ## Dalsza praca i granice

@@ -30,7 +30,7 @@ if args.group != 'storage' and not os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABL
 
 suites = {
     'storage': [],
-    'core': ['--local-accounts', 'models.spec.ts', 'upload-failures.spec.ts', 'upload-timeout.spec.ts', 'model-removal.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'two-client-upload.spec.ts', 'upload-busy-retry.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'manual-publication.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
+    'core': ['binary-replacement.spec.ts', '--local-accounts', 'models.spec.ts', 'upload-failures.spec.ts', 'upload-timeout.spec.ts', 'model-removal.spec.ts', 'pricing.spec.ts', 'concurrency.spec.ts', 'two-client-upload.spec.ts', 'upload-busy-retry.spec.ts', 'public-visual.spec.ts', 'populated-visual.spec.ts', 'manual-publication.spec.ts', 'piotr-api.spec.ts', 'boundaries.spec.ts', 'configurator.spec.ts', 'showcase.spec.ts', 'security.spec.ts', 'legal.spec.ts'],
     'privacy': ['--local-accounts', 'account-switch.spec.ts'],
     'sandbox': ['--sandbox', '--client-totp', 'same-upload-configs.spec.ts', 'profile-drift.spec.ts', 'payment-resume.spec.ts', 'guest-claim.spec.ts', 'checkout.spec.ts', 'delivery.spec.ts', 'shipping-checkout.spec.ts', 'logistics.spec.ts', 'panels.spec.ts', 'abandonment.spec.ts'],
     'email': ['--sandbox', 'auth.spec.ts', 'auth-resend.spec.ts', 'journey.spec.ts'],

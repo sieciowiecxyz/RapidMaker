@@ -18,9 +18,15 @@ import urllib.request
 
 os.umask(0o077)
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / "backend"))
+from runtime import pin_executable
+
 artifacts = root / "frontend/tests/artifacts"
 artifacts.mkdir(parents=True, exist_ok=True)
 artifacts.chmod(0o700)
+report_name = os.environ.get("E2E_REPORT_NAME", "integration")
+if not report_name.replace("-", "").isalnum():
+    raise SystemExit("Invalid report name")
 queue_restart = "--queue-restart" in sys.argv
 queue_recovery = "--queue-recovery" in sys.argv
 queue_mode = queue_restart or queue_recovery
@@ -76,6 +82,7 @@ if not binary.exists():
     raise SystemExit("Build the backend and frontend first; see docs/testing.md.")
 folder = Path(tempfile.mkdtemp(prefix="rapidmaker-browser-"))
 api = None
+api_launches = []
 browser = None
 recovery = None
 creation_attempted = False
@@ -86,6 +93,9 @@ def interrupted(_signal, _frame):
     raise SystemExit(143)
 signal.signal(signal.SIGTERM, interrupted)
 try:
+    build_binary = folder / "rapidmaker-api-build"
+    shutil.copyfile(binary, build_binary)
+    build_binary.chmod(0o500)
     # The private random name also belongs to this run when CREATE's outcome is unknown.
     creation_attempted = True
     sql("CREATE DATABASE " + name)
@@ -107,9 +117,10 @@ try:
             with socket.socket() as probe:
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind(("127.0.0.1", 18436))
+        pinned_binary = pin_executable(build_binary, folder / "runtime")
         with log.open("ab") as output:
             os.chmod(log, 0o600)
-            api = subprocess.Popen([str(binary)], cwd=root, env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
+            api = subprocess.Popen([str(pinned_binary)], cwd=root, env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if api.poll() is not None:
@@ -117,6 +128,10 @@ try:
             try:
                 req = urllib.request.Request("http://127.0.0.1:18436/api/openapi.json", headers={"Host": "localhost:18437"})
                 with urllib.request.urlopen(req, timeout=1):
+                    executable = Path(f"/proc/{api.pid}/exe")
+                    if executable.resolve() != pinned_binary:
+                        raise RuntimeError("Isolated API did not start its pinned executable")
+                    api_launches.append(dict(pid=api.pid, executable=str(pinned_binary), inode=executable.stat().st_ino))
                     return api.pid
             except (urllib.error.URLError, TimeoutError):
                 time.sleep(0.1)
@@ -130,7 +145,7 @@ try:
         from queue_restart import run_queue_restart
         if queue_recovery:
             from queue_recovery import QueueRecovery
-            recovery = QueueRecovery(root, folder, binary, env)
+            recovery = QueueRecovery(root, folder, pin_executable(build_binary, folder / "runtime"), env)
         def restart_api():
             old_pid = api.pid
             os.killpg(old_pid, signal.SIGTERM)
@@ -144,7 +159,7 @@ try:
             return dict(old_pid=old_pid, old_exit_code=exit_code, new_pid=new_pid)
         report = queue_report
         started = time.monotonic()
-        evidence = {}
+        evidence = {"api_launches": api_launches}
         error = None
         try:
             run_queue_restart(root, folder, container, name, restart_api, evidence, recovery.run if recovery else None)
@@ -161,7 +176,7 @@ try:
     # Chromium otherwise drops Unicode file paths from FileList in this minimal environment.
     browser_env.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
     if large_models: browser_env["RAPIDMAKER_LARGE_MODELS"] = "1"
-    browser_env.update(RAPIDMAKER_TEST_API_PID=str(api.pid), RAPIDMAKER_TEST_DATABASE=name, RAPIDMAKER_TEST_MODEL_ROOT=str(folder / "models"), TEST_PG_CONTAINER=container)
+    browser_env.update(RAPIDMAKER_TEST_API_PID=str(api.pid), RAPIDMAKER_TEST_API_BUILD_BINARY=str(build_binary), RAPIDMAKER_TEST_DATABASE=name, RAPIDMAKER_TEST_MODEL_ROOT=str(folder / "models"), TEST_PG_CONTAINER=container)
     if sandbox or local_accounts:
         if client_totp: env["TEST_CLIENT_TOTP"] = "1"
         if registration: env["TEST_REGISTER"] = "1"
@@ -171,8 +186,6 @@ try:
             subprocess.run(["cargo", "run", "--locked", "--quiet", "--manifest-path", "backend/Cargo.toml", "-p", "rapidmaker-api", "--example", "browser_fixture"], cwd=root, env=env, stdout=output, check=True)
         browser_env.update(RAPIDMAKER_TEST_ACCOUNTS=str(fixture_file))
         if sandbox: browser_env["RAPIDMAKER_SANDBOX"] = "1"
-    report_name = os.environ.get("E2E_REPORT_NAME", "integration")
-    if not report_name.replace("-", "").isalnum(): raise RuntimeError("Invalid report name")
     browser_env["E2E_REPORT_NAME"] = report_name
     browser_env["PLAYWRIGHT_NO_COPY_PROMPT"] = "1"
     method = os.environ.get("E2E_REGISTRATION_METHOD", "password")
@@ -215,7 +228,7 @@ finally:
 
     def copy_failure_logs():
         if (folder / "api.jsonl").exists():
-            private_log = artifacts / ((queue_report_name if queue_mode else "integration") + "-api.jsonl")
+            private_log = artifacts / ((queue_report_name if queue_mode else report_name) + "-api.jsonl")
             shutil.copyfile(folder / "api.jsonl", private_log)
             private_log.chmod(0o600)
             print("Private API failure report:", private_log)

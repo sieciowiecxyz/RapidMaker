@@ -4,6 +4,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
+from runtime import pin_executable
 
 root = Path(__file__).resolve().parent.parent
 allowed = {"STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY", "FURGONETKA_SANDBOX_TOKEN", "FURGONETKA_SENDER_JSON", "DATABASE_URL", "PRICING_RATES_JSON", "MODEL_STORAGE_DIR"}
@@ -31,4 +32,5 @@ binary = root / "backend/target/debug/rapidmaker-api"
 if sys.argv[1:] in (["--pricing-poc"], ["--pricing-poc-extend"]):
     binary = root / "backend/target/debug/examples/configure_pricing_poc"
     os.execv(binary, [str(binary), *(["--extend"] if sys.argv[1] == "--pricing-poc-extend" else [])])
+binary = pin_executable(binary)
 os.execv(binary, [str(binary), *sys.argv[1:]])

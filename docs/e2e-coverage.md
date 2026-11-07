@@ -39,6 +39,7 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 | Zakres / raport | Dowód | Granica |
 | --- | --- | --- |
+| Podmiana binarki, `launcher-pin-20261107/` | 8 unit PASS; fixed-c 4 native integration PASS; queue-b 1 PASS. Baseline201→503, fix201→201, PID/inode/SHA stabilne, GLB owner200/foreign404 | Prywatny build runnera; nie test kasowania pinu ani wdrożenie zwykłego API. |
 | Ośmiu klientów, `eight-clients-resources-20261107` | 1 PASS: 16 estimate → 8 rzeczywistych zadań, max running 1; próbkowana suma RSS drzewa 187,2 MiB, max 3 potomków, recovery 0 potomków | Uploady sekwencyjne; równoległe wyceny/odczyty, mała kohorta API, nie osiem przeglądarek/load test/SLA/górny limit pamięci. Starszy `eight-clients-final` bez RSS pozostaje w raporcie. |
 | Tmpfs workerów, `bounded-dev-shm-probe-20261107` | Dwie natywne regresje Rust: geometria standard/large i slicer. `/dev` RO, `/dev/shm` 128 MiB RW; dodatkowo 3 testy API/Bambu PASS | Probe zastępuje tylko końcowy program; brak testu exploita/wyczerpania lub łącznego limitu RAM/CPU. [Polityka](security.md#pamięć-tymczasowa-workerów). |
 | Upload dwóch klientów, `two-client-upload-20261107b` | 1 PASS: 429 przed drugim body, responsywny katalog, oba 201 po retry, własne GLB/ceny, obce 404 | Jeden parser/upload naraz — celowy limit RAM, nie równoległe konwersje. |

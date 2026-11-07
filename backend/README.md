@@ -5,7 +5,7 @@ Jeden Cargo workspace, jedna aplikacja. Zależności: `app → api → moduły`;
 ```text
 backend/
 ├── Cargo.toml / Cargo.lock
-├── run.py
+├── run.py / runtime.py  # launcher i prywatna binarka na czas procesu
 ├── data/bambu/           # katalog i zaufane presety
 └── crates/
     ├── app/             # start serwera i procesu geometrii
@@ -33,6 +33,8 @@ python backend/run.py
 ```
 
 API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `AUTH_*`, `MODEL_STORAGE_DIR` oraz konfigurację SMTP poniżej.
+
+Launcher przypina binarkę na czas procesu w prywatnym katalogu `$XDG_STATE_HOME/rapidmaker/runtime` (domyślnie `~/.local/state/rapidmaker/runtime`). Kolejny build nie usuwa ścieżki potrzebnej workerom geometrii. Nieaktywne, rozpoznane kopie są sprzątane przy następnym starcie; aktywne i nieznane pliki pozostają. Uruchomienie binarki bez launchera nie ma tej ochrony. Test helpera: `python -m unittest discover -s backend/tests -v`.
 
 ## Email
 
