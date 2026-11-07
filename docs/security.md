@@ -61,3 +61,14 @@ Natywny probe korzysta z konstruktorów produkcyjnych poleceń; zastępuje tylko
 AS i CPU pozostają limitami pojedynczego procesu. Ta zmiana nie zapewnia łącznego limitu RAM/CPU potomków ani nowego limitu zawartości `/out` slicera. Sprawdzono profile geometrii standard/large i reprezentatywne cięcie Bambu. Zmianę uruchomiono w testach izolowanych; zwykły lokalny serwer zachował poprzednią binarkę.
 
 Regresje wymagają Linux/bubblewrap/Bambu i są domyślnie ignored. Jawne uruchomienie: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-api -p rapidmaker-slicer native_device_mounts_are_readonly_with_bounded_writable_shm -- --ignored --nocapture`.
+
+
+## Anulowanie slicera
+
+Natywna regresja `cancelled_plate_kills_descendants_and_removes_workspace` bierze produkcyjny prefiks sandboxa, zastępując wyłącznie Bambu zaufanym Pythonem z jednym potomkiem. Po anulowaniu future oba procesy zwalniają blokady w ciągu 2 s, a `Workspace` usuwa katalog. Jawnie uruchomiony test PASS; nie jest to dowód odporności na awarię hosta ani pomiar rzeczywistego Bambu.
+
+```sh
+cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-slicer cancelled_plate_kills_descendants_and_removes_workspace -- --ignored --nocapture
+```
+
+Nadal brak łącznych limitów RAM/CPU/liczby potomków i rozmiaru/liczby plików `/out`. Per-process rlimits, FSIZE pojedynczego pliku i timeout nie zastępują tych limitów. Następny krok wymaga pomiaru rzeczywistych wyjść Bambu i doboru ograniczonego katalogu roboczego; nie podnosimy ocen bezpieczeństwa na podstawie samego sprzątania.

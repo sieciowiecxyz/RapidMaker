@@ -761,3 +761,12 @@ Nowy `pricing-options.spec.ts` uzupełnia standard1/10/1000 i istniejący UI/che
 `pricing-options-20261107/pricingoptions20261107a.json`: **1 PASS/0 FAIL/0 SKIP/0 flaky,7,1s**. Sol xhigh uznał regresję za wartościową; wskazał stałą ścieżkę dowodu jako ryzyko nadpisania. Po zmianie na `test.info().outputPath`/attachment osobny `pricingoptions20261107b.json`: **1 PASS/0 FAIL/0 SKIP/0 flaky,7,1s**; dodano do core. Oba dowody zachowane osobno, final-source.json zapisuje hashe końcowego testu/runnera; końcowe pomiary w measurements-b.json. Prettier PASS z katalogu frontend; wcześniejsze wywołanie z root błędnie nie znalazło wzorca pliku, więc nie było dowodem formatowania.
 
 Brak zmian produktu, schematu, stawek lub wyglądu. To jeden model/PLA i jawne stawki testowe, nie pełna macierz, rentowność firmy ani niezależna analiza G-code każdego ustawienia. Profile, snapshoty i odmienne pomiary potwierdzają trasę konfiguracji. Headless; normalny API bez restartu.
+
+
+## 2026-11-07 — anulowanie procesu i sprzątanie slicera
+
+Przegląd nie znalazł konkretnego błędu sprzątania w API/queue/slicerze. Dodano wyłącznie 83 linie ignorowanej domyślnie natywnej regresji slicera: rzeczywisty produkcyjny prefiks taskset/prlimit/bwrap, zaufany Python i jeden fork, potwierdzone aktywne blokady obu procesów; timeout anuluje future jak w run_plate/queue, `Workspace` znika, obie blokady zwolnione ≤2 s. Próba ograniczona do 8 s, bez wyczerpywania zasobów.
+
+Worker i agent główny osobno uruchomili filtr: **1 PASS**, około0,07s testu. Zachowany końcowy log/komenda/hash w `slicer-cancellation-20261107/`. Izolowany CARGO_TARGET_DIR w `/tmp`; wspólny target i normalne serwery bez zmian. Rustfmt/diff PASS, Sol xhigh bez blokera. Brak zmian produkcyjnej logiki, UI, zależności i stawek.
+
+Dowód obejmuje anulowanie sandboxa i jedno pokolenie potomka, nie działanie Bambu, lease/DB, crash hosta ani pełne limity zasobów. Nadal otwarte: łączne RAM/CPU/pids i bajty/inody `/out`; osobny pomiar rzeczywistych wyjść jest potrzebny przed bezpiecznym dobraniem limitów.

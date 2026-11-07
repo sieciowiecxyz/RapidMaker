@@ -814,6 +814,89 @@ print(json.dumps(result))"#])
         );
     }
 
+    // Exercise the same dropped status future used by run_plate and the queue's
+    // outer timeout. Locks remain observable after Workspace unlinks the files.
+    #[tokio::test]
+    #[ignore = "requires Linux bubblewrap, installed Bambu runtime and /usr/bin/python3"]
+    async fn cancelled_plate_kills_descendants_and_removes_workspace() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-cancel-probe-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        fs::set_permissions(&workspace.0, fs::Permissions::from_mode(0o700)).unwrap();
+        for file in ["model.stl", "machine.json", "process.json", "filament.json"] {
+            fs::write(workspace.0.join(file), b"trusted probe placeholder").unwrap();
+        }
+        let path = workspace.0.clone();
+        let out = path.join("out");
+        fs::create_dir(&out).unwrap();
+        let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status").unwrap()).unwrap();
+        let production = plate_command(&workspace, &out, &cpus, 1, 60);
+        let args = production.as_std().get_args().collect::<Vec<_>>();
+        let invocation = args
+            .iter()
+            .rposition(|arg| *arg == "/opt/bambustudio-bin/AppRun")
+            .unwrap();
+        let mut probe = tokio::process::Command::new(production.as_std().get_program());
+        probe
+            .args(&args[..invocation])
+            .args([
+                "/usr/bin/python3",
+                "-c",
+                r#"import fcntl, os, time
+name = 'parent' if os.fork() else 'child'
+with open('/out/' + name, 'xb') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    open('/out/' + name + '.ready', 'xb').close()
+    time.sleep(8)
+"#,
+            ])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let mut running = Box::pin(async move {
+            let _workspace = workspace;
+            probe.status().await
+        });
+        let ready = async {
+            while !out.join("parent.ready").exists() || !out.join("child.ready").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        };
+        tokio::select! {
+            result = &mut running => panic!("sandbox exited before readiness: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(3), ready) => result.unwrap(),
+        }
+        let locks = ["parent", "child"].map(|name| fs::File::open(out.join(name)).unwrap());
+        for lock in &locks {
+            assert!(matches!(lock.try_lock(), Err(fs::TryLockError::WouldBlock)));
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), running)
+                .await
+                .is_err()
+        );
+        assert!(!path.exists(), "cancelled workspace remained on disk");
+        tokio::time::timeout(Duration::from_secs(2), async {
+            for lock in locks {
+                loop {
+                    match lock.try_lock() {
+                        Ok(()) => break,
+                        Err(fs::TryLockError::WouldBlock) => {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                        Err(error) => panic!("cannot inspect process lock: {error}"),
+                    }
+                }
+            }
+        })
+        .await
+        .expect("sandbox parent or descendant survived cancellation");
+    }
+
     #[test]
     fn trusted_slice_limits_keep_standard_and_large_budgets_bounded() {
         assert!(validate_slice_limits(64 * 1024 * 1024, 60).is_ok());
