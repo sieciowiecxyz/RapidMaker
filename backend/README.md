@@ -16,7 +16,7 @@ backend/
     ├── geometry/        # analiza STL/STEP/3MF, fixtures
     ├── packing/         # rozmieszczenie w paczkach
     ├── notifications/   # iCloud SMTP i tekstowe wiadomości
-    ├── auth/            # crypto kodów, sesji i CSRF
+    ├── auth/            # hasła, passkeys, MFA, sesje i CSRF
     ├── payments/        # Stripe test i podpisy webhooków
     ├── shipping/        # adres PL i Furgonetka sandbox
     ├── observability/   # strukturalne logi JSON
@@ -40,9 +40,9 @@ Launcher przypina binarkę na czas procesu w prywatnym katalogu `$XDG_STATE_HOME
 
 `rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden Mailer. Kody wysyła bezpośrednio; zdarzenia zamówień/rozmów zapisuje atomowo z outboxem w PostgreSQL. Jeden worker wykonuje maks. 10 prób wysyłki/min, odzyskuje lease po restarcie, honoruje preferencje i ma stały Message-ID. Brak publicznego endpointu wysyłki. Stan kolejki: chronione `GET /api/admin/notifications`.
 
-Backend klienta: `AUTH_MODE=localhost`, `AUTH_CODE_KEY` (32 losowe bajty hex w `.env`/SOPS), opcjonalnie `AUTH_ORIGIN` (domyślnie `http://localhost:18430`). Kod email jest jednorazowy, ważny 10 min; sesja HttpOnly/SameSite=Lax trwa do 30 dni, wygasa po 7 dniach bezczynności. Brak trybu oznacza disabled; production obsługuje origin HTTPS i Secure cookie; wymaga skonfigurowanego reverse proxy TLS. Passkey chroni admina; szczegóły w docs/auth.md. UI kont nadal korzysta z mocków.
+Konta klienta i operatora korzystają ze wspólnego auth: hasło albo passkey, następnie drugi składnik email/TOTP; kod email służy także rejestracji/migracji kont bez metody podstawowej. UI kont i operatora jest podłączone do API. `AUTH_MODE=localhost`, `AUTH_CODE_KEY` (32 losowe bajty hex w `.env`/SOPS), opcjonalnie `AUTH_ORIGIN` (domyślnie `http://localhost:18430`). Brak trybu oznacza disabled; production wymaga HTTPS/Secure cookie i skonfigurowanego reverse proxy TLS. Sesje, ich limity i ścieżki logowania: [auth](../docs/auth.md).
 
-Trasy klienta: `/api/auth/{start,verify,me,logout,logout-all}`, `GET/PUT /api/account/notifications`, `/api/account/orders/{id}` i `/messages`, `POST /payment-status`. Mutacje wymagają JSON, dokładnego Origin i CSRF z `/me`; start/verify używają powiązania przeglądarki. Operator obsługuje `/api/admin/orders/{id}/{status,messages}` przez sesję konta z potwierdzonym passkey. Szczegóły kontraktu: [email](../docs/email.md).
+Trasy kont i logowania opisuje [auth](../docs/auth.md); zamówienia, preferencje i wiadomości: [email](../docs/email.md). Frontend klienta i operatora korzysta z tych endpointów. Mutacje są chronione przez Origin i CSRF zgodnie z kontraktem; operator wymaga roli administratora i pełnego MFA.
 
 Konfiguracja w `.env`: `MAIL_MODE=disabled|test|live` (domyślnie disabled), `MAIL_SMTP_HOST=smtp.mail.me.com`, `MAIL_SMTP_PORT=587`, `MAIL_USER`, hasło aplikacji `MAIL_PASSWORD`, dopuszczony alias `MAIL_FROM`, `MAIL_REPLY_TO`, `MAIL_TEST_TO`. STARTTLS jest wymagane. `test` przyjmuje wyłącznie dokładny adres `MAIL_TEST_TO`; niczego nie przekierowuje. Na tym stanowisku używamy `void@sieciowiec.xyz` w trybie testowym. Dane IMAP nie są potrzebne serwerowi do wysyłki.
 
@@ -67,7 +67,7 @@ Linux + bubblewrap + prlimit + taskset są wymagane dla parsera i slicera. Slice
 - `GET /api/models/{id}` i `/api/models/{id}/source`: metadane i pobranie oryginału, tylko z cookie właściciela. Brak sesji → 401, obcy/wygasły model → 404.
 - `POST /api/quotes/estimate`: JSON `{"model_id":"ID z uploadu","material_id":"GFA00","color_code":"10300","options":{"quantity":1,"quality":"standard","wall_loops":2,"infill_percent":15}}`. Wymaga cookie właściciela. Ilość 1–1000, jakość draft/standard/fine, 2–8 ścian, 5–100% wypełnienia. Odpowiedź 202: ID i status trwałego zadania; wynik/snapshot pobierany przez `GET /api/quotes/jobs/{id}`. Nie uruchamia płatności.
 
-Automatyczna cena wymaga zatwierdzonego materiału, dodatniej ceny zakupu netto/kg i dostępnego koloru w DB oraz skonfigurowanych stawek (panel operatora lub `PRICING_RATES_JSON`). Import nigdy ich nie wymyśla ani nie nadpisuje. Zapisy operatora korzystają z chronionego API poniżej. Rola z browser mocka nie daje uprawnień. Cennik w PostgreSQL ma pierwszeństwo przed konfiguracją startową `.env`; zmiana działa dla nowych wycen bez restartu.
+Automatyczna cena wymaga zatwierdzonego materiału, dodatniej ceny zakupu netto/kg i znanego koloru danego materiału w DB oraz skonfigurowanych stawek (panel operatora lub `PRICING_RATES_JSON`). Import nigdy ich nie wymyśla ani nie nadpisuje. Zapisy operatora korzystają z chronionego API poniżej. Rola przesłana przez przeglądarkę nie daje uprawnień. Cennik w PostgreSQL ma pierwszeństwo przed konfiguracją startową `.env`; zmiana działa dla nowych wycen bez restartu.
 
 `PRICING_RATES_JSON` zawiera: `version`, `setup_grosze`, `handling_per_plate_grosze`, `machine_per_hour_grosze`, `energy_per_kwh_grosze`, `printer_watts`, `loss_bps`, `margin_bps`, `vat_bps`, `minimum_net_grosze`. Stawki pieniężne są netto w groszach; 100 bps = 1%. Marża jest udziałem w cenie netto, a nie narzutem na koszt. Dane muszą zostać zatwierdzone przez operatora; brak konfiguracji oznacza ocenę indywidualną.
 
@@ -77,7 +77,7 @@ Zadania i wyniki są trwałe w PostgreSQL, deduplikowane per właściciel i peł
 
 Panel operatora i klienta używa wspólnego auth: hasło albo passkey + obowiązkowy email/TOTP. UI logowania i ustawień jest podłączone; rola, pełne MFA, Origin i CSRF są sprawdzane na serwerze. Pierwszy admin i odzyskanie: [auth](../docs/auth.md).
 
-- `GET /api/admin/session`: stan sesji; `POST` z `{token}` tworzy sesję cookie, `DELETE` ją unieważnia. Browser mock nie nadaje uprawnień.
+- `GET /api/admin/session`: stan sesji operatora; logowanie i wylogowanie obsługuje wspólne API auth. Dawny token operatora nie tworzy sesji.
 - `GET /api/admin/materials`: pełny katalog z kosztami i metadanymi.
 - `PUT /api/admin/materials/{id}`: dodaj/edytuj `name`, `density_g_cm3`, `cost_net_grosze_per_kg` (liczba groszy lub null), `production_enabled`. Włączenie wymaga dodatniej ceny. Własny materiał bez zaufanego profilu nie otrzyma automatycznej wyceny.
 - `PUT /api/admin/materials/{id}/colors/{code}`: `code`, `name`, `rgba` (lista `#RRGGBBAA`), `in_stock`.
@@ -114,7 +114,7 @@ GLB maks. 25 MiB; rozmiar oryginału + siatki + GLB liczy się do wspólnych lim
 
 Przed zewnętrznym wywołaniem Stripe backend trwale wiąże zamówienie z własnymi snapshotami wycen i ich modelami. Bez ochrony plików nie utworzy zamówienia. Powtórzenie wymaga identycznego właściciela i zestawu snapshotów; cudze, wygasłe, zmienione lub już usuwane modele są odrzucane. Maks. 20 snapshotów/zamówienie i 30 nowych zabezpieczeń/właściciela/dobę.
 
-Ochrona obejmuje oryginał, STL i GLB: przed płatnością, przy niepewnym wyniku i przez realizację. Przejście do `completed` ustawia 90 dni retencji w tej samej transakcji co status/email. Inne zamówienie tego samego modelu może nadal go chronić. Pliki nadal liczą się do limitów dysku. Niepewność Stripe nie zwalnia miejsca; automatyczne rozstrzyganie porzuconych prób wymaga kolejnego etapu webhooków/uzgadniania płatności.
+Ochrona obejmuje oryginał, STL i GLB: przed płatnością, przy niepewnym wyniku i przez realizację. Przejście do `completed` ustawia 90 dni retencji w tej samej transakcji co status/email. Inne zamówienie tego samego modelu może nadal go chronić. Pliki nadal liczą się do limitów dysku. Niepewność Stripe nie zwalnia miejsca. Worker uzgadnia porzucone próby i podpisane webhooki; nierozstrzygnięte przypadki pozostają w `manual_review` z ochroną plików.
 
 - `GET /api/account/orders/{id}/files`: własne pliki, materiał/kolor/ilość/opcje i adresy pobrania. Pobranie `/files/{model_id}/source` lub `/preview.glb` działa niezależnie od roboczych 24 h; zasady dostępu do zamówienia pozostają wymagane.
 - `GET /api/admin/orders/{id}/files`: to samo dla admina po MFA; dodatkowo `/files/{model_id}/mesh` daje STL do produkcji. Klient nie ma dostępu do tej trasy siatki.
@@ -137,7 +137,7 @@ Test PostgreSQL w `storage` jest ignorowany domyślnie; uruchamiaj wyłącznie n
 
 ## Nadawanie przesyłek
 
-Backend sandbox, bez nowego panelu. Podjazdy i anulowanie obsługuje backend opisany poniżej. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po pełnym MFA oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
+Backend i panel operatora działają w sandboxie; udostępniają etykiety, podjazdy i anulowanie opisane poniżej. Po opłaceniu i `ready`: GET/PUT `/api/admin/orders/{id}/shipment`, potem POST `/quote` i `/book` pod tym adresem (version/request_id UUID/quote_id). Wymaga sesji admina po pełnym MFA oraz CSRF. `202` potwierdza zapis zlecenia. Worker korzysta z PostgreSQL; GET zwraca bieżący stan/last_error, etykiety są prywatne. `/handover` potwierdza fizyczne przekazanie; klient czyta `/api/account/orders/{id}/shipment`. Niepewne wyniki nie są ponawiane w ciemno. Recovery i ponowna akceptacja kosztu: [kontrakt S0–S4](../docs/PLAN.md#s0s4--nadawanie-przesyłek).
 
 Używa istniejących FURGONETKA_SANDBOX_TOKEN/FURGONETKA_SENDER_JSON; bez nowych sekretów. DPD sandbox sprawdzony: dwa kartony/dwa numery w jednej przesyłce, PDF, restart i ponowienie bez duplikatu, przekazanie, jedna wysyłka SMTP oraz symulowane doręczenie. Właściciel zaakceptował regulamin DPD i zweryfikował telefon konta; kod nie zapisuje zgód. Test używał opłaconego zamówienia/sesji admina z fixtures i void@sieciowiec.xyz.
 
