@@ -647,14 +647,3 @@ export async function retryJob(jobId: string): Promise<SystemSettings> {
   save();
   return clone(state.settings);
 }
-export async function getDemoScenario(): Promise<DemoScenario> {
-  return state.scenario;
-}
-export async function setDemoScenario(scenario: DemoScenario): Promise<void> {
-  state.scenario = scenario;
-  save();
-}
-export async function resetDemo(): Promise<void> {
-  state = seed();
-  save();
-}

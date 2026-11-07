@@ -531,3 +531,9 @@ Reviewer zatwierdził aktualny zakres. Ten UI test sprawdza ceny przypadków9/20
 Na czystymc8d8514 `python frontend/tests/run-all.py --group contracts --no-build`: **54PASS/0FAIL/0SKIP/0flaky,12s,exit0**; raporty zachowane contracts-c8d8514/current-contracts.json i current-summary.json (poprzedni53PASS osobno). Testy obejmują parser GLB i limity, kwoty pozycji, formularze bezpieczeństwa/redirecty, CSRF w adapterach, panele, pending/retry zwrotów/nadań i operatora.
 
 Sol xhigh przejrzał raport/listę/źródła: bez konkretnego błędu do poprawienia w tym zakresie. Są to testy produkcyjnego UI/parsera z wire fixtures i mockami API, wirtualny WebAuthn; nie Rust/DB, rzeczywiste operacje Stripe/Furgonetka/iCloud ani fizyczny klucz. Te integracje mają odrębne raporty. Brak zmian kodu i deklaracji10/10 całego produktu.
+
+## 2026-11-07 — usunięcie martwego demo
+
+Usunięto91 linii nieużywanego kodu źródłowego: DemoTools.svelte43, dedykowany CSS34,3 re-eksporty i11 linii helperów getDemoScenario/setDemoScenario/resetDemo. Brak importów we wszystkich4 wejściach Vite; aktywny koszyk i konsumowany DemoScenario pozostają. Bez zmian widocznego UI, autoryzacji/backendu.
+
+Regeneracja inventory-controls:445 kontrolek/44 pliki (to mapa źródeł, nie testy wszystkich kombinacji). rg usuniętych symboli/klas: brak. Build PASS (Svelte0 błędów/ostrzeżeń, Vite), diff PASS. Sol xhigh sprawdził rzeczywisty diff i importy: brak blokera. Bez zbędnego ponawiania E2E/providerów dla nieosiągalnego komponentu.

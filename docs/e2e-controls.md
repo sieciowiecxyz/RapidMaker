@@ -2,7 +2,7 @@
 
 Wygenerowano: `node frontend/tests/inventory-controls.mjs`. To mapa źródeł, nie wynik testów. Jedna kontrolka szablonu może tworzyć wiele opcji/wierszy; wartości i pokrycie opisują pliki e2e-*-inventory.md oraz raport. Nie klikamy automatycznie wszystkiego bez sprawdzenia skutków.
 
-Kontrolki szablonów: **447**, pliki: **45**.
+Kontrolki szablonów: **445**, pliki: **44**.
 
 ## frontend/src/App.svelte
 
@@ -213,14 +213,6 @@ Kontrolki szablonów: **447**, pliki: **45**.
 | --- | --- | --- |
 | 16 | a | <a href="/wycena?restore=cart"> |
 | 18 | button | <button type="button" onclick={() => |
-
-## frontend/src/components/DemoTools.svelte
-
-| Linia | Typ | Etykieta / początek deklaracji |
-| --- | --- | --- |
-| 26 | summary | <summary > |
-| 35 | select | <select bind:value={scenario} onchange={change} > |
-| 40 | button | Przywróć demo |
 
 ## frontend/src/components/Header.svelte
 
@@ -510,10 +502,10 @@ Kontrolki szablonów: **447**, pliki: **45**.
 | 914 | summary | <summary > |
 | 941 | button | Zmień |
 | 962 | summary | Szczegóły pakowania |
-| 1024 | button | <button type="submit" class="button primary" disabled={busy \|\| quoteBusy \|\| (stage === 4 && !stripeForm) \|\| (stage === 3 && cart.quote.manual) \|\| (stage === 3 && !cart.quote.manual |
-| 1048 | button | ← Wróć do podsumowania |
-| 1055 | button | ← Wróć do dostawy |
-| 1057 | a | ← Wróć do konfiguracji druku |
+| 1028 | button | <button type="submit" class="button primary" disabled={busy \|\| quoteBusy \|\| (stage === 4 && !stripeForm) \|\| (stage === 3 && cart.quote.manual) \|\| (stage === 3 && !cart.quote.manual |
+| 1052 | button | ← Wróć do podsumowania |
+| 1059 | button | ← Wróć do dostawy |
+| 1061 | a | ← Wróć do konfiguracji druku |
 
 ## frontend/src/pages/checkout/PaymentReturn.svelte
 
@@ -555,11 +547,11 @@ Kontrolki szablonów: **447**, pliki: **45**.
 | 181 | button | Wypróbuj przykład |
 | 198 | button | <button class="part-row" class:active={selected?.id === model.id} aria-pressed={selected?.id === model.id} disabled={busy} onclick={() => |
 | 226 | button | Usuń |
-| 271 | input | <input type="number" min="1" max="1000" step="1" disabled={busy} value={model.options.quantity} onchange={(event) => |
-| 286 | PrintChoices | <PrintChoices {model} {materials} catalog={printOptions} {busy} onchange={(changes) => |
-| 293 | AdvancedOptions | <AdvancedOptions bind:open={advancedOpen} {model} catalog={printOptions} {busy} onchange={(changes) => |
-| 331 | button | <button class="button primary" disabled > |
-| 333 | a | Dalej: wysyłka → |
+| 276 | input | <input type="number" min="1" max="1000" step="1" disabled={busy} value={model.options.quantity} onchange={(event) => |
+| 291 | PrintChoices | <PrintChoices {model} {materials} catalog={printOptions} {busy} onchange={(changes) => |
+| 298 | AdvancedOptions | <AdvancedOptions bind:open={advancedOpen} {model} catalog={printOptions} {busy} onchange={(changes) => |
+| 336 | button | <button class="button primary" disabled > |
+| 338 | a | Dalej: wysyłka → |
 
 ## frontend/src/pages/configure/PrintChoices.svelte
 
@@ -578,40 +570,41 @@ Kontrolki szablonów: **447**, pliki: **45**.
 
 | Linia | Typ | Etykieta / początek deklaracji |
 | --- | --- | --- |
-| 376 | a | Przejdź do treści |
-| 379 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
-| 380 | button | Wróć do konfiguracji |
-| 380 | a | Oferta |
-| 380 | a | Wycena |
-| 380 | a | Moje zamówienia |
-| 380 | a | Kontakt |
-| 381 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
-| 391 | Button | Spróbuj ponownie |
-| 416 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
-| 417 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
-| 420 | a | Zasady prywatności |
-| 421 | Button | <Button variant="text" onclick={() => |
-| 421 | Button | Pokaż przykład: 10 STL |
-| 429 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
-| 434 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
-| 438 | Button | Następny model |
-| 439 | Button | Ponów wysłanie modelu |
-| 443 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
-| 443 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
-| 444 | input | <input type="checkbox" bind:checked={manual} /> |
-| 456 | Button | Uzupełnij dla wszystkich |
-| 459 | Button | Uzupełnij ustawienia |
-| 462 | Button | Ponów przeliczenie |
-| 466 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
-| 479 | a | 537 320 816 |
-| 479 | a | piotr@rapidmaker.pl |
-| 479 | Button | Wczytaj mapę Google |
-| 479 | a | Wyznacz trasę |
-| 481 | summary | Narzędzia podglądu |
-| 481 | Button | Zmień motyw |
-| 481 | Button | Symuluj błąd wyceny |
-| 483 | a | Regulaminy i prywatność |
-| 483 | a | Wróć na górę |
+| 388 | a | Przejdź do treści |
+| 391 | a | <a class="brand" href="#main" aria-label="RapidMaker, początek strony"> |
+| 392 | button | Wróć do konfiguracji |
+| 392 | a | Oferta |
+| 392 | a | Wycena |
+| 392 | a | Moje zamówienia |
+| 392 | a | Kontakt |
+| 393 | button | <button class="icon-button" onclick={changeTheme} aria-label={theme === 'dark' ? 'Zmień na jasny motyw' : 'Zmień na ciemny motyw'}> |
+| 403 | Button | Spróbuj ponownie |
+| 428 | input | <input bind:this={fileInput} type="file" class="sr-only" tabindex="-1" aria-label="Dodaj modele STL, STEP lub 3MF" accept=".stl,.step,.stp,.3mf" multiple onchange={event => |
+| 429 | button | <button type="button" class:dragging class="dropzone" onclick={() => |
+| 432 | a | Zasady prywatności |
+| 433 | Button | <Button variant="text" onclick={() => |
+| 433 | Button | Pokaż przykład: 10 STL |
+| 441 | button | <button class="model-select" aria-pressed={selectedId===model.id} aria-label={'Konfiguruj ${model.name}'} onclick={()=> |
+| 448 | button | <button class="remove" aria-label={'Powiel wariant ${model.name}'} title="Powiel wariant" disabled={models.length> |
+| 450 | button | <button class="remove" aria-label={'Usuń ${model.name}'} onclick={()=> |
+| 455 | Button | Następny model |
+| 456 | Button | Ponów wysłanie modelu |
+| 460 | input | <input type="radio" bind:group={delivery} value="pickup" /> |
+| 460 | input | <input type="radio" bind:group={delivery} value="shipping" /> |
+| 461 | input | <input type="checkbox" bind:checked={manual} /> |
+| 473 | Button | Uzupełnij dla wszystkich |
+| 476 | Button | Uzupełnij ustawienia |
+| 479 | Button | Ponów przeliczenie |
+| 483 | Button | <Button class="quote-contact" disabled={!canContact \|\| preparing} onclick={prepareContact}> |
+| 496 | a | 537 320 816 |
+| 496 | a | piotr@rapidmaker.pl |
+| 496 | Button | Wczytaj mapę Google |
+| 496 | a | Wyznacz trasę |
+| 498 | summary | Narzędzia podglądu |
+| 498 | Button | Zmień motyw |
+| 498 | Button | Symuluj błąd wyceny |
+| 500 | a | Regulaminy i prywatność |
+| 500 | a | Wróć na górę |
 
 ## frontend/src/storefront/components/OrderPage.svelte
 

@@ -12,9 +12,6 @@ export {
   getSystemSettings,
   updateSystemSettings,
   retryJob,
-  getDemoScenario,
-  setDemoScenario,
-  resetDemo,
 } from './mock';
 
 import { LEGAL_VERSION } from './legal';

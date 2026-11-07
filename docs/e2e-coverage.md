@@ -3,7 +3,7 @@
 Przeczytaj gdy: oceniasz pokrycie celu lub wybierasz test po zmianie.
 Opis: faktyczne przebiegi i granice; szczegóły w [raporcie](corpus-report.md).
 
-Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijają `.json`. To osobne przebiegi, nie jeden wspólny wynik. Aktualny spis źródeł: 447 kontrolek w 45 plikach, [mapa](e2e-controls.md). Powtarzalny szablon nie oznacza sprawdzenia każdej możliwej kombinacji.
+Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijają `.json`. To osobne przebiegi, nie jeden wspólny wynik. Aktualny spis źródeł: 445 kontrolek w 44 plikach, [mapa](e2e-controls.md). Powtarzalny szablon nie oznacza sprawdzenia każdej możliwej kombinacji.
 
 | Wymaganie | Test i wykonany dowód | Granica |
 | --- | --- | --- |
