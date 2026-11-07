@@ -18,6 +18,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 | Korpus/API | corpus41-large-current: 41 scenariuszy; 24 native ceny, 12 ręcznych, 4 wadliwe, 1 limit; 36 GLB. corpus12-manual-geometry osobno uzasadnia ręczne ścieżki |
 | Korpus/UI | 37 PASS/4 FAIL harnessu, poprawione 4 PASS osobno; 144 unikalne ujęcia 1440/390 px i oba motywy obejrzane. Nie pojedynczy czysty przebieg 41 |
 | Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
+| Nowsza regresja3519cb9 | Storage25PASS, core49PASS/1 opt-in large SKIP, zeroFAIL/flaky; poprawiona etykieta runnera. Hashe niezmienione; sandbox/email inne osobne dowody |
 | Pełny zestaw 78d5802 | 136 PASS/0 FAIL/0 flaky/1 SKIP w siedmiu osobnych grupach. Kod wrappera 2 przez pominięcie opt-in large; ten scenariusz osobno 1 PASS. 312 hashów przed/po zgodnych |
 | Naprawione przepływy | Tożsamość line_id/model_id/quote_id, zakup gościa → konto, PI decline/leave/resume. Dwa warianty jednego uploadu z prawidłowymi kwotami w obu panelach; duplikacja szkicu to jawny szew, brak przycisku powielania |
 | Osiem klientów | eight-clients-final: 1 PASS/3,8 s. 16 równoczesnych estimate → 8 zadań/8 snapshotów/max prób 1; własne ceny i odmowa obcych zasobów; 4 próbki responsywności, nie szeroki load test |

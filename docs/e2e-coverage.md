@@ -29,6 +29,8 @@ Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijaj�
 
 ## Aktualność i pozostałe ograniczenia
 
+Nowsza wspólna regresja na3519cb9: storage25PASS po poprawce etykiety runnera (pierwsza próba24PASS/1harnessFAIL); core49PASS/0FAIL/0flaky/1SKIP,392,4s. Pominięty tylko opt-in large removal. Źródła/binarium/dist niezmienione podczas core; Sol xhigh zweryfikował raporty. Nie powtarzano sandbox/email/registrations/contracts. Szczegóły i prywatne nazwy raportów w corpus-report.md.
+
 Końcowy zestaw na **78d5802**: storage 22 PASS, core 45 PASS/1 SKIP, sandbox 12 PASS, email 2 PASS, rejestracja hasło 1 PASS, rejestracja passkey 1 PASS, contracts 53 PASS. Łącznie **136 PASS/0 FAIL/0 flaky/1 SKIP**. Wrapper zakończył się kodem 2 przez opcjonalny test large pominięty przy standardzie; ten sam scenariusz uruchomiony osobno na tej samej wersji z large dał **1 PASS**, bez skip. To oddzielny przebieg, nie zmiana wyniku wrappera na zielony. Brak adnotacji provider-blocked.
 
 Prywatna kopia raportów: final-suite-78d5802/. Przed startem zapisano czysty HEAD i 312 hashów kodu/binarki; wszystkie niezmienione po zestawie i osobnym large. Komenda: `python frontend/tests/run-all.py --group all --no-build`; build/check były już wykonane dla tej samej wersji produktu. Siedem grup używa osobnych baz/scenariuszy, nie jednego wspólnego zamówienia. Wcześniejsze wyniki z tabeli zachowują opisany zakres; nowy zestaw nie powtarza całego korpusu.
