@@ -33,6 +33,8 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 
 ## Dalsza praca i granice
 
+Następna konkretna luka dowodowa: przerwane już uruchomione zadanie slicera i odzyskanie po lease. Nowy test queue-restart sprawdza wyłącznie queued przed startem workera; nie jest to dowód błędu ani ukończenia active-lease recovery.
+
 1. Ulepszać konkretnie wskazane problemy, nie uruchamiać ponownie pełnych zestawów bez nowej przyczyny. Po zmianie tylko potrzebna regresja i scoped review.
 2. Zbędnych bezpośrednich zależności nie wykryto. Pozostałe słabiej udowodnione obszary to ogólna prostota kodu, szersze obciążenie i zużycie zasobów. Osiem klientów nie wyznacza przepustowości produkcyjnej.
 3. Jawne ograniczenia: wadliwe/ponadlimitowe źródła, koszty fixture zamiast rentowności firmy, wirtualny passkey i emulowany viewport. Cały goal nadal otwarty; review nie potwierdziło 10/10.

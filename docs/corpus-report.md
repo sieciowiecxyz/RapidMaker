@@ -601,3 +601,11 @@ Dodano samodzielny `--queue-restart` do izolowanego runnera (bez przeglądarki/p
 `E2E_REPORT_NAME=queue-restart-final python frontend/tests/run-integration.py --queue-restart`: **1PASS/0FAIL/0SKIP/0flaky,8,99s**, starePID2690706/nowe2691744. Po teardown worker zweryfikował brak obu PID/DB/root; main dodatkowo oba/proc nieobecne. JSON powstaje przed teardown, więc sam raport nie dowodzi cleanup. Osobny tryb odrzuca kombinację z sandbox przed DB; zajętyport sprawdza preflight.
 
 Sol xhigh przejrzał kod/raport/lifecycle: bez blokera. Po review zwiększono timeout estimate5→30s dla zimnego odczytu runtime; pozostałe HTTP5/upload40/startup30/stop30/worker160. Pythoncompile/diff PASS. Zwykły runner po refaktorze startu API: two-client-upload1PASS/2,3s (browser-runner-after-restart-20261107). Bez zmian produkcyjnego kodu/localhosta/.env. To queued-job+gracefulAPIrestart, nie aktywny lease, awaria hosta/powerloss, UI lub nowy niezależny rachunek ceny.
+
+## 2026-11-07 — kolor wybrany przed materiałem
+
+Usunięto nadmiarowy reset koloru/customShade przy każdej zmianie materiału. Storefront zachowuje preferencję przez normalizeSettings; istniejący wyjątek PA-CF nadal wymusza czarny. Nie zmieniono palety, stylów, backendu lub dostępności. Odcień PLA wybrany dla TPU pozostaje jawną preferencją wymagającą potwierdzenia, nie automatycznie obsługiwanym kodem filamentu.
+
+Nowy browser test: custom BambuRed przed materiałem → PLA/PETG/ASA/TPU zachowują wybór, reload, rzeczywiste oszacowanie slicera z komunikatem do potwierdzenia, manual checkout i cart colorPreference/GFU01/colorpusty; PA-CF czarny. Istniejący test rodzin sprawdza teraz zachowanie zielonego przez rodziny, zamiast kodować błędny reset. Negatywna kontrola starego źródła FAIL przy pierwszymPLA (color-first-old); poprawiony2/2PASS23,9s (color-first-fixed). Dodatkowy nowy scenariusz z pozytywnymi screenshotami1PASS6,4s (color-first-visual-20261107); main obejrzał zachowany czerwony TPU i informację do potwierdzenia.
+
+BuildSvelte0/Vite, integrationTS, Prettier zmienionego testu i diff PASS. Sol xhigh sprawdził źródła/raporty/manual routing: bez blokera, brak podmiany na automatyczny kod innej rodziny. Nie wysłano ręcznego zamówienia lub operacji dostawców w tych testach. Ogólne oceny review pozostają8–9/10, nie wymuszamy10.

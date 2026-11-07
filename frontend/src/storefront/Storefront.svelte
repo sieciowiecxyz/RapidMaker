@@ -139,8 +139,7 @@
   function updateSettings(patch:Partial<PrintSettings>) {
     if(patch.strength)strengthTrigger++;
     settingsCopied='';
-    const changedMaterial=patch.material!==undefined && patch.material!==activeSettings.material;
-    const next=normalizeSettings({...activeSettings,...patch,...(changedMaterial?{color:'black',customShade:''}:{})});
+    const next=normalizeSettings({...activeSettings,...patch});
     lastSettings={...next};
     if(selectedModel) models=models.map(model=>model.id===selectedId?{...model,settings:{...next}}:model);
   }

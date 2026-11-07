@@ -141,6 +141,58 @@ test('storefront navigation, theme, sample and invalid upload actions have obser
   await expect(page.getByRole('heading', { name: 'Dobrze Cię widzieć.' })).toBeVisible();
 });
 
+test('color chosen before material survives family switches and remains an explicit preference', async ({
+  page,
+}, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/wycena');
+  await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles(fixture('cube_20mm.stl'));
+  await expect(page.getByRole('img', { name: /cube_20mm.stl.*Czarny/ })).toBeVisible();
+  await expect(page.locator('input[name=material]:checked')).toHaveCount(0);
+  await page.locator('input[name=color][value=custom]').check();
+  const shade = customColors.find((item) => item.id === 'bambu-GFA00-10200')!;
+  const preference = `${shade.name} · ${shade.series} · ${shade.code} (${shade.hexes.join(', ')})`;
+  await page.locator(`input[name=custom-shade][value="${shade.id}"]`).check();
+  for (const family of ['pla', 'petg', 'asa', 'tpu']) {
+    await page.locator(`input[name=material][value="${family}"]`).check();
+    await expect(page.locator('input[name=color][value=custom]')).toBeChecked();
+    await expect(page.locator(`input[name=custom-shade][value="${shade.id}"]`)).toBeChecked();
+    await expect
+      .poll(async () => (await storefront(page)).models[0].settings)
+      .toMatchObject({
+        material: family,
+        color: 'custom',
+        customShade: shade.id,
+      });
+  }
+  await page.locator('input[name=quality][value=standard]').check();
+  await page.locator('input[name=strength][value=standard]').check();
+  await expect(page.locator('.manual-heading')).toHaveText('Szacowana cena wydruku');
+  await expect(page.locator('.estimate-lines')).toContainText(preference);
+  await expect(page.locator('.estimate-lines')).toContainText('wymaga potwierdzenia.');
+  await page
+    .locator('.material-field')
+    .evaluate((element) => element.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: info.outputPath('retained-tpu-bambu-red.png') });
+  await page
+    .locator('.estimate-lines')
+    .screenshot({ path: info.outputPath('tpu-shade-confirmation.png') });
+  await page.reload();
+  await expect(page.locator('input[name=material][value=tpu]')).toBeChecked();
+  await expect(page.locator(`input[name=custom-shade][value="${shade.id}"]`)).toBeChecked();
+  await expect(page.locator('.quote-contact')).toBeEnabled();
+  await page.locator('.quote-contact').click();
+  await expect(page).toHaveURL(/#zamowienie$/);
+  await expect(page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny' })).toBeVisible();
+  const saved = (await cart(page)).models[0];
+  expect(saved.colorPreference).toBe(preference);
+  expect(saved.options).toMatchObject({ materialId: 'GFU01', color: '' });
+  await page.goto('/wycena');
+  await page.locator('input[name=material][value=pa]').check();
+  await expect(page.locator('input[name=color]')).toHaveCount(1);
+  await expect(page.locator('input[name=color][value=black]')).toBeChecked();
+});
+
 test('fixed families, every PLA wheel shade and real prices preserve the authored configurator', async ({
   page,
 }) => {
@@ -169,9 +221,13 @@ test('fixed families, every PLA wheel shade and real prices preserve the authore
       .locator('input[name=material]')
       .evaluateAll((options) => options.map((option) => (option as HTMLInputElement).value)),
   ).toEqual(['pla', 'petg', 'asa', 'pa', 'tpu']);
-  for (const family of ['pla', 'petg', 'asa', 'pa', 'tpu']) {
+  // Basic colors chosen before a material are preferences too. PA-CF alone forces black.
+  await page.locator('input[name=color][value=green]').check();
+  for (const family of ['pla', 'petg', 'asa', 'tpu', 'pa']) {
     await page.locator(`input[name=material][value="${family}"]`).check();
-    await expect(page.locator('input[name=color][value=black]')).toBeChecked();
+    await expect(
+      page.locator(`input[name=color][value=${family === 'pa' ? 'black' : 'green'}]`),
+    ).toBeChecked();
     await expect(page.locator('input[name=color]')).toHaveCount(family === 'pa' ? 1 : 4);
     if (family === 'pa')
       await expect(
