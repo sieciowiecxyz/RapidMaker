@@ -27,3 +27,5 @@ JSON można zbierać w Loki i oglądać w Grafanie; kolektor i dashboardy pozost
 
 
 Orphan retention: `model_orphan_removed` (info, UUID), `model_orphan_cleanup_failed` (error, UUID i reason=filesystem). Zbiorcze `model_cleanup_failed` używa reason=storage, obejmując filesystem/blokady/bazę. Bez nazw plików i payloadów klienta; poziom info musi być włączony, aby widzieć udane usunięcia.
+
+Nieudane zakończenie procesu konwersji modelu emituje WARN `model_worker_failed`: opcjonalne numeryczne `exit_code`/`signal` i kontrolowany `profile`. Bez nazw/ścieżek/zawartości plików. Sam sygnał nie przesądza przyczyny (np. SIGKILL); błędy startu/timeout pozostają poza tym zdarzeniem.

@@ -790,3 +790,14 @@ Build API na62f56b5 SHAa3d97ca37da688ad748f597f0a159d4f14a9d0db672090db1a4bd7be0
 1000 to40×25, więc ten przypadek nie sprawdzał reszty płyty. Minimalne rozszerzenie istniejącego pricing.spec o26 i asercję25+1: osobny `pricingremainder20261107a/summary.json` **1 PASS/0 FAIL/0 SKIP/0 flaky,10,18s**. Dwie rzeczywiste partie,2płyty,114,10436344146729g,10484s,6972grbrutto; sumy pomiarów i rachunek wszystkich składowych przechodzą. Test obejmuje ponowne utworzenie `/out` przy drugim run_plate. Natywna wycena1000 w oddzielnych przebiegach160704/160821gr: zmierzone czasy nieco różne, rachunek poprawny w obu, bez obietnicy identycznej ceny między pomiarami.
 
 Źródła stabilne podczas testów, nowy hash builda przed/po zgodny; prywatne bazy/procesy/katalogi sprzątnięte, normalny API niezmieniony. Bez całego korpusu/providerów, bez potwierdzenia kosztów firmy. Sol xhigh bez blokera, format/diff PASS. Wynik3PASS i osobny1PASS nie są jednym4-testowym przebiegiem. Wygląd niezmieniony, wyłącznie headless.
+
+
+## 2026-11-07 — pełny korpus po limicie `/out`, niestabilny model37
+
+`corpus-output-cap-20261107/` zachowuje pełny API przebieg na6217076/builda3d97ca: **40 PASS/1 FAIL**, exit1. Nadal24 native ceny z rachunkiem,12manual,36GLB; modele14/21/32 wadliwe,41resource jak wcześniej. Jedyna różnica37: upload503 po25,16s zamiast spodziewanej422topology. To etap geometrii przed slicerem; brak dowodu związku z `/out`. Wszystkie486hashy przed/po zgodne, cleanup potwierdzony.
+
+Osobny case37 API1PASS/21,7s; dokładny produkcyjny command workerprobe exit67/topology21,2s. Pierwotny sygnał/kod nie został zapisany; twardy CPU25s jest hipotezą, nie ustaloną przyczyną. Duży XML322638102B, lib3mf buduje edge-count przed końcową odmową non-manifold; dalsze profilowanie/early-rejection pozostaje otwarte. Nie rozszerzono budżetów ani oczekiwań testu.
+
+Minimalna zmiana models.rs zapisuje WARN `model_worker_failed` z numerycznym exit_code/signal i kontrolowanym profile. Bez ścieżek/nazw/payloadów/sekretów; dotychczasowe65/66/67/inne503 bez zmian. Nie obejmuje jeszcze timeout/spawnerror. Fmt/check/build PASS,3resourceunitPASS/1dotychczasowy opt-inIGNORED. Build26d403ba; osobny case37-observability-b **1PASS/22,34s**, rzeczywisty log exit67/large iHTTP422,486hashy zgodne/cleanup. Pierwszy scopedlogrunPASS nie uchwycił końcowego logu przy1spollingu; drugi20ms go zachował, bez zmiany produktu/buildu.
+
+Sol xhigh bez blokera tej małej zmiany diagnostycznej. Nie zmienia ona historycznego40/1 na41PASS ani nie naprawia udowodnionej przyczyny503. Źródła/dowody w diagnosis.md, case-comparison.json i observability-summary.json obok raportów. Normalny serwer bez restartu, UI bez zmian, headless.

@@ -16,7 +16,10 @@ use std::{
     collections::HashMap,
     fs,
     io::{Read, Write},
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
+    os::unix::{
+        fs::{DirBuilderExt, OpenOptionsExt},
+        process::ExitStatusExt,
+    },
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -325,6 +328,12 @@ pub(super) async fn prepare_for_slicing(
             .map_err(|_| "Model conversion timed out")?
             .map_err(|_| "Model conversion unavailable")?;
         if !status.success() {
+            tracing::warn!(
+                event = "model_worker_failed",
+                exit_code = status.code(),
+                signal = status.signal(),
+                profile = profile.name(),
+            );
             return Err(match status.code() {
                 Some(65) => "Unsupported or invalid model geometry",
                 Some(66) => "Model resource limit",

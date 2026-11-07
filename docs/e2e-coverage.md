@@ -39,6 +39,8 @@ Native opcje: `pricing-options-20261107/pricingoptions20261107b.json` — 1 PASS
 
 Po zmianie `/out`: `bounded-output-api-20261107/` — 3 native API PASS na builda3d97ca, następnie osobny `pricingremainder20261107a/`1 PASS po rozszerzeniu ilości o26. Dwie mierzone partie25+1, zachowane sumy/ceny i ponowne utworzenie katalogu wyjściowego. To stawki fixture i kontrolowana kostka, nie pełny korpus/rentowność.
 
+Nowszy pełny API korpus po zmianie `/out`: `corpus-output-cap-20261107/` **40 PASS/1 FAIL** (model37 upload503 zamiast422);24ceny/12manual/36GLB bez różnic. Scoped37 później1PASS/422/exit67; nie kasuje pełnegoFAIL. Nowy log exit/signal daje diagnostykę kolejnego zdarzenia, nie dowód przyczyny pierwotnej.
+
 ## Błędy, trwałość i zasoby
 
 | Zakres / raport | Dowód | Granica |
