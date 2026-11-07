@@ -36,7 +36,7 @@ suites = {
     'email': ['--sandbox', 'auth.spec.ts', 'auth-resend.spec.ts', 'journey.spec.ts'],
     'registration-password': ['--sandbox', '--registration', 'registration.spec.ts'],
     'registration-passkey': ['--sandbox', '--registration', 'registration.spec.ts'],
-    'contracts': ['checkout-line-prices.spec.ts', 'glb-parser.spec.ts', 'model-limits.spec.ts', 'admin-csv.spec.ts', 'auth-factors.spec.ts', 'legal.spec.ts', 'live-panels.spec.ts', 'operations.spec.ts', 'operator.spec.ts'],
+    'contracts': ['security-headers.spec.ts', 'checkout-line-prices.spec.ts', 'glb-parser.spec.ts', 'model-limits.spec.ts', 'admin-csv.spec.ts', 'auth-factors.spec.ts', 'legal.spec.ts', 'live-panels.spec.ts', 'operations.spec.ts', 'operator.spec.ts'],
 }
 results = []
 selected = list(suites) if args.group == 'all' else ['registration-password', 'registration-passkey'] if args.group == 'registration' else ['core', 'privacy'] if args.group == 'core' else [args.group]

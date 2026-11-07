@@ -713,3 +713,9 @@ ModelPreview nie przekazywał callbacku dostępności renderera: zasoby wracały
 private-preview-restore-20261107/baseline-native.json: rzeczywiste trustedlost/restored1/1, ResizeObserver1 bez zmiany, białe piksele2314→0,FAIL. Wcześniejszy baseline.json to wyłącznie odrzucony niekanoniczny fixture, zachowany osobno. fixed.json:**3PASS/0FAIL/0SKIP/0flaky,2,81s** (restore,failedworker,panel klienta). Dwa cykle2314→2314 i2356→2356, trusted2/2,resize1, późniejszy obrót zmienia sylwetkę, zwinięcie usuwa canvas, brak pageerror.
 
 Worker/parser/GPU rzeczywiste; mockHTTP z kanonicznym GLB z pozycji/indeksów checked-in fixture, testowy ciemny podkład screenshotu. To nie dowód konwersji backendu. Zrzutyinitial/restored obejrzane, main także restored2; brak formalnego snapshotu hashów. Svelte0/Vite4HTML/typy/Prettier/diff PASS; Sol xhigh przejrzał źródła, raporty i metryki, brak blokera.
+
+## 2026-11-07 — nagłówki dokumentów frontendu
+
+Trzy wspólne nagłówki w Vite dev/preview: CSP frame-ancestors/object-src/base-uri, XFO DENY, nosniff. Bez zmiany źródeł script/childframe/worker, wyglądu lub własnych mechanizmów backendu. Nowy security-headers.spec dołączony do contracts.
+
+frame-policy-20261107/baseline.json:**2FAIL** — cztery HTML200 bez nagłówków, aplikacja widoczna w cross-origin iframe200. fixed.json:**2PASS/0FAIL/0SKIP/0flaky,0,80s** — cztery HTML200 z polityką, Chromium blokuje ramkę przyHTTP200, komunikat o polityce i brak#app. Łączna CSP/XFO, nie niezależna certyfikacja obu.3hashe źródeł zgodne. BuildSvelte0/Vite/typy/Python/Prettier/diff PASS; test:proxy1PASS dla EPIPE/upstream413, bez nowej asercji cacheheader. Sol xhigh przejrzał source/raporty, brak blokera. Tylko lokalne headless HTTP, bez providerów. Nagłówki nie przechodzą do statycznego dist; hosting produkcyjny wymaga własnej konfiguracji.

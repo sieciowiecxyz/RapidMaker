@@ -45,3 +45,9 @@ Test sprawdza nazwę bazy/katalogu i konfigurację przed utworzeniem fixtures. P
 - Lokalne raporty: `/tmp/rapidmaker-access-{before-fix,tests}.log`, `/tmp/rapidmaker-security2-{audit-final.json,clippy.log,unit.log,pg.log,build.log,smoke.json}` oraz `/tmp/rapidmaker-{geometry-occt,webauthn}*.log`. Baza testowa i pliki fixtures zostały usunięte po testach.
 - Status GitHuba przy pierwszym pushu L7 wciąż pokazywał wcześniejsze alerty lz4_flex/WebAuthn; kod/lockfile usuwa lub aktualizuje wskazane wersje. Nie zamykano alertów ręcznym wyjątkiem ani nie zakładano odświeżenia indeksu.
 - Nadal potrzebne przed produkcją: wdrożenie HTTPS/proxy, podłączenie autoryzacji frontendu i utrzymanie aktualnych bibliotek systemowych OCCT. To ograniczony przegląd, bez pełnego pentestu i testów atakujących zewnętrzne usługi.
+
+## Nagłówki lokalnego frontendu
+
+Vite dev i preview ustawiają CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'`, `X-Frame-Options: DENY` i `X-Content-Type-Options: nosniff`. Aplikacja nie może być osadzana w ramce; własne iframe Stripe/Maps, workery i skrypty nie dostały nowej polityki źródeł.
+
+Nagłówki nie są częścią plików `dist`. Przyszły hosting musi wystawić je sam; nie jest to konfiguracja wdrożenia produkcyjnego. Test headless sprawdza cztery dokumenty HTML i blokadę cross-origin iframe przez łączną politykę CSP/XFO; nie dowodzi uprzywilejowanego ataku na localhost.

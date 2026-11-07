@@ -1,6 +1,11 @@
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
+const headers = {
+  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+};
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', 'RUST_API_PORT');
   const apiPort = Number(env.RUST_API_PORT ?? '18432');
@@ -38,8 +43,8 @@ export default defineConfig(({ mode }) => {
   };
   return {
     plugins: [tailwindcss(), svelte()],
-    server: { proxy },
-    preview: { proxy },
+    server: { proxy, headers },
+    preview: { proxy, headers },
     build: {
       rollupOptions: {
         input: {
