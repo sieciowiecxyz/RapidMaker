@@ -45,3 +45,5 @@ Runner ma wspólny Chromium Playwright w preflight i testach; własny executable
 
 
 `eight-clients-final` (po pełnym zestawie, zmieniony tylko test): 1 PASS / 3,8 s; przyjęcie 16 żądań 90 ms, wszystkie wyniki po 2611 ms, katalog HTTP 200 w czterech próbkach 13/8/8/8 ms, aktywne zadania 1/1/1/0. Uploady były sekwencyjne; współbieżność dotyczy wycen i odczytów. Maksimum jest próbkowane, nie ciągłe; brak pomiaru RSS lub produkcyjnego SLA.
+
+`two-client-upload-20261107b`:1PASS. Dwa oddzielne konteksty:429 przed przyjęciem drugiego body, responsywny katalog, oba uploady201 po ponowieniu, własneGLB/wyceny i obce404. Jeden parser/upload naraz pozostaje celowym ograniczeniem RAM; nie równoległe konwersje. Test w core, opis w corpus-report.md.
