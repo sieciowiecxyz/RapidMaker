@@ -948,3 +948,12 @@ Audyt nie wykazał błędu produktu: rezerwacje uwzględniają pending/unknown/m
 Rozszerzono wyłącznie istniejący test storage/refunds.rs (+22/−3): dwóch aktywnych administratorów i niezależne Storage/pool. Po rezerwacji600 z1000 konkurują400+400: dokładnie jeden sukces, drugi Amount, dwa wpisy/suma1000. Równoczesne ponowienie pierwotnego request_id przez obu adminów zwraca oryginalny refundID, bez trzeciego wpisu. Rzeczywisty jednorazowyPGtest1PASS,fmt/diffPASS, własneDBusunięte. Brak operacjiStripe/HTTP/UI lub zmianprodukcyjnych.
 
 Istotna granica: negatywna kopia źródła bez orderFORUPDATE przeszła5/5. Nie wymuszono harmonogramu kolizji, więc ten smoke nie dowodzi wykrywania usunięcia blokady ani pełnej atomowości. Nie dodano frameworku blokad tylko dla tej próby; zachowano wszystkiewyniki w `refund-concurrency-20261108/` (positive i negative logs/result). Solxhigh zatwierdził w tym wąskim zakresie, bez deklaracji10/10.
+
+
+## 2026-11-08 — kontrolowane wymuszenie kolizji zwrotów
+
+Uzupełniono wcześniejszy smoke dwóch administratorów bez zmiany produktu: trzecia transakcja przytrzymuje wiersz zamówienia, a dwa rzeczywiste refund_prepare wykonują się równocześnie. Test czeka maks.3s aż pg_stat_activity pokaże dwa aktywne zapytania o dokładnym produkcyjnym SQL, z wait_event_type=Lock, w tej samejDB/roli i poza PIDblokera; potem commit zwalnia blokadę. Nadal sprawdza jeden przyjęty400, drugiAmount, ledger600+400 i idempotentny replay.
+
+KontrolowanyPG **1PASS/1,04s**. Prywatna kopia z usuniętym wyłącznie orderFORUPDATE daje teraz **oczekiwanyFAIL** na asercji dwóch zablokowanych zapytań, a nie losowym timeout/brakuDB. Historyczne niekontrolowane5/5PASS pozostają zachowane. To dowodzi rozróżnienia blokady w tym scenariuszu, nie że bez niej zawsze wystąpi nadmiernyzwrot lub pokryto całą współbieżność.
+
+Produkcjabytes identyczne z6cc0e3d, test+28/−4,fmt/diffPASS, Solxhigh bezblokera; własneDB/kopiamutanta usunięte. Dowody `refund-concurrency-20261108/controlled-*`. Test wymaga widoczności własnych zapytań w pg_stat_activity i mieści się w3s; bieżący lokalnyPostgreSQL spełnia te warunki. Bez Stripe/HTTP/UI lub normalnegoAPIrestartu.

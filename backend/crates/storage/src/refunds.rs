@@ -587,10 +587,34 @@ mod tests {
         let request2 = uuid::Uuid::new_v4().to_string();
         let request3 = uuid::Uuid::new_v4().to_string();
         let other_db = Storage::connect(&url).await.unwrap();
-        let (a, b) = tokio::join!(
-            db.refund_prepare(&order, &request2, 400, &actor, 1002),
-            other_db.refund_prepare(&order, &request3, 400, &other_actor, 1002)
-        );
+        let mut blocker = db.pool.begin().await.unwrap();
+        let blocker_pid: i32 =
+            sqlx::query_scalar("SELECT pg_backend_pid() FROM orders WHERE id=$1 FOR UPDATE")
+                .bind(&order)
+                .fetch_one(&mut *blocker)
+                .await
+                .unwrap();
+        let requests = async {
+            tokio::join!(
+                db.refund_prepare(&order, &request2, 400, &actor, 1002),
+                other_db.refund_prepare(&order, &request3, 400, &other_actor, 1002)
+            )
+        };
+        let release = async {
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                loop {
+                    let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND usename=current_user AND state='active' AND wait_event_type='Lock' AND query=$1 AND pid<>$2")
+                        .bind("SELECT * FROM orders WHERE id=$1 FOR UPDATE").bind(blocker_pid)
+                        .fetch_one(&db.pool).await.unwrap();
+                    if waiting == 2 {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            }).await.expect("both admins must contend on the locked order before release");
+            blocker.commit().await.unwrap();
+        };
+        let ((a, b), ()) = tokio::join!(requests, release);
         let (a, b) = (a.unwrap(), b.unwrap());
         assert_eq!(
             usize::from(a.is_ok()) + usize::from(b.is_ok()),
