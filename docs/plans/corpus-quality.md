@@ -21,6 +21,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | Bieżący korpus API,acbd999 | **41 PASS/0 FAIL/0 SKIP/0 flaky**,594,9s:24native/12manual/4wadliwe/1limit i36GLB. Model37typed422 w2,212s.486hashy i oczekiwania bez zmian; osobny przebieg, nie nowy dowód UI. |
 | Korpus UI, `40e8a5d` | 41 PASS, 36 renderów, 144 unikalne obejrzane ujęcia; ceny UI tylko 9/20/29. To osobny przebieg na innym HEAD. |
 | Bieżący korpus UI,d560c97 | **41 PASS/0 FAIL/0 SKIP/0 flaky**,662,9s:36renderów,144unikalne obejrzane ujęcia1440/390/light/dark.486hashy zgodne. CenyUI tylko9/20/29; orientacja29 i formalny kontrast niepotwierdzone. |
+| Macierze3MF — nowsza poprawka | Trzy kolumny konstruktora poprawione: rotation/shear/nested3MF miały3FAIL, teraz22unit/2nativeAPIUI PASS. Model29upright/basebelow zgodnie ze źródłem. PełnyAPI/UI41 po tej zmianie jeszcze NOT RUN; wcześniejsze41PASS historyczne. |
 | Większe modele | Pełny STL, kompaktowy/spatial GLB i jawnie uproszczony tylko podgląd; [budżety](large-models.md). Model 41 nadal ponad limitem; 14/21/32/37 poprawnie odrzucone jako wadliwe. |
 | Zbiorczy `baad9d1` | **179 PASS / 0 FAIL / 1 opt-in SKIP**, 0 flaky; osiem grup exit0, wrapper2 wyłącznie przez skip.441hashy bez zmian. |
 | Large na tym samym HEAD | Pominięty przypadek uruchomiony osobno: **1 PASS/0SKIP**,16,5s, te same441hashy. Nie zmienia wyniku wrappera. |

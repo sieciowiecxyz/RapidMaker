@@ -1099,10 +1099,12 @@ fn transform_determinant(matrix: [[f32; 4]; 4]) -> Result<f64, PreviewError> {
 
 fn mat4_from_3mf_transform(transform: [f64; 12]) -> [[f32; 4]; 4] {
     let [m00, m01, m02, m10, m11, m12, m20, m21, m22, tx, ty, tz] = transform;
+    // 3MF Core §3.3 uses row vectors; our matrices store column-vector columns.
+    // Transpose the mathematical 4x4 once, including its final translation row.
     [
-        [m00 as f32, m10 as f32, m20 as f32, 0.0],
-        [m01 as f32, m11 as f32, m21 as f32, 0.0],
-        [m02 as f32, m12 as f32, m22 as f32, 0.0],
+        [m00 as f32, m01 as f32, m02 as f32, 0.0],
+        [m10 as f32, m11 as f32, m12 as f32, 0.0],
+        [m20 as f32, m21 as f32, m22 as f32, 0.0],
         [tx as f32, ty as f32, tz as f32, 1.0],
     ]
 }
@@ -1611,6 +1613,119 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn assert_three_mf_vertices(input: &[u8], expected: [[f32; 3]; 4], volume: f64) {
+        let output = source_to_production(
+            "transform.3mf",
+            input,
+            &ConversionLimits::default(),
+            &ThreeMfLimits::default(),
+        )
+        .unwrap();
+        let (scene, _) =
+            parse_stl(&output.stl, &ConversionLimits::default(), Instant::now()).unwrap();
+        assert_eq!(scene.positions_mm.len(), 4);
+        for point in expected {
+            assert!(
+                scene.positions_mm.contains(&point),
+                "missing {point:?}; actual {:?}",
+                scene.positions_mm
+            );
+        }
+        assert!((signed_volume(&scene) - volume).abs() < 0.001);
+    }
+
+    #[test]
+    fn three_mf_row_vector_rotation_and_translation() {
+        let input = mirror_package("1 0 0 0 0 1 0 -1 0 10 20 30", None, 0);
+        assert_three_mf_vertices(
+            &input,
+            [
+                [10., 20., 30.],
+                [12., 20., 30.],
+                [10., 20., 32.],
+                [10., 18., 30.],
+            ],
+            8. / 6.,
+        );
+    }
+
+    #[test]
+    fn three_mf_row_vector_shear_and_translation() {
+        let input = mirror_package("1 2 0 0 1 0 0 0 1 10 20 30", None, 0);
+        assert_three_mf_vertices(
+            &input,
+            [
+                [10., 20., 30.],
+                [12., 24., 30.],
+                [10., 22., 30.],
+                [10., 20., 32.],
+            ],
+            8. / 6.,
+        );
+    }
+
+    #[test]
+    fn three_mf_row_vector_nonuniform_scale_and_reflection() {
+        let input = mirror_package("-2 0 0 0 3 0 0 0 4 10 20 30", None, 0);
+        assert_three_mf_vertices(
+            &input,
+            [
+                [10., 20., 30.],
+                [6., 20., 30.],
+                [10., 26., 30.],
+                [10., 20., 38.],
+            ],
+            32.,
+        );
+    }
+
+    #[test]
+    fn three_mf_row_vector_nested_production_component() {
+        // The child translation is applied before the parent's +90 degree X rotation.
+        let input = mirror_package(
+            "1 0 0 0 0 1 0 -1 0 10 20 30",
+            Some("1 0 0 0 1 0 0 0 1 0 2 0"),
+            0,
+        );
+        let mut source = zip::ZipArchive::new(Cursor::new(input)).unwrap();
+        let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        let mut part = String::new();
+        for index in 0..source.len() {
+            let mut entry = source.by_index(index).unwrap();
+            if entry.name().unwrap() == "3D/3dmodel.model" {
+                let mut xml = String::new();
+                entry.read_to_string(&mut xml).unwrap();
+                let start = xml.find("<object id=\"1\"").unwrap();
+                let end = start + xml[start..].find("</object>").unwrap() + "</object>".len();
+                part = format!(
+                    r#"<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>{}</resources><build/></model>"#,
+                    &xml[start..end]
+                );
+                xml.replace_range(start..end, "");
+                xml = xml.replace("<model ", r#"<model xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" "#)
+                    .replace("<component objectid=", r#"<component p:path="/3D/Objects/part.model" p:UUID="12345678-1234-1234-1234-123456789abc" objectid="#);
+                output.start_file("3D/3dmodel.model", options).unwrap();
+                output.write_all(xml.as_bytes()).unwrap();
+            } else {
+                output.raw_copy_file(entry).unwrap();
+            }
+        }
+        output.start_file("3D/Objects/part.model", options).unwrap();
+        output.write_all(part.as_bytes()).unwrap();
+        let input = output.finish().unwrap().into_inner();
+        assert_three_mf_vertices(
+            &input,
+            [
+                [10., 20., 32.],
+                [12., 20., 32.],
+                [10., 20., 34.],
+                [10., 18., 32.],
+            ],
+            8. / 6.,
+        );
     }
 
     #[test]

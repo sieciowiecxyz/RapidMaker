@@ -830,3 +830,14 @@ Sol xhigh niezależnie potwierdził41unikalnychprzypadków, klasyfikacje, hashe 
 Worker i agent główny obejrzeli wszystkie6plansz kontaktowych; Solxhigh niezależnie1/5/6 oraz obecny/historyczny29mobilelight. Nie znaleziono nowej pustej sceny, oczywistego clippingu lub zasłoniętych kontrolek. Rozproszone złożenia2/16/18/24/31 pozostają małe/ciemne, szczególnie dark. Model29 ma bazę powyżej odwróconej postaci także w dawnym przebiegu; zgodność z intencją pliku źródłowego niepotwierdzona, nie traktujemy podobieństwa historycznego jako poprawności orientacji. Brak formalnego pomiaru kontrastu/fizycznego telefonu.
 
 CenyUI sprawdzane wyłącznie9/20/29 względem serwera, manualUI5/19/22/25.24native/12manual to osobny bieżący raportAPI, nie ten przebiegUI. Hashy obrazów użyto do kontroli odrębności, nie jako zastępstwa oględzin. Wynik nie dowodzi pełnej macierzy, wszystkich urządzeń, rentowności ani zakończenia goal; reviewer7–9/10 bez wymuszania10. Wygląd produktu bez zmian.
+
+
+## 2026-11-07 — poprawa macierzy 3MF i orientacji modelu29
+
+Niezależna analiza źródłowego3MF i dokładnych funkcji Rust wykazała błąd, nie preferencję wizualną: konstruktor macierzy transponował część liniową w niewłaściwym kierunku. [3MF Core §3.3](https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md) opisuje row-vector/finaltranslationrow; parser przekazuje12wartości bez przekształcenia. Dla+90°X punkt[0,2,0] powinien dawać[10,20,32], wcześniej dawał[10,20,28]. Diagonalne scale/reflection/translation przechodziły, więc wcześniejsze testy nie wykrywały błędu.
+
+Poprawka trzech kolumn w geometry/lib.rs, bez zmian viewer/layoutu. Cztery rzeczywiste paczki3MF sprawdzają wierzchołki/objętość po rotation+translation,shear,nonuniformscale+reflection,nestedproductionreference. Baseline3FAIL/1PASS; po zmianie22three_mfPASS,build/fmt/diffPASS. Scoped nativeformaty +corpusUI29: **2PASS/0FAIL/0SKIP/0flaky,85,6s**,runtime7f4dfbbf. Obecne1440/390/light/dark: postać prawidłowo nad podstawą; worker/główny/reviewer obejrzeli ujęcia. Spec i źródłoweprzekształcenie, nie zgodność ze starym obrazem, stanowią dowód kierunku. Fixturecena4178→4180gr; strona/cart/serwer zgodne, bez wymagania niezmienionej ceny.
+
+Pierwszy preflight nie znalazł/usr/bin/chromium i zakończył się przedDB; istniejącyChrome przeszedł. Dowody `preview-visibility-20261107/REPORT.md`, beforeFAIL/afterPASS, audit macierzy i źródła, scoped `orientation-case29-20261107.json`/obrazy. CleanupPID/DB/katalog potwierdzony; zwykłyAPI bez restartu. Solxhigh sprawdził składanie/winding/odbicia, brak blokera.
+
+Poprzedni pełnyAPI/UI41PASS dotyczy wcześniejszej geometrii; po korekcie obrotów pełny korpus jeszcze NOT RUN. Kontrast rozproszonych czarnych części pozostaje ograniczeniem; pomiar lokalnych krawędzi1,35–1,51 i bardzo małych powierzchni nie jest certyfikacją WCAG. Nie zmieniono światła/kolorów/style.
