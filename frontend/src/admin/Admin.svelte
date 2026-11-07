@@ -791,7 +791,9 @@
                 </dl>
                 <div class="model-controls">
                   <label
-                    >Cena / szt. (zł)<input
+                    >{m.priceApproximate
+                      ? 'Cena / szt. (zł, orientacyjnie)'
+                      : 'Cena / szt. (zł)'}<input
                       type="number"
                       value={m.price}
                       placeholder="Indywidualnie"

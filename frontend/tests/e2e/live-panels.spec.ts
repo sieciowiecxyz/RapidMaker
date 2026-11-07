@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 const id = '00000000-0000-4000-8000-000000000001';
-async function fixture(page: Page, role = 'client', verified = true) {
+async function fixture(page: Page, role = 'client', verified = true, lineTotal = 52) {
   let stage = verified ? 'authenticated' : 'second_factor';
   let authenticated = true,
     state = 'paid',
@@ -36,7 +36,7 @@ async function fixture(page: Page, role = 'client', verified = true) {
       postalCode: '05-500',
       city: 'Piaseczno',
     },
-    lines: [{ model_id: 'model-1', quantity: 3, unit_grosze: 18, total_grosze: 52 }],
+    lines: [{ model_id: 'model-1', quantity: 3, unit_grosze: 18, total_grosze: lineTotal }],
     fulfillment: {
       delivery: { method: 'courier' },
       offer: { name: 'DPD', price_grosze: 1555 },
@@ -247,6 +247,24 @@ test('admin status and chat use CSRF, exact totals and clear expired data', asyn
   await expect(page).toHaveURL(/\/logowanie\?/);
   await expect(page.getByText('Klient API', { exact: true })).toHaveCount(0);
 });
+
+for (const total of [52, 54]) {
+  test(`admin unit price identifies rounding for line total ${total}`, async ({ page }) => {
+    const api = await fixture(page, 'admin', true, total);
+    await page.goto('/admin.html');
+    await page.getByRole('button', { name: `Otwórz ${id}`, exact: true }).click();
+    const unit = page.getByLabel(
+      total === 52 ? 'Cena / szt. (zł, orientacyjnie)' : 'Cena / szt. (zł)',
+      { exact: true },
+    );
+    await expect(unit).toBeDisabled();
+    await expect(unit).toHaveValue('0.18');
+    await expect(page.locator('.model-controls strong')).toContainText(
+      total === 52 ? '0,52' : '0,54',
+    );
+    expect(api.writes).toHaveLength(0);
+  });
+}
 
 test('refund retry after lost response reuses request id and remains pending', async ({ page }) => {
   const api = await fixture(page, 'admin');

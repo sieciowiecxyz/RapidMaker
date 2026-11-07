@@ -651,3 +651,9 @@ Review wyeliminowało dwie regresje: nie wolno odrzucać odpowiedzi już zapisan
 Po końcowym usunięciu guardu blokującego kolejne powroty: repeated-return-revoke-headless-20261107 **2PASS/0FAIL/0SKIP/0flaky,79,6s**; pierwsze rzeczywiste/me200 wstrzymane, zdalne wylogowanie, drugie/me401 wstrzymane. Stare200 nie odsłania widoku;401 usuwa chat/plik/konto, szkic publiczny zachowany.6hashów źródeł/dist zgodnych między przypadkami i dyskiem. Poprzednich7 nie powtarzano po tej dwuliniowej zmianie. Svelte0/TS/build/Prettier/diff PASS; Sol xhigh przejrzał źródła i raporty, brak blokera.
 
 Zdarzenia blur/focus/visibility są syntetyczne w headless; logowanie/TOTP, odwołanie sesji, HTTP i DOM rzeczywiste. Brak dowodu natywnego focus/BFCache; stale widoczna karta bez zdarzenia/requestu nie otrzymuje aktywnego push-revoke. Fallback zmiany dwóch adminów sprawdzony źródłowo, bez osobnego E2E dwóch adminów.
+
+## 2026-11-07 — zaokrąglona cena jednostkowa w panelu admina
+
+Przegląd integerpricing/cart nie wykazał błędu pobieranej kwoty. Cena jednostkowa ceil(total/quantity) mogła jednak wyglądać na dokładną obok dokładnej sumy pozycji. Adapter porównuje grosze przed konwersją naPLN; tylko rozbieżna cena dostaje etykietę „orientacyjnie”. Bez zmiany sumy, płatności, kontrolek lub stylów.
+
+admin-unit-rounding-baseline:1PASS/1FAIL (52/3 brak właściwej etykiety,54/3 poprawne). admin-unit-rounding-fixed:**3PASS/0FAIL/0SKIP/0flaky,1,44s** — oba przypadki i istniejący admin status/chat/CSRF. To kontrakt renderowania z mockAPI, nie dowód rzeczywistej płatności. Svelte0/build/diff PASS; Sol xhigh sprawdził mapping, precyzję i raporty, brak blokera.

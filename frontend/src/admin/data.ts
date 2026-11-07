@@ -26,6 +26,7 @@ export type Model = {
   quality: string;
   strength: string;
   price: number | null;
+  priceApproximate?: boolean;
   amount: number | null;
   done: number;
 };
@@ -229,6 +230,10 @@ export function orderFromServer(row: ServerOrder): Order {
       color: '—',
       qty: l.quantity,
       price: l.unit_grosze == null ? null : l.unit_grosze / 100,
+      priceApproximate:
+        l.unit_grosze != null &&
+        l.total_grosze != null &&
+        l.unit_grosze * l.quantity !== l.total_grosze,
       amount: l.total_grosze == null ? null : l.total_grosze / 100,
       done:
         row.production?.progress.find((p) => p.model_id === (l.line_id || l.model_id))?.done ?? 0,
