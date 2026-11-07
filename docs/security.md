@@ -51,3 +51,13 @@ Test sprawdza nazwę bazy/katalogu i konfigurację przed utworzeniem fixtures. P
 Vite dev i preview ustawiają CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'`, `X-Frame-Options: DENY` i `X-Content-Type-Options: nosniff`. Aplikacja nie może być osadzana w ramce; własne iframe Stripe/Maps, workery i skrypty nie dostały nowej polityki źródeł.
 
 Nagłówki nie są częścią plików `dist`. Przyszły hosting musi wystawić je sam; nie jest to konfiguracja wdrożenia produkcyjnego. Test headless sprawdza cztery dokumenty HTML i blokadę cross-origin iframe przez łączną politykę CSP/XFO; nie dowodzi uprzywilejowanego ataku na localhost.
+
+## Pamięć tymczasowa workerów
+
+Aktualny kod uruchamia geometrię i Bambu z `/dev` tylko do odczytu oraz osobnym, zapisywalnym `/dev/shm` o limicie 128 MiB. `/dev/null` i `/dev/urandom` działają. Slicer zachowuje osobne 128 MiB w `/tmp`.
+
+Natywny probe korzysta z konstruktorów produkcyjnych poleceń; zastępuje tylko końcowy program zaufanym testem jednego bajtu. Sprawdza RO urządzeń, rozmiar i zapis w shared memory. Nie wyczerpuje zasobów ani nie wykonuje exploita z modelu. Wcześniej tmpfs `/dev` oferował około 45,9 GiB zapisu; nadal ma taki rozmiar, lecz zwykłe zapisy kończą się EROFS.
+
+AS i CPU pozostają limitami pojedynczego procesu. Ta zmiana nie zapewnia łącznego limitu RAM/CPU potomków ani nowego limitu zawartości `/out` slicera. Sprawdzono profile geometrii standard/large i reprezentatywne cięcie Bambu. Zmianę uruchomiono w testach izolowanych; zwykły lokalny serwer zachował poprzednią binarkę.
+
+Regresje wymagają Linux/bubblewrap/Bambu i są domyślnie ignored. Jawne uruchomienie: `cargo test --locked --manifest-path backend/Cargo.toml -p rapidmaker-api -p rapidmaker-slicer native_device_mounts_are_readonly_with_bounded_writable_shm -- --ignored --nocapture`.

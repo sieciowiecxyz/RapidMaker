@@ -517,19 +517,15 @@ fn slicer_cpus(status: &str) -> Result<String, Error> {
     }
 }
 
-async fn run_plate(
+fn plate_command(
     workspace: &Workspace,
+    out: &Path,
+    cpus: &str,
     copies: u32,
     cpu_seconds: u64,
-) -> Result<PlateBatch, Error> {
-    let out = workspace.0.join("out");
-    if out.exists() {
-        fs::remove_dir_all(&out)?;
-    }
-    fs::create_dir(&out)?;
-    let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status")?)?;
+) -> tokio::process::Command {
     let mut command = tokio::process::Command::new("/usr/bin/taskset");
-    command.args(["--cpu-list", &cpus, "/usr/bin/prlimit"]);
+    command.args(["--cpu-list", cpus, "/usr/bin/prlimit"]);
     command.arg(format!("--cpu={cpu_seconds}"));
     command.args([
         "--as=4294967296",
@@ -561,6 +557,13 @@ async fn run_plate(
         "/proc",
         "--dev",
         "/dev",
+        // Keep device nodes usable, but bound writable shared memory.
+        "--size",
+        "134217728",
+        "--tmpfs",
+        "/dev/shm",
+        "--remount-ro",
+        "/dev",
         "--size",
         "134217728",
         "--tmpfs",
@@ -579,7 +582,7 @@ async fn run_plate(
     }
     command
         .arg("--bind")
-        .arg(&out)
+        .arg(out)
         .arg("/out")
         .args([
             "--chdir",
@@ -620,6 +623,21 @@ async fn run_plate(
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
+    command
+}
+
+async fn run_plate(
+    workspace: &Workspace,
+    copies: u32,
+    cpu_seconds: u64,
+) -> Result<PlateBatch, Error> {
+    let out = workspace.0.join("out");
+    if out.exists() {
+        fs::remove_dir_all(&out)?;
+    }
+    fs::create_dir(&out)?;
+    let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status")?)?;
+    let mut command = plate_command(workspace, &out, &cpus, copies, cpu_seconds);
     runtime_sha256().await?;
     let wall_seconds = cpu_seconds + 5;
     let status = tokio::time::timeout(Duration::from_secs(wall_seconds), command.status())
@@ -708,6 +726,94 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plate_command_bounds_shared_memory_before_remounting_devices() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-command-probe-{}", uuid::Uuid::new_v4())),
+        );
+        let command = plate_command(&workspace, Path::new("/unused-out"), "0", 1, 60);
+        let args = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(args.windows(8).any(|args| args
+            == [
+                "--dev",
+                "/dev",
+                "--size",
+                "134217728",
+                "--tmpfs",
+                "/dev/shm",
+                "--remount-ro",
+                "/dev"
+            ]));
+        assert!(args.contains(&"--as=4294967296"));
+        assert!(args.contains(&"--cpu=60"));
+        assert!(args.windows(2).any(|args| args == ["--remount-ro", "/"]));
+    }
+
+    // Uses the production command; only the final AppRun invocation is replaced.
+    #[tokio::test]
+    #[ignore = "requires Linux bubblewrap, installed Bambu runtime and /usr/bin/python3"]
+    async fn native_device_mounts_are_readonly_with_bounded_writable_shm() {
+        let workspace = Workspace(
+            std::env::temp_dir().join(format!("rapidmaker-mount-probe-{}", uuid::Uuid::new_v4())),
+        );
+        fs::create_dir(&workspace.0).unwrap();
+        for file in ["model.stl", "machine.json", "process.json", "filament.json"] {
+            fs::write(workspace.0.join(file), b"trusted probe placeholder").unwrap();
+        }
+        let out = workspace.0.join("out");
+        fs::create_dir(&out).unwrap();
+        let cpus = slicer_cpus(&fs::read_to_string("/proc/thread-self/status").unwrap()).unwrap();
+        let production = plate_command(&workspace, &out, &cpus, 1, 60);
+        let args = production.as_std().get_args().collect::<Vec<_>>();
+        let invocation = args
+            .iter()
+            .rposition(|arg| *arg == "/opt/bambustudio-bin/AppRun")
+            .unwrap();
+        let mut probe = tokio::process::Command::new(production.as_std().get_program());
+        probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os
+result = {}
+for directory in ['/dev', '/dev/shm']:
+    stat = os.statvfs(directory)
+    item = {'advertised_bytes': stat.f_blocks * stat.f_frsize, 'available_bytes': stat.f_bavail * stat.f_frsize}
+    target = directory + '/rapidmaker-one-byte-probe'
+    try:
+        with open(target, 'xb') as output:
+            assert output.write(b'x') == 1
+        os.unlink(target)
+        item['written_bytes'] = 1
+        assert directory == '/dev/shm'
+    except OSError as error:
+        item['errno'] = error.errno
+        assert directory == '/dev' and error.errno == errno.EROFS
+    result[directory] = item
+assert result['/dev/shm']['advertised_bytes'] == 134217728
+with open('/dev/null', 'wb') as device:
+    assert device.write(b'x') == 1
+with open('/dev/urandom', 'rb', buffering=0) as device:
+    assert len(device.read(1)) == 1
+result['device_io_bytes'] = 1
+result['mounts'] = [line.strip() for line in open('/proc/self/mountinfo') if line.split()[4] in ['/dev', '/dev/shm']]
+print(json.dumps(result))"#])
+            .env_clear().env("PATH", "/usr/bin:/bin").kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(10), probe.output())
+            .await
+            .expect("sandbox probe timed out")
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr[..output.stderr.len().min(4096)])
+        );
+        println!(
+            "slicer sandbox: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+
     #[test]
     fn trusted_slice_limits_keep_standard_and_large_budgets_bounded() {
         assert!(validate_slice_limits(64 * 1024 * 1024, 60).is_ok());

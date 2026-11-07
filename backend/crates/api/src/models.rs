@@ -233,6 +233,13 @@ fn isolated_worker(
             "/proc",
             "--dev",
             "/dev",
+            // Keep device nodes usable, but bound writable shared memory.
+            "--size",
+            "134217728",
+            "--tmpfs",
+            "/dev/shm",
+            "--remount-ro",
+            "/dev",
             "--ro-bind",
         ])
         .arg(executable)
@@ -676,6 +683,75 @@ mod resource_tests {
         }
     }
 
+    // Uses the production command; only the final worker invocation is replaced.
+    #[tokio::test]
+    #[ignore = "requires Linux bubblewrap, user namespaces and /usr/bin/python3"]
+    async fn native_device_mounts_are_readonly_with_bounded_writable_shm() {
+        let source = std::env::temp_dir().join(format!(
+            "rapidmaker-mount-probe-{}.stl",
+            uuid::Uuid::new_v4()
+        ));
+        fs::write(&source, b"trusted probe placeholder").unwrap();
+        for profile in [ModelProfile::Standard, ModelProfile::Large] {
+            let output = fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .unwrap();
+            let production = isolated_worker(
+                &source,
+                output,
+                "--geometry-worker",
+                134217728,
+                None,
+                None,
+                profile,
+            )
+            .unwrap();
+            let args = production.as_std().get_args().collect::<Vec<_>>();
+            let invocation = args.iter().rposition(|arg| *arg == "/worker").unwrap();
+            let mut probe = tokio::process::Command::new(production.as_std().get_program());
+            probe.args(&args[..invocation]).args(["/usr/bin/python3", "-c", r#"import errno, json, os
+result = {}
+for directory in ['/dev', '/dev/shm']:
+    stat = os.statvfs(directory)
+    item = {'advertised_bytes': stat.f_blocks * stat.f_frsize, 'available_bytes': stat.f_bavail * stat.f_frsize}
+    target = directory + '/rapidmaker-one-byte-probe'
+    try:
+        with open(target, 'xb') as output:
+            assert output.write(b'x') == 1
+        os.unlink(target)
+        item['written_bytes'] = 1
+        assert directory == '/dev/shm'
+    except OSError as error:
+        item['errno'] = error.errno
+        assert directory == '/dev' and error.errno == errno.EROFS
+    result[directory] = item
+assert result['/dev/shm']['advertised_bytes'] == 134217728
+with open('/dev/null', 'wb') as device:
+    assert device.write(b'x') == 1
+with open('/dev/urandom', 'rb', buffering=0) as device:
+    assert len(device.read(1)) == 1
+result['device_io_bytes'] = 1
+result['mounts'] = [line.strip() for line in open('/proc/self/mountinfo') if line.split()[4] in ['/dev', '/dev/shm']]
+print(json.dumps(result))"#])
+            .env_clear().env("PATH", "/usr/bin:/bin").kill_on_drop(true);
+            let output = tokio::time::timeout(Duration::from_secs(10), probe.output())
+                .await
+                .expect("sandbox probe timed out")
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr[..output.stderr.len().min(4096)])
+            );
+            println!(
+                "geometry sandbox: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+        fs::remove_file(source).unwrap();
+    }
+
     #[test]
     fn isolated_worker_receives_profile_without_inheriting_configuration() {
         let profile = ModelProfile::Large;
@@ -699,6 +775,17 @@ mod resource_tests {
             .map(|s| s.to_str().unwrap())
             .collect::<Vec<_>>();
         assert!(args.contains(&"--fsize=209715200"));
+        assert!(args.windows(8).any(|args| args
+            == [
+                "--dev",
+                "/dev",
+                "--size",
+                "134217728",
+                "--tmpfs",
+                "/dev/shm",
+                "--remount-ro",
+                "/dev"
+            ]));
         assert!(args.contains(&"--as=2147483648"));
         assert!(args.contains(&"--cpu=25"));
         assert_eq!(
