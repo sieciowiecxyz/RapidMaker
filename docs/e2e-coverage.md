@@ -7,7 +7,9 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 ## Najnowsze dowody — 2026-11-07
 
-Nowsza poprawka macierzy3MF: `preview-visibility-20261107/` — baseline3FAIL/1PASS, po poprawce22unitPASS i scopedAPI/UI2PASS, model29upright zgodnie ze źródłem/specyfikacją. Pełne41API/UI poniżej dotyczą wcześniejszej geometrii; ponowny pełny korpus na poprawce jeszcze NOT RUN.
+Po korekcie macierzy: `corpus-matrix-api-20261107/` **41PASSAPI**, `corpus-matrix-ui-20261107/final-report.json` osobno **41PASSUI**, bezFAIL/SKIP/flaky.24native/12manual/36GLB,144obejrzane ujęcia;486hashy bez zmian. Model25terazprinter_fit, ścisłytest422/reason/message zaktualizowany po zachowanymUI40/1. Kwotyfixture/wymiary mogą się zmienić po poprawnym obrocie; wszystkie rachunkiAPI nadal przechodzą.
+
+Nowsza poprawka macierzy3MF: `preview-visibility-20261107/` — baseline3FAIL/1PASS, po poprawce22unitPASS i scopedAPI/UI2PASS, model29upright zgodnie ze źródłem/specyfikacją. Pełne powtórzenie na poprawce opisano poniżej.
 
 Bieżący pełny UI: `corpus-ui-current-20261107/` na d560c97 — **41 PASS/0 FAIL/0 SKIP/0 flaky**,36renderów/144obejrzane ujęcia desktop/mobile/light/dark;486hashy niezmienione. CenyUI9/20/29, manualUI5/19/22/25. Rozproszone części ciemne/małe; orientacja29 i formalny kontrast pozostają niepotwierdzone. Brak nowego redesignu.
 

@@ -841,3 +841,14 @@ Poprawka trzech kolumn w geometry/lib.rs, bez zmian viewer/layoutu. Cztery rzecz
 Pierwszy preflight nie znalazł/usr/bin/chromium i zakończył się przedDB; istniejącyChrome przeszedł. Dowody `preview-visibility-20261107/REPORT.md`, beforeFAIL/afterPASS, audit macierzy i źródła, scoped `orientation-case29-20261107.json`/obrazy. CleanupPID/DB/katalog potwierdzony; zwykłyAPI bez restartu. Solxhigh sprawdził składanie/winding/odbicia, brak blokera.
 
 Poprzedni pełnyAPI/UI41PASS dotyczy wcześniejszej geometrii; po korekcie obrotów pełny korpus jeszcze NOT RUN. Kontrast rozproszonych czarnych części pozostaje ograniczeniem; pomiar lokalnych krawędzi1,35–1,51 i bardzo małych powierzchni nie jest certyfikacją WCAG. Nie zmieniono światła/kolorów/style.
+
+
+## 2026-11-07 — pełne API i UI po korekcie macierzy3MF
+
+API `corpus-matrix-api-20261107/` na0e53ffb/pinned7f4dfbbf: **41 PASS/0 FAIL/0 SKIP/0 flaky**,587,492s/597,918swrapper. Nadal24native/12manual/4wadliwe/1resource,36GLB. Korekta geometrii zmieniła8z12zapisanych manualbounds;25z463,816×534,418×12 na463,816×449,936×12mm, powód size_limit→printer_fit (poniżej500mm, pozaP1P).21pomiarów native różniło się,11kwotbrutto o−17..+4gr; wszystkie24rachunki przechodzą. Nie przypisujemy wszystkich różnic korekcie, bo Bambu wykazywał wcześniej drobne różnice czasu. Wymiary wszystkich native nie były zapisane w istniejącym raporcie — jawna granica.486hashy bez zmian,41wejść/test bez zmian,cleanup potwierdzony.
+
+PierwszyUI `corpus41matrixui20261107a`: **40 PASS/1 FAIL**,651,756s, zachowany;25trafił na nieaktualne oczekiwanie>500mm. Minimalna korekta wyłącznie corpus-ui.spec:25sprawdza wszystkieosie≤500, brak ortogonalnego dopasowaniaP1P238×250×256, rzeczywiste422/manual_quote_required/printer_fit/dokładnąwiadomość oraz identycznytekstUI i brakceny.5/19/22zachowują warunek>500. Scoped25osobno1PASS/16,6s.
+
+Nowy pełnyUI `corpus-matrix-ui-20261107/final-report.json`: **41 PASS/0 FAIL/0 SKIP/0 flaky**,593,194s,exit0.144unikalne ujęcia36renderów,5odmów.486hashy przed/poidentyczne z jedyną autoryzowaną zmianą testu SHA9e0f0512c0d97c0ab8d4a1fe7adf08f3453f52f272d5ee981966d2756a08f7e0; produkt/frontend/dist niezmienione. Worker obejrzał6plansz, agent główny i Solxhigh4/5/6:29upright/basebelow,27otwarta tacka w górę,35podpora pionowo,36kopuły w górę; brak pustych/uciętych scen/kontrolek. Nie potwierdza to intencji źródłowej każdego złożenia; małe ciemne części nadal słabo widoczne.
+
+UIcenytylko9/20/29,manual5/19/22/25; API24/12 to osobny przebieg. SHAAPIraportu1da6d62a1de9b18d60673ca11ed530900f47e80b37b47a645fef290278b9f368; finalUI23daeb2e22762518184198140eb07eeb3cee0e6690322d7446d0dffca381caf5. CleanupPID/DB/root potwierdzony, normalny serwer bezrestartu; bez providerów/pobierania/mail,headless. Solxhigh bezblokera zmianytestu i dowodów. PoprzednieFAILpozostają, nie składamy osobnych przebiegów w jeden82-testPASS. Bez gwarancji rentowności lub zakończenia celu.

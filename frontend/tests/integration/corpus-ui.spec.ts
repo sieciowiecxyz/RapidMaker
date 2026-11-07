@@ -145,12 +145,11 @@ for (const item of selected) {
     await page.locator('input[name=material][value=pla]').check();
     await page.locator('input[name=color]').first().check();
     await page.locator('input[name=quality][value=standard]').check();
-    const quoted =
-      item.case === 9
-        ? page.waitForResponse(
-            (r) => r.url().endsWith('/api/quotes/estimate') && r.request().method() === 'POST',
-          )
-        : undefined;
+    const quoted = [9, 25].includes(item.case)
+      ? page.waitForResponse(
+          (r) => r.url().endsWith('/api/quotes/estimate') && r.request().method() === 'POST',
+        )
+      : undefined;
     const cartQuoted =
       item.case === 9
         ? page.waitForResponse(
@@ -161,8 +160,8 @@ for (const item of selected) {
           )
         : undefined;
     await page.locator('input[name=strength][value=standard]').check();
-    if (quoted) {
-      expect((await quoted).status()).toBe(202);
+    if (item.case === 9) {
+      expect((await quoted!).status()).toBe(202);
       const server = await cartQuoted!;
       expect(server.status()).toBe(200);
       const quote = await server.json();
@@ -178,8 +177,25 @@ for (const item of selected) {
       ).toBeEnabled();
     } else {
       await expect(page.locator('.manual-heading')).toHaveText('Wymagana ręczna wycena');
-      expect(model.dimensions_mm.some((axis: number) => axis > 500)).toBe(true);
-      await expect(page.locator('.estimate-lines')).toContainText('model przekracza 500 mm');
+      if (item.case === 25) {
+        // Correct 3MF rotations keep this assembly below 500 mm, but outside P1P capacity.
+        const [short, middle, long] = [...model.dimensions_mm].sort((a, b) => a - b);
+        expect(long).toBeLessThanOrEqual(500);
+        expect(short <= 238 && middle <= 250 && long <= 256).toBe(false);
+        const response = await quoted!;
+        expect(response.status()).toBe(422);
+        const error = await response.json();
+        expect(error).toEqual({
+          code: 'manual_quote_required',
+          reason: 'printer_fit',
+          message:
+            'Model wymaga indywidualnego ułożenia, podziału lub innej drukarki. Poproś o wycenę indywidualną.',
+        });
+        await expect(page.locator('.estimate-lines')).toContainText(error.message);
+      } else {
+        expect(model.dimensions_mm.some((axis: number) => axis > 500)).toBe(true);
+        await expect(page.locator('.estimate-lines')).toContainText('model przekracza 500 mm');
+      }
       await expect(page.locator('.price')).toHaveCount(0);
     }
     for (const width of [1440, 390]) {
@@ -233,7 +249,7 @@ for (const item of selected) {
     }
     info.annotations.push({
       type: 'ui-render',
-      description: `Deep GUI mesh/privacy checks and four frames; ${item.case === 9 ? 'server price checked' : 'explicit manual quote above 500 mm'}`,
+      description: `Deep GUI mesh/privacy checks and four frames; ${item.case === 9 ? 'server price checked' : item.case === 25 ? 'explicit printer_fit manual quote below 500 mm' : 'explicit manual quote above 500 mm'}`,
     });
   });
 }
