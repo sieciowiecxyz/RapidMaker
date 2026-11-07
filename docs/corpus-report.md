@@ -587,3 +587,9 @@ Rozszerzony journey wysyła2 rzeczywiste SMTP odpowiedzi z identycznym Message-I
 `E2E_REPORT_NAME=journey-email-replay-20261107 python frontend/tests/run-integration.py --sandbox --client-totp journey.spec.ts`: **1PASS/0FAIL/0SKIP/0flaky,175s**; dotychczasowe manual offer/payment/refund/email zachowane. Przypadkowo rozpoczęty wcześniej runner bez nazwy raportu zatrzymano w startupie przed browser/testami; log prywatny zachowany, nie ukryto nieudanego testu.
 
 Sol xhigh przejrzał source/raport: bez blokera, dowód rzeczywistej deduplikacji tych dwóch dostaw. Po przebiegu main dodał15s timeout psql i typ UIDv/UIDs bez nowego any; TS/Pythoncompile/Prettier/diff PASS, bez ponawiania zewnętrznych operacji dla zmian pomocniczych. Helper nadal wysyła wyłącznie void; nie zapisuje kodów/tokenów, trace/screens off. Bez zmian produkcyjnego backendu/UI; jeden sender/mailbox/reply nie jest dowodem wszystkich możliwych wariantów poczty.
+
+## 2026-11-07 — formatowanie i Clippy całego Rust workspace
+
+Na czystymbc2855f `cargo fmt --manifest-path backend/Cargo.toml --all -- --check` oraz `cargo clippy --offline --locked --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings`: **PASS/exit0**, Clippy4,42s. Wszystkie13crate’ów/default features/targety, bez zmian kodu. Prywatny zapis komend rust-workspace-check-bc2855f.json.
+
+Sol xhigh sprawdził manifesty/linty: brak szerokiego wyciszania, tylko item-scoped too_many_arguments wstorage. Wynik dotyczy włączonych lintów Rust, nie pedantic/nursery/opcjonalnych kombinacji, wykonania testów lub dowodu bezpieczeństwa. Osobno nadal emitowane wcześniejsze GCC maybe-uninitialized w wygenerowanym CXX STEP; nie wyciszano ani nie nazywamy tego wynikiem0 ostrzeżeń całego natywnego stosu. Brak konkretnego defektu do poprawienia w tym zakresie.
