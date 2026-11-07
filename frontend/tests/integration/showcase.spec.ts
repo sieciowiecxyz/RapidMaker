@@ -146,3 +146,98 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+for (const source of ['sample', 'upload'] as const) {
+  test(`WebGL context restore repaints the current ${source} mesh and controls`, async ({
+    page,
+  }, info) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/wycena');
+    if (source === 'sample') {
+      await page
+        .getByRole('button', { name: 'Nie masz pliku? Wypróbuj przykład', exact: true })
+        .click();
+    } else {
+      await page
+        .getByLabel('Dodaj modele STL, STEP lub 3MF')
+        .setInputFiles('../backend/crates/geometry/tests/fixtures/cube_20mm.stl');
+      await expect(page.locator('.print-scene .scene-caption')).toContainText('12 trójkątów');
+    }
+    await page.locator('input[name=material][value=asa]').check();
+    await page.locator('input[name=color][value=black]').check();
+    await page.locator('input[name=quality][value=standard]').check();
+    await page.locator('input[name=strength][value=standard]').check();
+    const scene = page.locator('.print-scene');
+    const canvas = scene.locator('canvas');
+    await scene.scrollIntoViewIfNeeded();
+    const uniforms = () =>
+      canvas.evaluate((node: HTMLCanvasElement) => {
+        const gl = node.getContext('webgl')!;
+        const program = gl.getParameter(gl.CURRENT_PROGRAM);
+        return Object.fromEntries(
+          [
+            'uYaw',
+            'uPitch',
+            'uColor',
+            'uLayer',
+            'uDensity',
+            'uWall',
+            'uScale',
+            'uGloss',
+            'uFlex',
+          ].map((name) => {
+            const value = gl.getUniform(program, gl.getUniformLocation(program, name)!);
+            return [name, value instanceof Float32Array ? Array.from(value) : value];
+          }),
+        );
+      });
+    let before: number[] = [];
+    await expect
+      .poll(async () => {
+        before = await silhouette(page);
+        return before.reduce((sum, pixel) => sum + pixel, 0);
+      })
+      .toBeGreaterThan(60);
+    const extension = await canvas.evaluateHandle((node: HTMLCanvasElement) =>
+      node.getContext('webgl')!.getExtension('WEBGL_lose_context'),
+    );
+    expect(
+      await extension.evaluate((value) => !!value),
+      'Chromium supports real context loss',
+    ).toBe(true);
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const settings = await uniforms();
+      await extension.evaluate((value) => value!.loseContext());
+      await expect(scene.locator('.viewer-fallback')).toBeVisible();
+      await expect(scene.getByRole('button', { name: 'Obróć model', exact: true })).toBeDisabled();
+      expect(
+        await canvas.evaluate((node: HTMLCanvasElement) =>
+          node.getContext('webgl')!.isContextLost(),
+        ),
+      ).toBe(true);
+      await extension.evaluate((value) => value!.restoreContext());
+      await expect(scene.locator('.viewer-fallback')).toHaveCount(0);
+      await expect(scene.getByRole('button', { name: 'Obróć model', exact: true })).toBeEnabled();
+      let restored: number[] = [];
+      await expect
+        .poll(async () => {
+          restored = await silhouette(page);
+          return restored.reduce((sum, pixel) => sum + pixel, 0);
+        })
+        .toBeGreaterThan(60);
+      expect(await uniforms()).toEqual(settings);
+      // Reduced motion keeps the pose fixed: the same CPU mesh and current settings survive.
+      expect(restored.filter((pixel, index) => pixel !== before[index]).length).toBeLessThan(20);
+      await scene.getByRole('button', { name: 'Obróć model', exact: true }).click();
+      await expect
+        .poll(async () => {
+          const rotated = await silhouette(page);
+          return rotated.filter((pixel, index) => pixel !== restored[index]).length;
+        })
+        .toBeGreaterThan(20);
+      before = await silhouette(page);
+    }
+    await scene.screenshot({ path: info.outputPath(`context-restored-${source}.png`) });
+    await extension.dispose();
+  });
+}

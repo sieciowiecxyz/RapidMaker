@@ -64,10 +64,12 @@ void main(){
  gl_FragColor=vec4(light,uOpacity);
 }`;
 export type ViewerState={yaw:number;pitch:number;build:number;flex:number;layer:number;sweep:number;r:number;g:number;b:number;oldR:number;oldG:number;oldB:number;explode:number;zoom:number;upperOpacity:number;density:number;wall:number};
-export function createPartViewer(canvas:HTMLCanvasElement){
+export function createPartViewer(canvas:HTMLCanvasElement,onAvailabilityChange:(available:boolean)=>void=()=>{}){
  const gl=canvas.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:false,stencil:true,powerPreference:'low-power'});
  if(!gl)return null;
  const compile=(type:number,source:string)=>{const shader=gl.createShader(type)!;gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const error=gl.getShaderInfoLog(shader);gl.deleteShader(shader);throw new Error(error??'Nie udało się uruchomić podglądu.');}return shader;};
+ // A restored WebGL context invalidates every program, buffer, texture and location.
+ const createResources=()=>{
  const layerFilter=gl.getExtension('OES_standard_derivatives');
  const filteredFragment=(layerFilter?'#extension GL_OES_standard_derivatives : enable\n#define FILTER_LAYERS\n':'')+fragment;
  const vs=compile(gl.VERTEX_SHADER,vertex),fs=compile(gl.FRAGMENT_SHADER,filteredFragment),program=gl.createProgram()!;gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Nie udało się uruchomić podglądu.');gl.useProgram(program);
@@ -80,11 +82,30 @@ export function createPartViewer(canvas:HTMLCanvasElement){
  const position=gl.getAttribLocation(program,'aPosition'),normal=gl.getAttribLocation(program,'aNormal');gl.enableVertexAttribArray(position);gl.enableVertexAttribArray(normal);
  const uniform=(name:string)=>gl.getUniformLocation(program,name);
  const names=['uYaw','uPitch','uAspect','uFlex','uColor','uOldColor','uSweep','uBuild','uMin','uMax','uLayer','uGround','uGloss','uScale','uSliced','uLow','uHigh','uClipSide','uOffset','uCut','uCap','uDensity','uWall','uOpacity','uBoundary'];const u=Object.fromEntries(names.map(name=>[name,uniform(name)]));
- let count=0,min=-80,max=82,kind='';let lost=false;
+ return {vs,fs,program,buffer,ground,cap,position,normal,u};
+ }
+ let {vs,fs,program,buffer,ground,cap,position,normal,u}=createResources();
+ let count=0,min=-80,max=82,kind='';let lost=false,disposed=false;let mesh:PartMesh|undefined;
  const boundaries:WebGLTexture[]=[];const layers=2;
- const onLost=(event:Event)=>{event.preventDefault();lost=true;};canvas.addEventListener('webglcontextlost',onLost);
+ const onLost=(event:Event)=>{event.preventDefault();lost=true;onAvailabilityChange(false);};
+ const onRestored=()=>{
+   if(disposed)return;
+   try{
+     ({vs,fs,program,buffer,ground,cap,position,normal,u}=createResources());
+     boundaries.length=0;
+     if(mesh)uploadMesh(mesh);
+     lost=false;
+     onAvailabilityChange(true);
+   }catch{lost=true;onAvailabilityChange(false);}
+ };
+ canvas.addEventListener('webglcontextlost',onLost);
+ canvas.addEventListener('webglcontextrestored',onRestored);
+ // Keep the CPU mesh even while lost; configuration changes must survive restoration.
  function setPart(material:string,external?:PartMesh){
-   if(kind===material)return;kind=material;const mesh=external ?? buildPart(material);min=mesh.minY;max=mesh.maxY;count=mesh.vertices.length/6;
+   if(kind===material)return;kind=material;mesh=external ?? buildPart(material);min=mesh.minY;max=mesh.maxY;count=mesh.vertices.length/6;
+   if(!lost)uploadMesh(mesh);
+ }
+ function uploadMesh(mesh:PartMesh){
    gl!.bindBuffer(gl!.ARRAY_BUFFER,buffer);gl!.bufferData(gl!.ARRAY_BUFFER,mesh.vertices,gl!.STATIC_DRAW);
    for(const texture of boundaries)gl!.deleteTexture(texture);boundaries.length=0;
    for(let i=1;i<layers;i++){
@@ -126,5 +147,5 @@ export function createPartViewer(canvas:HTMLCanvasElement){
  }
  gl!.depthMask(true);
  }
- return {setPart,draw,dispose(){canvas.removeEventListener('webglcontextlost',onLost);gl.deleteBuffer(buffer);gl.deleteBuffer(ground);gl.deleteBuffer(cap);for(const texture of boundaries)gl.deleteTexture(texture);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);},get triangles(){return count/3;}};
+ return {setPart,draw,dispose(){disposed=true;lost=true;mesh=undefined;canvas.removeEventListener('webglcontextrestored',onRestored);canvas.removeEventListener('webglcontextlost',onLost);gl.deleteBuffer(buffer);gl.deleteBuffer(ground);gl.deleteBuffer(cap);for(const texture of boundaries)gl.deleteTexture(texture);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);},get triangles(){return count/3;}};
 }

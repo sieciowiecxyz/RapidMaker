@@ -17,7 +17,7 @@
   $effect(()=>configure(theme,material,color,quality,strength,mesh,meshKey,strengthTrigger));
   onMount(()=>{
     let viewer:ReturnType<typeof createPartViewer>;
-    try {viewer=createPartViewer(canvas);}catch {unavailable=true;return;}
+    try {viewer=createPartViewer(canvas,(available)=>{unavailable=!available;syncActivity();if(available)draw();});}catch {unavailable=true;return;}
     if(!viewer){unavailable=true;return;}
     const renderer=viewer;
     const reduced=matchMedia('(prefers-reduced-motion:reduce)');
@@ -26,7 +26,7 @@
     let rotation:gsap.core.Tween|undefined,entrance:gsap.core.Tween|undefined,flex:gsap.core.Timeline|undefined,demonstration:gsap.core.Timeline|undefined;
     // Explicit redraws must work while IntersectionObserver catches up after scroll/resize.
     const draw=()=>{if(!document.hidden)renderer.draw(state);};
-    const syncActivity=()=>{const stop=paused||demonstrating||!active||document.hidden||reduced.matches;rotation?.paused(stop);entrance?.paused(stop);flex?.paused(stop);};
+    const syncActivity=()=>{const stop=unavailable||paused||demonstrating||!active||document.hidden||reduced.matches;rotation?.paused(stop);entrance?.paused(stop);flex?.paused(stop);};
     function start(){demonstration?.kill();demonstrating=false;state.explode=0;state.upperOpacity=1;rotation?.kill();entrance?.kill();reducedMotion=reduced.matches;if(reduced.matches){state.build=1;draw();return;}state.build=.04;entrance=gsap.to(state,{build:1,duration:1.3,ease:'power3.out',onUpdate:draw});rotation=gsap.to(state,{yaw:state.yaw+Math.PI*2,duration:55,ease:'none',repeat:-1});syncActivity();}
     function demonstrate(){
       demonstration?.kill();entrance?.kill();state.build=1;
@@ -53,7 +53,7 @@
     zoomIn=()=>{state.zoom=Math.min(2.4,state.zoom*1.2);draw();};zoomOut=()=>{state.zoom=Math.max(.5,state.zoom/1.2);draw();};
     replay=()=>{paused=false;start();};togglePause=()=>{paused=!paused;if(!paused&&!reduced.matches){rotation?.kill();rotation=gsap.to(state,{yaw:state.yaw+Math.PI*2,duration:55,ease:'none',repeat:-1});}syncActivity();};
     rotate=()=>{paused=true;syncActivity();if(reduced.matches){state.yaw+=Math.PI/4;draw();}else gsap.to(state,{yaw:state.yaw+Math.PI/4,duration:.3,ease:'power3.out',overwrite:'auto',onUpdate:draw});};
-    const tick=(time:number)=>{if((paused&&!demonstrating)||reduced.matches||document.hidden||!active||time-lastDraw<1/30)return;lastDraw=time;draw();};gsap.ticker.add(tick);
+    const tick=(time:number)=>{if(unavailable||(paused&&!demonstrating)||reduced.matches||document.hidden||!active||time-lastDraw<1/30)return;lastDraw=time;draw();};gsap.ticker.add(tick);
     const visible=new IntersectionObserver(([entry])=>{active=entry.isIntersecting;syncActivity();if(active)draw();},{threshold:.05});visible.observe(host);
     let dragging=false,lastX=0,lastY=0;
     const down=(event:PointerEvent)=>{if(event.pointerType==='mouse'||event.pointerType==='pen'){dragging=true;lastX=event.clientX;lastY=event.clientY;canvas.setPointerCapture(event.pointerId);}};
@@ -68,7 +68,7 @@
   <div class="chamber-top"><span><i></i> Podgląd</span><span>{mesh ? 'Twój plik / 3D' : 'FDM / próbka'}</span></div>
   <div class="chamber-visual" role="img" aria-label={mesh ? `Model z pliku ${fileName}. Obróć przeciągając myszą. Kolor: ${colorName}.` : `Pokazowa część: ${sample.name}, ${materialName}, ${colorName}, jakość ${quality === 'fine' ? 'dokładna' : quality === 'standard' ? 'standardowa' : quality === 'draft' ? 'robocza' : 'nie wybrano'}. ${demonstrating ? `Poglądowe wypełnienie i ścianki: ${strengthName}.` : ''} Nie przedstawia wgranego pliku.`}>
     <span class="chamber-watermark" aria-hidden="true">{mesh && material === 'unselected' ? '3D' : materialName}</span>
-    <canvas bind:this={canvas} aria-hidden="true"></canvas>{#if unavailable}<p class="viewer-fallback">Podgląd 3D jest niedostępny na tym urządzeniu. Konfigurator działa dalej.</p>{/if}
+    <canvas bind:this={canvas} aria-hidden="true"></canvas>{#if unavailable}<p class="viewer-fallback">Podgląd 3D jest niedostępny. Konfigurator działa dalej.</p>{/if}
     <span class="chamber-callout"><IconArrowDownRight size={16} stroke={1.5} /><span class="chamber-filename" title={fileName ?? sample.name}>{fileName ?? sample.name}</span></span>
   </div>
   {#if demonstrating}<div class="strength-demonstration" role="status"><span>Wypełnienie i ścianki · {strengthName}</span><small>Pokaz poglądowy</small></div>{/if}
