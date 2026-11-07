@@ -693,3 +693,9 @@ Dwa osobne provider-reruny na tym samym kodzie produktu: panels-focus-final-2026
 Badge.svelte nie miał importu, eksportu, odkrywania dynamicznego ani kontraktu docs/testów. Usunięto31linii komponentu oraz bezpośrednie devDependencies clsx/tailwind-merge/tailwind-variants. Te dwa ostatnie zniknęły z lockfile; clsx pozostaje wymagany przez Svelte.71usuniętychlinii/0dodanych w3plikach; pozostałe rekordy pakietów niezmienione, bez aktualizacji wersji. Button/Input/Card i osiągalny UI nietknięte.
 
 Svelte0/Vitebuild4HTML/Prettier/diff PASS; bez zbędnego E2E/providerów dla martwej ścieżki. Sol xhigh niezależnie sprawdził brak odwołań i lockfile, brak blokera. npm audit:3LOW oznaczają jedno znane GHSA-gcqx-w48m-w2h4 w deepmerge i zależne plugin/inspector;0moderate/high/critical,fixAvailablefalse. Raport prywatny badge-cleanup-npm-audit.json; brak auditfix lub nowej gwarancji bezpieczeństwa.
+
+## 2026-11-07 — prywatność odpowiedzi API i cache
+
+Przegląd potwierdził istniejące no-store we wspólnej checkout::protect; nie dodawano drugiego middleware. Rozszerzono rzeczywisty PG/router access test: GET wymaga dyrektywy no-store również przy kilku nagłówkach/wartościach. Jawne me sprawdza klientówA/B,admina pending/verified oraz anonimowe401, stage i zgodnyCSRF bez wydruku tokenu. Istniejące odczyty orders/chat/admin/models/files obejmują sukcesy i401/403/404/410. Nie obejmuje wczesnego odrzucenia Host/Origin lub mutations.
+
+private-cache-access-20261107:**1PASS/0FAIL/0SKIP/0flaky**; odrębna baza/modelroot usunięte, bez maila/providerów/zmiany produktu. fmt/diff PASS; Sol xhigh sprawdził source/report, brak blokera. Worker osobno policzył103GET w tym przebiegu; licznik był diagnostyczny, nie jest nową liczbą przypadków w raporcie. Brak twierdzenia o obejściu cache, BFCache lub wcześniej potwierdzonym wycieku.

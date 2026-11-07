@@ -57,6 +57,22 @@ async fn call(
         .oneshot(request.body(body).unwrap())
         .await
         .unwrap();
+    if method == "GET" {
+        assert!(
+            response
+                .headers()
+                .get_all("cache-control")
+                .iter()
+                .any(|value| {
+                    value.to_str().is_ok_and(|value| {
+                        value
+                            .split(',')
+                            .any(|directive| directive.trim().eq_ignore_ascii_case("no-store"))
+                    })
+                }),
+            "private response must forbid storage: {path}"
+        );
+    }
     (
         response.status().as_u16(),
         to_bytes(response.into_body(), 2_000_000)
@@ -212,6 +228,24 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         .collect::<String>();
     let fg = fixture(&db, &pool, None, &guest_owner, now).await;
     let (app, workers) = rapidmaker_api::router().await.unwrap();
+    for actor in [&a, &b, &pending, &admin] {
+        let (status, body) = call(&app, "GET", "/api/auth/me", Some(actor), None).await;
+        assert_eq!(status, 200);
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body["stage"],
+            if std::ptr::eq(actor, &pending) {
+                "second_factor"
+            } else {
+                "authenticated"
+            }
+        );
+        assert!(
+            body["csrf_token"].as_str() == actor.csrf.as_deref(),
+            "session CSRF must remain private"
+        );
+    }
+    assert_eq!(call(&app, "GET", "/api/auth/me", None, None).await.0, 401);
     for (owner, foreign, f) in [(&a, &b, &fa), (&b, &a, &fb)] {
         for path in [
             format!("/api/models/{}", f.model),
