@@ -101,11 +101,12 @@ test('full HTTP checkout rejects a stale catalog profile after a real slicer quo
   expect(legal.status()).toBe(200);
   const { version: legalVersion } = await legal.json();
   expect(legalVersion).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  // Other specs share this disposable DB; observe only this draft and guest.
   const effects = () =>
     sql(`SELECT json_build_object(
-    'payment_attempts',(SELECT count(*) FROM payment_attempts),
-    'orders',(SELECT count(*) FROM orders),
-    'worker_attempts',(SELECT coalesce(sum(attempts),0) FROM payment_attempts))`);
+    'payment_attempts',(SELECT count(*) FROM payment_attempts WHERE draft_id='${draft.id}'),
+    'orders',(SELECT count(*) FROM orders WHERE owner_hash=(SELECT owner_hash FROM checkout_drafts WHERE id='${draft.id}')),
+    'worker_attempts',(SELECT coalesce(sum(attempts),0) FROM payment_attempts WHERE draft_id='${draft.id}'))`);
   const before = effects();
   expect(JSON.parse(before)).toEqual({ payment_attempts: 0, orders: 0, worker_attempts: 0 });
   const changed = original === 'a'.repeat(64) ? 'b'.repeat(64) : 'a'.repeat(64);
