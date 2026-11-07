@@ -7,7 +7,7 @@ Raporty JSON są prywatne w `frontend/tests/artifacts/`. Nazwy poniżej pomijaj�
 
 | Wymaganie | Test i wykonany dowód | Granica |
 | --- | --- | --- |
-| Różne modele i nazwy | `corpus.spec`: corpus41-large-current, 41 scenariuszy; 24 ceny slicera, 12 ręcznych, 4 wadliwe, 1 limit; corpus12-manual-geometry sprawdza uzasadnienie ręcznej ścieżki | 36 podglądów; odmowa nie jest obsługą modelu. STEP dodatkowo w models |
+| Różne modele i nazwy | `corpus.spec`: aktualny corpus-api-current-69bec69,41PASS/0FAIL/0SKIP;24 ceny slicera z pełnym rachunkiem,12 geometrycznie uzasadnionych ręcznych,4wadliwe,1limit;391hashów zgodnych | 36 podglądów; odmowa nie jest obsługą modelu. STEP dodatkowo w models |
 | Podgląd, obrazy i Piotr UI | `corpus-ui`: aktualny corpus41-ui-authoritative-40e8a5d-20261107T004449Z —41PASS/0FAIL/0SKIP,36renderów+5jawnych odmów;144 unikalne ujęcia obejrzane,437hashów zgodnych. `public-visual`, `populated-visual`, `showcase`, `configurator` w core-current | Jeden aktualny przebieg UI; ceny tylko9/20/29,1440/390 i motywy; nie fizyczny telefon ani formalny audyt kontrastu |
 | Ceny, ilości, przygotowanie raz | `pricing` w core-current: rzeczywiste 1/10/1000 sztuk, partie, jednostki, zaokrąglenia, rachunek fixture, zmienione/obce quote ID; order-identity-pricing po poprawce identyfikatorów | Jawne stawki testowe, bez dowodu rzeczywistych kosztów firmy lub globalnego optimum układania |
 | Jedna siatka, różne konfiguracje | `same-upload-configs-final` 1 PASS: dwie wyceny/ilości/kolory/parametry, przypisanie kwot, Stripe, oba panele/pliki/reload | Aktualizacja: duplicate-variant-same-upload1PASS używa przycisku „Powiel wariant”; osobny core1PASS potwierdza niezależność, reload i last-reference cleanup |

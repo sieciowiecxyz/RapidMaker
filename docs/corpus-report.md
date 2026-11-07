@@ -537,3 +537,11 @@ Sol xhigh przejrzał raport/listę/źródła: bez konkretnego błędu do poprawi
 Usunięto91 linii nieużywanego kodu źródłowego: DemoTools.svelte43, dedykowany CSS34,3 re-eksporty i11 linii helperów getDemoScenario/setDemoScenario/resetDemo. Brak importów we wszystkich4 wejściach Vite; aktywny koszyk i konsumowany DemoScenario pozostają. Bez zmian widocznego UI, autoryzacji/backendu.
 
 Regeneracja inventory-controls:445 kontrolek/44 pliki (to mapa źródeł, nie testy wszystkich kombinacji). rg usuniętych symboli/klas: brak. Build PASS (Svelte0 błędów/ostrzeżeń, Vite), diff PASS. Sol xhigh sprawdził rzeczywisty diff i importy: brak blokera. Bez zbędnego ponawiania E2E/providerów dla nieosiągalnego komponentu.
+
+## 2026-11-07 — aktualny pełny korpus API i wycen
+
+Na czystym69bec69 `E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=corpus-api-current-69bec69 python frontend/tests/run-integration.py --large-models corpus.spec.ts`: **41PASS/0FAIL/0SKIP/0flaky/0retry,640,6s,exit0**. 36GLB;24 pomiary slicera z pełnym niezależnym rachunkiem fixture;12 ręcznych z niezależnym uzasadnieniem bounds GLB;4 wadliwe14/21/32/37 i odmowa zasobów41. Nie utożsamiamy manual/refusal z automatyczną ceną.
+
+391 hashów źródeł/binarium/dist/manifestu przed/po identycznych, cleanGit. ReportSHA86a868c1ec44a473e44dfe546238e360dd99399e350517b65247e2d9b2dd86dc, immutable kopia/provenance w corpus-api-current-69bec69-provenance/. Bez zmian kodu, limitów, stawek lub oczekiwań podczas przebiegu. Bez zewnętrznych providerów/emaili, zwykły localhost nietknięty.
+
+Sol xhigh przejrzał source, report/kopię, hashe i klasyfikacje: zakres zatwierdzony. Automatyczne ceny sprawdzone dla1/3/4/6–13/17/20/23/26/27/29/30/33–35/38–40; ręczne2/5/15/16/18/19/22/24/25/28/31/36. Cennik testowy nie dowodzi kosztów/rentowności firmy; API to nie test wizualny lub współbieżności. Aktualny UI41 pozostaje osobnym dowodem na40e8a5d; późniejsze69bec usunęło martwy komponent, ale nie zmieniamy historycznego HEAD UI. Brak deklaracji10/10 całego produktu.

@@ -15,7 +15,7 @@ Opis: kryteria, aktualny checkpoint i dalsza praca; historia w [raporcie](../cor
 
 | Zakres | Zweryfikowany stan |
 | --- | --- |
-| Korpus/API | corpus41-large-current: 41 scenariuszy; 24 native ceny, 12 ręcznych, 4 wadliwe, 1 limit; 36 GLB. corpus12-manual-geometry osobno uzasadnia ręczne ścieżki |
+| Korpus/API | Aktualny69bec69:corpus-api-current-69bec69,41PASS/0FAIL/0SKIP;24 ceny slicera z rachunkiem,12 uzasadnionych ręcznych,4wadliwe,1limit;36GLB,391hashów zgodnych. Dawny corpus12-manual-geometry osobno |
 | Korpus/UI | Aktualny40e8a5d:41PASS/0FAIL/0SKIP/0flaky w jednym676s przebiegu;36renderów,4wadliwe i1zasobowa odmowa.144 unikalne ujęcia obejrzane,437hashów zgodnych; ceny UI tylko9/20/29 |
 | Większe modele | Bezstratny kompaktowy/spatial GLB i jawne uproszczenie wyłącznie podglądu z zachowaniem pełnego STL. [Budżety i dowody](large-models.md). Zespół 41 nadal ponad limitem |
 | Nowsza regresja3519cb9 | Storage25PASS, core49PASS/1 opt-in large SKIP, zeroFAIL/flaky; poprawiona etykieta runnera. Hashe niezmienione; sandbox/email inne osobne dowody |
