@@ -567,3 +567,9 @@ Zwykły API18432 aktualny7fb2a24,PID3428123,prywatne stabilne binariumSHA d0d6c5
 Realne HTTP: held validprefix/100Continue → drugi429/model_upload_busy/Retry-After1/no-files; pierwszy201, ponowienie drugiego201; własne source/GLB200, cudze404, estimate202/native3705gr, oba własneDELETE204. API/proxy limit96MiB, Vite200 i aktualne moduły retry/duplicate. Początkowy probe przerwał błędny wymóg in_stock=true (wszystkie koloryfalse); katalog nietknięty. Dokładnie2 utracone własne probe IDs po weryfikacji SHA/czasu/braku zadań/holdów/nieobecności w backupie wygaszono za zgodą agenta głównego; normalny worker usunął metadata/pliki. Bez szerszego sprzątania.
 
 Sol xhigh niezależnie sprawdził live SHA i obie ścieżki limitów, przejrzał źródła i metadata: brak blokera. Normalny smoke dowodzi HTTP busy/retry, nie nowego browser E2E na zwykłym localhost; automatyczne UI retry ma wcześniejsze odizolowane testy. Bez nowych testów obciążenia/wyglądu/providerów i bez wniosku o rentowności cennikaPOC.
+
+## 2026-11-07 — martwe mock operacje płatności/admina
+
+Usunięto101 linii wyłącznie z lib/api.ts i lib/mock.ts:5 nieużywanych eksportów/implementacji retryPayment/updateMaterial/getSystemSettings/updateSystemSettings/retryJob i ich prywatne orphan helpery. Wszystkie4 wejścia Vite, dynamiczne Workspace i testy sprawdzone; aktywny admin używa serwera/operator API. Usunięty admin() chronił tylko martwe mock funkcje, nie żywe uprawnienia. Koszyk/wyceny, statyczne opcje/modele i load/save z purge starych receipts pozostają.
+
+Svelte0/Vite build wszystkich wejść, integrationTS i diff PASS. Sol xhigh sprawdził rzeczywisty diff/odwołania: bez blokera, auth i migracje nietknięte. Bez zbędnych E2E/providerów dla nieosiągalnej ścieżki. Łącznie z wcześniejszym DemoTools usunięto192 linie martwego źródła; nie jest to twierdzenie o spadku całego projektu o192LoC ani o10/10 prostoty.

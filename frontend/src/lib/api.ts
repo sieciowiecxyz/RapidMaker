@@ -7,11 +7,6 @@ export {
   removeModel,
   setDelivery,
   getDeliveryOptions,
-  retryPayment,
-  updateMaterial,
-  getSystemSettings,
-  updateSystemSettings,
-  retryJob,
 } from './mock';
 
 import { LEGAL_VERSION } from './legal';

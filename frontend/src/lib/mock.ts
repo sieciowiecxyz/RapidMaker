@@ -11,7 +11,6 @@ import type {
   Material,
   Order,
   OrderStatus,
-  PaymentScenario,
   PrintModel,
   Profile,
   Quote,
@@ -39,7 +38,6 @@ const profile = (email = ''): Profile => ({
 });
 const id = () => crypto.randomUUID();
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
-const now = () => new Date().toISOString();
 const colors = () => [
   { name: 'Leśny zielony', hex: '#1b8356', inStock: true },
   { name: 'Jasny szary', hex: '#cdd0c9', inStock: true },
@@ -423,29 +421,6 @@ async function wait(read = false) {
   if (read && state.scenario === 'error')
     throw new Error('Nie udało się pobrać danych. Spróbuj ponownie.');
 }
-function session() {
-  if (!state.session) throw new Error('Zaloguj się, aby otworzyć ten widok.');
-  return state.session;
-}
-function admin() {
-  if (session().role !== 'admin')
-    throw new Error('Ten widok jest dostępny dla administratora demo.');
-}
-function findOrder(orderId: string, guest = false) {
-  const order = state.orders.find((item) => item.id === orderId);
-  if (!order) throw new Error('Nie znaleziono zamówienia.');
-  if (
-    state.session?.role === 'admin' ||
-    (state.session && order.ownerId === state.session.id) ||
-    (guest && !order.ownerId && state.cart.quote?.id === order.quote.id)
-  )
-    return order;
-  throw new Error('Nie masz dostępu do tego zamówienia w demonstracji.');
-}
-function history(order: Order, text: string) {
-  order.history.push({ at: now(), text });
-  save();
-}
 function invalidate() {
   state.cart.quote = null;
   save();
@@ -553,16 +528,6 @@ export function saveQuote(quote: Quote, cart: Cart): Quote {
   save();
   return clone(state.cart.quote);
 }
-function payment(order: Order, scenario: PaymentScenario) {
-  if (scenario === 'reprice')
-    throw new Error('Zmianę ceny sprawdzisz przy tworzeniu nowego zamówienia.');
-  order.payment = scenario === 'success' ? 'paid' : scenario;
-  if (order.payment === 'paid') {
-    order.status = 'preparing';
-    order.document = `Dokument sprzedaży ${order.number} — demonstracja`;
-  }
-  history(order, `Symulacja płatności: ${order.payment}`);
-}
 export function assertCurrentQuote(quote: Quote) {
   if (state.cart.quote?.id !== quote.id || quote.fingerprint !== fingerprint())
     throw new Error('Koszyk zmienił się. Wróć do wyceny.');
@@ -585,65 +550,4 @@ export function applyCheckoutStatus(status: StripeStatus) {
     state.cart = { ...state.cart, models: [], quote: null };
     save();
   }
-}
-export async function retryPayment(orderId: string, scenario: PaymentScenario): Promise<Order> {
-  await wait();
-  const order = findOrder(orderId, true);
-  if (order.sandboxPayment) throw new Error('Sprawdź płatność bezpośrednio w Stripe.');
-  if (order.quote.manual) throw new Error('Najpierw zaakceptuj ofertę obsługi.');
-  if (order.payment === 'paid' || order.payment === 'refunded' || order.status === 'cancelled')
-    throw new Error('To zamówienie nie wymaga ponowienia płatności.');
-  payment(order, scenario);
-  return visibleOrder(order);
-}
-function visibleOrder(order: Order): Order {
-  const result = clone(order);
-  if (state.session?.role !== 'admin') result.notes = '';
-  return result;
-}
-export async function updateMaterial(
-  materialId: string,
-  patch: Partial<Material>,
-): Promise<Material[]> {
-  await wait();
-  admin();
-  const item = state.materials.find((item) => item.id === materialId);
-  if (!item) throw new Error('Nie znaleziono materiału.');
-  if (patch.costPerKg !== undefined && (!Number.isFinite(patch.costPerKg) || patch.costPerKg <= 0))
-    throw new Error('Koszt musi być większy od zera.');
-  if (
-    patch.priceMultiplier !== undefined &&
-    (!Number.isFinite(patch.priceMultiplier) || patch.priceMultiplier <= 0)
-  )
-    throw new Error('Mnożnik musi być większy od zera.');
-  Object.assign(item, patch, { id: materialId });
-  state.revision++;
-  invalidate();
-  return clone(state.materials);
-}
-export async function getSystemSettings(): Promise<SystemSettings> {
-  await wait(true);
-  admin();
-  return clone(state.settings);
-}
-export async function updateSystemSettings(
-  patch: Partial<Pick<SystemSettings, 'setupFee' | 'minimumPrice' | 'electricityPerKwh'>>,
-): Promise<SystemSettings> {
-  await wait();
-  admin();
-  if (Object.values(patch).some((value) => !Number.isFinite(value) || value < 0))
-    throw new Error('Podaj poprawne wartości nieujemne.');
-  Object.assign(state.settings, patch);
-  state.revision++;
-  invalidate();
-  return clone(state.settings);
-}
-export async function retryJob(jobId: string): Promise<SystemSettings> {
-  await wait();
-  admin();
-  const job = state.settings.jobs.find((item) => item.id === jobId);
-  if (!job) throw new Error('Nie znaleziono zadania.');
-  job.status = 'retried';
-  save();
-  return clone(state.settings);
 }
