@@ -515,3 +515,13 @@ Zmodyfikowany same-upload-configs używa rzeczywistego przycisku zamiast wstrzyk
 Sol xhigh przejrzał pricing/cumulative allocation, cart snapshot i limity checkoutu; nie wykrył błędu arytmetyki. Dodano celowany test gross_overflow_is_rejected_even_when_net_and_vat_each_fit: kontrola VAT0 przy netto4_000_000_000gr działa; VAT23%=920_000_000gr również mieści się w u32, lecz brutto4_920_000_000gr przekracza typ i wycena zwraca błąd. Niezależna stała faktury odróżnia ten przypadek od dotychczasowego przepełnienia wcześniejszych pól. Bez zmian produkcyjnego algorytmu/cennika/UI.
 
 `cargo test --offline --locked --manifest-path backend/Cargo.toml -p rapidmaker-pricing`: **7PASS/0FAIL/0SKIP**, rustfmt/diff PASS. Reviewer sprawdził rzeczywisty nowy test: potwierdza końcową konwersję brutto, bez blokera. To test granicy typu, nie cena dopuszczona w checkout (ma niższy limit), kalibracja kosztów firmy ani dowód rentowności.
+
+## 2026-11-07 — jeden aktualny przebieg UI całego korpusu
+
+Na czystym40e8a5d: corpus41-ui-authoritative-40e8a5d-20261107T004449Z — **41PASS/0FAIL/0SKIP/0flaky,676s,exit0**, bez rerun/poprawek/builda podczas testu. 36 przyjętych modeli rzeczywiście renderuje;4 wadliwe źródła14/21/32/37 poprawnie odrzucone,41 odmowa zasobów. Odmowy to poprawne wyniki scenariuszy, nie obsłużona geometria. Testy linked WebGL/pikseli/obrotu/zoomu PASS.
+
+144 unikalne sceny:36×1440/390×jasny/ciemny. Worker obejrzał6 contact sheets, main1/6, Sol xhigh2–5; brak pustych podglądów lub przyciętych kontrolek w badanych scenach. Rozproszone zespoły są niewielkie przy dopasowaniu całości, szczególnie w ciemnym motywie; zoom działa. Nie jest to certyfikacja kontrastu/całej strony/fizycznego telefonu.
+
+437 hashów przed/po identycznych (źródła,manifest,binarium,dist), HEAD bez zmian. ReportSHA16741edf62890ca6c011c1ab5e4ccfab8cb83a1af87fb04da05b41de225283ff, prywatne report/provenance/contact obok siebie w artifacts/. Izolowana DB/storage/profile large, normalny localhost/.env nietknięte, bez poczty/providerów/pobierania nowych modeli.
+
+Reviewer zatwierdził aktualny zakres. Ten UI test sprawdza ceny przypadków9/20/29 oraz ręczną ścieżkę5/19/22/25; pozostałe podglądy nie dowodzą wyceny. Nie przypisujemy temu przebiegowi starszych24native/12manual z oddzielnego API. Wcześniejszy37PASS/4harnessFAIL+4PASS pozostaje historyczny; aktualny dowód UI jest jednym czystym41.
