@@ -781,3 +781,12 @@ Minimalna zmiana (~14 linii produkcyjnych): `/out` tmpfs512 MiB i bind wyłączn
 Nowy produkcyjny run_plate/Bambu: te same cztery płyty PASS, tylko JSON na host2098/6273/2335/4810B; degenerate cube zwrócił InvalidModel. Oddzielne natywne regresje: statvfs512 MiB/tylko hostJSON, success/missing/error; anulowanie parent/child i Workspace; istniejące mounty/dev/shm — PASS. Test argumentów, cargo check slicera, fmt i diff PASS; izolowany target, bez pełnego API/wholejob/korpusu i restartu normalnych serwerów. Adaptacja testu anulowania dodaje dwa jawne testowe bindy plików blokad, zachowując produkcyjny tmpfs. Sol xhigh bez konkretnego blokera.
 
 Nie dowodzi globalnego optimum limitu: inne dopuszczone modele mogą odmówić po ENOSPC. Inody/metadata i łączne procesy nadal bez osobnego budżetu; cgroup delegation lokalnie zaobserwowano tylko odczytem, bez konfiguracji lub testu egzekwowania. Bez zmian UI, cen, zależności i sekretów.
+
+
+## 2026-11-07 — API po ograniczeniu wyjścia i ostatnia niepełna płyta
+
+Build API na62f56b5 SHAa3d97ca37da688ad748f597f0a159d4f14a9d0db672090db1a4bd7be0f256f9b. `bounded-output-api-20261107/summary.json`: **3 PASS/0 FAIL/0 SKIP/0 flaky,16s** — native formaty/GLB/własność, opcje brzegowe/invoice oraz partie1/10/1000. Pierwszy odczyt kopiowanej binarki w after.json trafił na nieukończoną kopię; osobny hash ukończonego przypiętego runtime zgadza się z buildem. Nie przedstawiamy częściowej kopii jako rozbieżności wykonywanego kodu.
+
+1000 to40×25, więc ten przypadek nie sprawdzał reszty płyty. Minimalne rozszerzenie istniejącego pricing.spec o26 i asercję25+1: osobny `pricingremainder20261107a/summary.json` **1 PASS/0 FAIL/0 SKIP/0 flaky,10,18s**. Dwie rzeczywiste partie,2płyty,114,10436344146729g,10484s,6972grbrutto; sumy pomiarów i rachunek wszystkich składowych przechodzą. Test obejmuje ponowne utworzenie `/out` przy drugim run_plate. Natywna wycena1000 w oddzielnych przebiegach160704/160821gr: zmierzone czasy nieco różne, rachunek poprawny w obu, bez obietnicy identycznej ceny między pomiarami.
+
+Źródła stabilne podczas testów, nowy hash builda przed/po zgodny; prywatne bazy/procesy/katalogi sprzątnięte, normalny API niezmieniony. Bez całego korpusu/providerów, bez potwierdzenia kosztów firmy. Sol xhigh bez blokera, format/diff PASS. Wynik3PASS i osobny1PASS nie są jednym4-testowym przebiegiem. Wygląd niezmieniony, wyłącznie headless.

@@ -37,6 +37,8 @@ Prywatne raporty: `frontend/tests/artifacts/`; nazwy poniżej zwykle bez `.json`
 
 Native opcje: `pricing-options-20261107/pricingoptions20261107b.json` — 1 PASS, trzy konfiguracje standard/draft/fine i granice ścian/wypełnienia; niezależny rachunek 10 pól, snapshot/reuse i 9 odmów bez zadań. Jeden model/PLA na stawkach fixture; nie dowód pełnej macierzy lub rentowności.
 
+Po zmianie `/out`: `bounded-output-api-20261107/` — 3 native API PASS na builda3d97ca, następnie osobny `pricingremainder20261107a/`1 PASS po rozszerzeniu ilości o26. Dwie mierzone partie25+1, zachowane sumy/ceny i ponowne utworzenie katalogu wyjściowego. To stawki fixture i kontrolowana kostka, nie pełny korpus/rentowność.
+
 ## Błędy, trwałość i zasoby
 
 | Zakres / raport | Dowód | Granica |

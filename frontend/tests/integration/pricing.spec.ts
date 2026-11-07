@@ -40,7 +40,7 @@ test('real configurator prices stock=false PLA with the slicer and invalidates q
   });
 });
 
-test('real batch prices follow measured plates and fixture costs for 1, 10 and 1000 copies', async ({
+test('real batch prices follow measured plates and fixture costs for 1, 10, 26 and 1000 copies', async ({
   request,
 }) => {
   test.setTimeout(600_000);
@@ -61,7 +61,7 @@ test('real batch prices follow measured plates and fixture costs for 1, 10 and 1
   const material = catalog.materials.find((m: { id: string }) => m.id === 'GFA00');
   expect(material?.colors.length).toBeGreaterThan(0);
   const totals: { quantity: number; gross: number }[] = [];
-  for (const quantity of [1, 10, 1000]) {
+  for (const quantity of [1, 10, 26, 1000]) {
     const options = { quantity, quality: 'standard', wall_loops: 3, infill_percent: 20 };
     const quote = await request.post('/api/quotes/estimate', {
       headers,
@@ -157,6 +157,18 @@ test('real batch prices follow measured plates and fixture costs for 1, 10 and 1
     };
     const batches: Batch[] = measurement.batches;
     expect(batches.length).toBeGreaterThan(0);
+    if (quantity === 26) {
+      // This controlled cube/profile fits 25 copies: measure the last copy separately.
+      expect(plates).toBe(2);
+      expect(
+        batches
+          .map(({ copies_per_plate, repeat_count }) => ({ copies_per_plate, repeat_count }))
+          .sort((a, b) => a.copies_per_plate - b.copies_per_plate),
+      ).toEqual([
+        { copies_per_plate: 1, repeat_count: 1 },
+        { copies_per_plate: 25, repeat_count: 1 },
+      ]);
+    }
     for (const batch of batches) {
       for (const value of [batch.copies_per_plate, batch.repeat_count, batch.time_seconds]) {
         expect(Number.isSafeInteger(value)).toBe(true);

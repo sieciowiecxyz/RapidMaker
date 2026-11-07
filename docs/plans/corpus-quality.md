@@ -26,6 +26,7 @@ Opis: wymagania i checkpoint; szczegółowe dowody w [mapie E2E](../e2e-coverage
 | Opcje wyceny — celowane | Native standard/draft/fine, skrajne ściany/wypełnienie: 1 PASS, trzy rachunki dziesięciu pól i snapshoty; 9 błędnych konfiguracji bez zadań. Jeden model/PLA, nie cała macierz. |
 | Anulowanie slicera | Natywna regresja1 PASS: produkcyjny sandbox/zaufany fork, oba procesy kończą i Workspace znika. Bez Bambu/crash hosta; łączne limity potomków i inodów nadal otwarte; bajty `/out` ograniczone poniżej. |
 | Wyjście slicera | `/out` tmpfs512 MiB + hostJSON maks.128 MiB; cztery native płyty i regresje błędów/cleanup PASS. Bez pełnego korpusu; metadane/inody i aggregate procesów nadal otwarte. |
+| API nowego `/out` | Builda3d97ca: native formaty/opcje/partie3 PASS. Osobno rozszerzona partia26=25+1:1 PASS,2płyty i rachunek. Źródła/binary stabilne, normalny API bez restartu. |
 | Ceny i zasoby | Minimum koszyka: 2 PASS, rzeczywisty slicer na stawkach testowych. Osiem klientów: 1 PASS, próbkowane RSS drzewa 187,2 MiB; nie limit RAM ani przepustowość. |
 | Prostota | Usunięcie Badge: 71 linii w 3 plikach, w tym 31 linii komponentu, i 3 bezpośrednie devDependencies; nie sumować jako całego usuniętego kodu. Szczegóły/audyt w raporcie. |
 | Launcher — celowane | Przypięcie binarki: baseline upload201→503 po podmianie, fix201→201 z tym samym PID/inode/SHA; 8 unit, 4 native integration i osobny queue-restart1 PASS. Bez restartu zwykłego API. |
