@@ -164,6 +164,10 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — wynik starego hasła po zmianie zabezpieczeń
+
+Przegląd zmian hasła/TOTP/passkey/roli nie wykazał potwierdzonego nadania dostępu przez nieaktualny czynnik. Istniejący test PostgreSQL wzmocniono o faktycznie inne hasło: po jego zapisie wynik wcześniejszej weryfikacji starego hasha nie tworzy sesji ani pending SID; dalsze loginy używają nowego hasha i przechodzą TOTP/recovery. Jeden test PASS, +16 linii testu, produkt bez zmian. Prywatna baza usunięta, normalne API bez zmian, Sol xhigh bez blokera. Dowody: `security-auth-revocation-20261108/regression-result.json`, password-change-regression.json i regression-source-after.sha256. To kontrolowany wynik po commicie, nie równoległy Argon2/HTTP race ani dowód przerwania wszystkich rozpoczętych żądań.
+
 ## 2026-11-08 — kwoty koszyka i checkoutu
 
 W badanych ścieżkach nie znaleziono obejścia ceny/ilości/własności/oferty: wyceny są serwerowymi snapshotami, koszyk sprawdza ich właściciela i aktualność, a przygotowanie płatności blokuje właściwą wersję szkicu i bierze kwotę z oferty DB. Ręczna cena wymaga admina; formularz klienta nie przyjmuje kwoty. Cztery istniejące testy offline tożsamości/reuse/formularza/overflow PASS; istniejące scenariusze manipulacji HTTP i blokad PG tylko przejrzano, bez ponownego uruchamiania. Sol xhigh bez blokera, bez zmian kodu/testów. Dowody: `security-cart-amounts-20261108/result.json`, tests.json i source-after.sha256. To nie pełny dowód przepływu płatności, wszystkich wyścigów lub rentowności; bez providerów, zmian normalnego API/DB i nowych cen.

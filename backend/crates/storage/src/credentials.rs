@@ -788,12 +788,28 @@ mod tests {
         );
         assert!(db.auth_pending(&pending, now + 2).await.unwrap().is_none());
         // Security changes rotate without extending the original primary/MFA freshness window.
+        let old_hash = hash.clone();
+        let hash = hash_password("this is a changed test password").unwrap();
         let edited = random_token().unwrap();
         let edited_state = db
             .auth_password_set(&verified, &hash, &edited, now + 60)
             .await
             .unwrap()
             .unwrap();
+        // A verification of the old password returning after this commit cannot create a session.
+        let stale_primary = random_token().unwrap();
+        assert!(
+            db.auth_primary(&email, Some(&old_hash), &stale_primary, None, now + 60)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db.auth_pending(&stale_primary, now + 60)
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(edited_state.family_id, primary_family);
         assert!(
             serde_json::to_value(&edited_state)
