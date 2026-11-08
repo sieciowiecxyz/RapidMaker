@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { accounts, login } from './helpers';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -500,3 +500,177 @@ for (const cleanupFails of [false, true]) {
     await gone(page, id);
   });
 }
+
+test('manual variants retain shared geometry until the last unpaid hold expires', async ({
+  page,
+}) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires local accounts without providers',
+  );
+  test.setTimeout(90_000);
+  const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+  expect(client.totp_uri).toBeTruthy();
+  await login(page, client);
+  const me = await (await page.request.get('/api/auth/me')).json();
+  expect(me.stage).toBe('authenticated');
+  const headers = { Origin: origin, 'X-CSRF-Token': me.csrf_token };
+  const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+  expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]{32}$/);
+  const sql = (query: string) =>
+    JSON.parse(
+      execFileSync(
+        'podman',
+        [
+          'exec',
+          process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+          'psql',
+          '-U',
+          'rapidmaker',
+          '-d',
+          database,
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-At',
+          '-c',
+          query,
+        ],
+        { encoding: 'utf8', stdio: 'pipe' },
+      ).trim(),
+    );
+  const uploadCube = () =>
+    page.request.post('/api/models', {
+      headers: {
+        ...headers,
+        'Content-Type': 'application/octet-stream',
+        'x-model-filename': 'cube_20mm.stl',
+      },
+      data: readFileSync(cube),
+    });
+  const response = await uploadCube();
+  expect(response.status()).toBe(201);
+  const model = await response.json(),
+    folder = directory(model.id);
+  const parts = [
+    { model_id: model.id, material_id: 'GFA00', color_code: '10101', quantity: 1 },
+    { model_id: model.id, material_id: 'GFG02', color_code: '33102', quantity: 2 },
+  ].map((p) => ({ ...p, options: { quality: 'standard', wall_loops: 3, infill_percent: 20 } }));
+  const created = await page.request.post('/api/account/manual-quotes', {
+    headers,
+    data: {
+      request_id: randomUUID(),
+      parts,
+      contact: {
+        name: 'Retention fixture',
+        email: client.email,
+        phone: '500600700',
+        country: 'PL',
+      },
+      delivery: { method: 'pickup' },
+    },
+  });
+  expect(created.status()).toBe(200);
+  const id = (await created.json()).order_id;
+  const order = await (await page.request.get(`/api/account/orders/${id}`)).json();
+  for (const value of [client.id, id, ...order.lines.map((l: { quote_id: string }) => l.quote_id)])
+    expect(value).toMatch(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+  const first = order.lines[0].quote_id,
+    source = `/api/account/orders/${id}/files/${model.id}/source`;
+  const artifacts = ['model.stl', 'canonical.stl', 'preview.glb'];
+  const state = () =>
+    sql(
+      `SELECT json_build_object('epoch',extract(epoch from now())::bigint,'status',o.status,'paid_at',o.paid_at,'payment_attempt_id',o.payment_attempt_id,'amount',o.amount_grosze,'manual_until',m.expires_at,'parts',m.input->'parts','lines',o.lines,'model',(SELECT json_build_object('expires_at',pm.expires_at,'deletion_started',pm.deletion_started) FROM private_models pm WHERE pm.id='${model.id}'),'payment_attempts',(SELECT count(*) FROM payment_attempts p WHERE p.draft_id=o.id),'slicer_jobs',(SELECT count(*) FROM slicer_jobs j WHERE j.model_id='${model.id}'),'active_jobs',(SELECT count(*) FROM slicer_jobs j WHERE j.model_id='${model.id}' AND j.status IN ('queued','running')),'order_refs',(SELECT count(DISTINCT order_id) FROM order_files WHERE model_id='${model.id}'),'holds',(SELECT json_agg(json_build_object('quote_id',f.quote_id,'retain_until',f.retain_until) ORDER BY f.quote_id) FROM order_files f WHERE f.order_id=o.id),'snapshots',(SELECT json_agg(json_build_object('quote_id',q.id,'request',q.request-'owner_hash'-'user_id','result',q.result) ORDER BY q.id) FROM order_files f JOIN quotes q ON q.id=f.quote_id WHERE f.order_id=o.id)) FROM orders o JOIN manual_quotes m ON m.order_id=o.id WHERE o.id='${id}'`,
+    );
+  const phases: unknown[] = [];
+  const checkpoint = async (phase: string) => {
+    const s = state(),
+      r = await page.request.get(`/api/account/orders/${id}/files`);
+    const files = (await r.json()).files;
+    phases.push({
+      phase,
+      state: s,
+      files,
+      physical: artifacts.map((name) => ({ name, exists: existsSync(resolve(folder, name)) })),
+    });
+    expect(r.status()).toBe(200);
+    expect(files).toHaveLength(2);
+    expect(new Set(files.map((f: { quote_id: string }) => f.quote_id))).toEqual(
+      new Set(order.lines.map((l: { quote_id: string }) => l.quote_id)),
+    );
+    return { s, files };
+  };
+  try {
+    const initial = (await checkpoint('initial')).s;
+    const unpaid = {
+      status: 'awaiting_quote',
+      paid_at: null,
+      payment_attempt_id: null,
+      amount: null,
+      payment_attempts: 0,
+      active_jobs: 0,
+      slicer_jobs: 0,
+      order_refs: 1,
+    };
+    expect(initial).toMatchObject(unpaid);
+    expect(initial.snapshots).toHaveLength(2);
+    for (const [index, line] of order.lines.entries())
+      expect(
+        initial.snapshots.find((q: { quote_id: string }) => q.quote_id === line.quote_id).request,
+      ).toMatchObject({
+        ...parts[index],
+        requested_color: null,
+        options: { ...parts[index].options, quantity: parts[index].quantity },
+      });
+    expect(
+      sql(
+        `WITH changed AS (UPDATE private_models SET expires_at=extract(epoch from now())::bigint-60 WHERE id='${model.id}' AND user_id='${client.id}' RETURNING id) SELECT count(*) FROM changed`,
+      ),
+    ).toBe(1);
+    for (const phase of ['both-active', 'one-active']) {
+      if (phase === 'one-active')
+        expect(
+          sql(
+            `WITH changed AS (UPDATE order_files SET retain_until=extract(epoch from now())::bigint-60 WHERE order_id='${id}' AND model_id='${model.id}' AND quote_id='${first}' AND EXISTS(SELECT 1 FROM orders o WHERE o.id='${id}' AND o.user_id='${client.id}' AND o.status='awaiting_quote' AND o.paid_at IS NULL AND o.payment_attempt_id IS NULL) RETURNING quote_id) SELECT count(*) FROM changed`,
+          ),
+        ).toBe(1);
+      expect((await uploadCube()).status()).toBe(201); // Existing upload admission performs real GC.
+      const { s, files } = await checkpoint(phase);
+      expect(s.model.expires_at).toBeLessThan(s.epoch);
+      expect(s.model.deletion_started).toBe(false);
+      expect(s.snapshots).toEqual(initial.snapshots);
+      expect(s.lines).toEqual(initial.lines);
+      for (const name of artifacts) expect(existsSync(resolve(folder, name))).toBe(true);
+      for (const file of files)
+        expect(file.available).toBe(phase === 'both-active' || file.quote_id !== first);
+      const download = await page.request.get(source);
+      expect(download.status()).toBe(200);
+      expect(await download.body()).toEqual(readFileSync(cube));
+    }
+    expect(state()).toMatchObject(unpaid);
+    expect(
+      sql(
+        `WITH changed AS (UPDATE manual_quotes SET expires_at=extract(epoch from now())::bigint-60 WHERE order_id='${id}' AND user_id='${client.id}' AND EXISTS(SELECT 1 FROM orders o WHERE o.id='${id}' AND o.status='awaiting_quote' AND o.paid_at IS NULL AND o.payment_attempt_id IS NULL) RETURNING order_id) SELECT count(*) FROM changed`,
+      ),
+    ).toBe(1);
+    const expired = await (await page.request.get(`/api/account/orders/${id}`)).json();
+    expect(expired.status).toBe('quote_expired');
+    expect(expired.manual_offer).toMatchObject({ state: 'expired', payment_started: false });
+    expect(expired.lines).toEqual(order.lines);
+    expect((await uploadCube()).status()).toBe(201);
+    const { s, files } = await checkpoint('all-expired-after-GC');
+    expect(s).toMatchObject({ ...unpaid, status: 'quote_expired', model: null });
+    expect(existsSync(folder)).toBe(false);
+    for (const name of artifacts) expect(existsSync(resolve(folder, name))).toBe(false);
+    expect(s.snapshots).toEqual(initial.snapshots);
+    expect(s.parts).toEqual(initial.parts);
+    expect(s.lines).toEqual(initial.lines);
+    for (const hold of s.holds) expect(hold.retain_until).toBeLessThanOrEqual(s.epoch);
+    expect(files.every((f: { available: boolean }) => !f.available)).toBe(true);
+    expect((await page.request.get(source)).status()).toBe(410);
+  } finally {
+    await test.info().attach('manual-file-retention-evidence', {
+      body: JSON.stringify(phases),
+      contentType: 'application/json',
+    });
+  }
+});

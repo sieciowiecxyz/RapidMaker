@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Retencja dwóch wariantów jednego uploadu: native 1 PASS, ostatnia aktywna ochrona zachowuje pliki, po wygaśnięciu wszystkich realny GC usuwa oryginał/STL/GLB, pozostawia snapshoty i zwraca 410. Tylko testy, bez retencji opłaconych zamówień i bez zmian normalnego serwera; Sol xhigh bez blokera, dowody w security/testing.
+
 Identyczne warianty: konfigurator autora pokazuje wczesny komunikat i blokuje przejście przed zmianą koszyka. Ilość lub ustawienia można zmienić, różne preferencje kolorów zachowane; backendowe odmowy pozostają. Native UI i mock HTTP po 1 PASS, +21 linii TS, brak zmian stylu; Sol xhigh bez blokera, granice w security.
 
 Naprawiono ręczne zgłoszenia różnych konfiguracji jednego uploadu: kanoniczny klucz części i osobne line_id, bez przyrostu kodu produktu. PG 1 PASS, rzeczywisty UI 1 PASS (Powiel wariant → PLA/PETG → zapis dwóch pozycji bez kwoty/płatności). Limity, własność, ponowienia i odrzucanie identycznych części zachowane; Sol xhigh bez blokera. Szczegóły i historyczny FAIL fixture w security.
