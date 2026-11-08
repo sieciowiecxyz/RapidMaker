@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — warianty jednego uploadu w ręcznej wycenie
+
+Potwierdzono błąd kontraktu: widoczny „Powiel wariant” zachowuje ID uploadu, a model-only guard odrzucał drugi wariant nawet z innym materiałem. API i storage porównują teraz całe kanoniczne części po normalizacji ilości; każda nowa pozycja ma osobne `line_id=quote_id`. Limity/własność/replay/14-dniowy hold pozostają, identyczne pozycje nadal odrzucane. Netto 0 linii produktu, bez migracji/DTO/deps lub zmian stylu.
+
+Osobno PG 1 PASS i native UI 1 PASS/12,7 s: jeden upload, dwa lokalne warianty (PLA ×1/PETG ×2), rzeczywisty POST/panel/GET, dwie tożsamości/snapshoty/aktywne holds i poprawne opcje. Kwota/oferta/płatność NULL, zero prób płatności dla zamówienia. Test 300 mm używa prechecku manual bez slicera; sprawdzono też odmowę identycznych części, odrzucenie cudzego modelu bez osieroconych wycen i ponowienie zgłoszenia. Pierwotny PG FAIL przez dodatkowy fixture przed starym GC assert zachowany; usunięto własny fixture, nie osłabiano assert. Build/fmt PASS, Sol xhigh bez blokera, źródła/binarka/dist zamrożone przez UI, własne zasoby usunięte, normalne API niezmienione. Dowody: `security-manual-multipart-20261108/implementation-result.json` i `ui-run1/manual-variants-evidence.json`. Nie sprawdzano tu edycji postępu produkcji w panelu admina lub dostawców; identyczne klony pozostają poza zakresem.
+
 ## 2026-11-08 — przerwane cięcie bez kosztownego retry
 
 Próba wariantów na modelu korpusu 29 ujawniła exit 137 po około 69 s i automatyczne ponowienie. Large miało prawidłowe 120 s CPU/125 s czasu na płytę; przy dwóch CPU wynik pasuje do limitu CPU, ale przyczyny nie ustalono. Nowe `Stopped` obejmuje timeout płyty i zewnętrzne kody 137/152/153; bez retry, z bezpiecznym komunikatem o ręcznej wycenie. Sprawdzenie znanego `return_code=-6` nadal poprzedza klasyfikację; Busy/Failed pozostają retryable. Adapter mapuje wyłącznie odebrany terminalny stan zadania na istniejącą ścieżkę manual, bez nowych kontrolek lub zależności.

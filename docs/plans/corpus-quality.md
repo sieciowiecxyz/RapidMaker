@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Naprawiono ręczne zgłoszenia różnych konfiguracji jednego uploadu: kanoniczny klucz części i osobne line_id, bez przyrostu kodu produktu. PG 1 PASS, rzeczywisty UI 1 PASS (Powiel wariant → PLA/PETG → zapis dwóch pozycji bez kwoty/płatności). Limity, własność, ponowienia i odrzucanie identycznych części zachowane; Sol xhigh bez blokera. Szczegóły i historyczny FAIL fixture w security.
+
 Warianty złożonego modelu 29: standard ×1, draft ×2 oraz osobno PETG/TPU standard ×1 mają poprawne rachunki przy stawkach testowych (4/5 automatycznie w odrębnych przebiegach); fine ×3 zatrzymuje slicer (exit 137, przyczyna nieustalona). Naprawiono kosztowne retry oraz brak przejścia UI do ręcznej wyceny: unit/PG/mock UI osobno PASS, rzeczywisty fine ×3 kończy jedną próbę i pozwala zapisać zalogowanemu klientowi ręczne zgłoszenie bez ceny/płatności. Dwa wcześniejsze FAIL zachowane. To nie pełna macierz modeli/opcji ani dowód rentowności; szczegóły w security i raporcie korpusu.
 
 Ręczny fallback domknięto też jednym pełnym native UI testem na małym cienkim STL: terminalny błąd → formularz → zapis/panel/GET/DB bez ceny/płatności, z aktywnym hold. 1 PASS/25,5 s; cztery wcześniejsze FAIL harnessu zachowane, produkt bez zmian. Test w manual-publication.spec.ts, dowody i granice w security/testing.

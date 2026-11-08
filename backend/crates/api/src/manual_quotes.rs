@@ -99,17 +99,17 @@ async fn request(
     input.contact.email = session.user.email;
     input.contact.normalize(&input.delivery).map_err(|v|(StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"code":"invalid_recipient","message":"Popraw dane odbiorcy.","field_errors":v.field_errors}))))?;
     let catalog = app.db()?.materials().await.map_err(|_| unavailable())?;
-    let mut models = HashSet::new();
+    let mut configurations = HashSet::new();
     for part in &mut input.parts {
         part.options.quantity = part.quantity;
         if part.options.validate().is_err()
             || uuid::Uuid::parse_str(&part.model_id).is_err()
-            || !models.insert(&part.model_id)
+            || !configurations.insert(serde_json::to_string(part).map_err(|_| unavailable())?)
         {
             return Err(error(
                 StatusCode::BAD_REQUEST,
                 "invalid_manual_parts",
-                "Dodaj różne części i poprawne ilości/opcje druku.",
+                "Dodaj różne konfiguracje części i poprawne ilości/opcje druku.",
             ));
         }
         if !catalog.iter().any(|m| {

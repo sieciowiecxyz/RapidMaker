@@ -414,3 +414,135 @@ test('native terminal failure reaches a persisted manual request through the UI'
     contentType: 'application/json',
   });
 });
+
+test('different manual configurations share one upload and preserve separate order lines', async ({
+  page,
+}) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires local accounts without providers',
+  );
+  test.setTimeout(90_000);
+  await login(
+    page,
+    accounts().find((a) => a.email === 'browser-other@example.invalid')!,
+  );
+  await page.goto('/wycena');
+  const buffer = Buffer.from(
+    readFileSync(resolve('../backend/crates/geometry/tests/fixtures/cube_20mm.stl')),
+  );
+  expect(buffer.readUInt32LE(80)).toBe(12);
+  for (let triangle = 0; triangle < 12; triangle++)
+    for (let vertex = 0; vertex < 3; vertex++)
+      for (let axis = 0; axis < 3; axis++) {
+        const offset = 84 + triangle * 50 + 12 + vertex * 12 + axis * 4;
+        buffer.writeFloatLE(buffer.readFloatLE(offset) * 15, offset);
+      }
+  let uploads = 0;
+  page.on('request', (r) => {
+    if (r.url().endsWith('/api/models') && r.method() === 'POST') uploads++;
+  });
+  const uploaded = page.waitForResponse(
+    (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',
+  );
+  await page
+    .getByLabel('Dodaj modele STL, STEP lub 3MF')
+    .setInputFiles({ name: 'oversized300.stl', mimeType: 'application/octet-stream', buffer });
+  expect((await uploaded).status()).toBe(201);
+  const draft = () =>
+    page.evaluate(
+      () => JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1') ?? '{}').models,
+    );
+  await expect.poll(async () => (await draft())?.[0]?.analysis?.id).toBeTruthy();
+  const model = (await draft())[0].analysis;
+  expect(model.dimensions_mm).toEqual([300, 300, 300]);
+  await page.locator('input[name=material][value=pla]').check();
+  await page.locator('input[name=color][value=black]').check();
+  await page.locator('input[name=quality][value=standard]').check();
+  await page.locator('input[name=strength][value=standard]').check();
+  await expect(page.getByText('Wymagana ręczna wycena', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Powiel wariant oversized300.stl', exact: true }).click();
+  const rows = page.locator('.model-row');
+  await expect(rows).toHaveCount(2);
+  await rows
+    .nth(1)
+    .getByRole('button', { name: 'Konfiguruj oversized300.stl', exact: true })
+    .click();
+  await page.locator('input[name=material][value=petg]').check();
+  await rows.nth(1).getByRole('spinbutton').fill('2');
+  expect(new Set((await draft()).map((m: { id: string }) => m.id)).size).toBe(2);
+  expect(new Set((await draft()).map((m: { analysis: { id: string } }) => m.analysis.id))).toEqual(
+    new Set([model.id]),
+  );
+  await page.locator('.quote-contact').click();
+  await fillAuthorContact(page);
+  await page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Zapytaj o wycenę', exact: true })).toBeVisible();
+  await page.getByRole('radio', { name: 'Odbiór osobisty', exact: true }).check();
+  const created = page.waitForResponse(
+    (r) => r.url().endsWith('/api/account/manual-quotes') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Wyślij zapytanie o wycenę', exact: true }).click();
+  const response = await created;
+  expect(response.status()).toBe(200);
+  const result = await response.json(),
+    body = response.request().postDataJSON();
+  const print = { quality: 'standard', wall_loops: 3, infill_percent: 20 };
+  const expected = [
+    { model_id: model.id, material_id: 'GFA00', color_code: '10101', quantity: 1, options: print },
+    { model_id: model.id, material_id: 'GFG02', color_code: '33102', quantity: 2, options: print },
+  ];
+  expect(body.parts).toEqual(expected);
+  await expect(page).toHaveURL(new RegExp('/konto/zamowienia/' + result.order_id + '$'));
+  await expect(
+    page.getByRole('heading', { name: 'Oczekuje na wycenę', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('article.model')).toHaveCount(2);
+  const order = await (await page.request.get(`/api/account/orders/${result.order_id}`)).json();
+  expect(order).toMatchObject({
+    status: 'awaiting_quote',
+    amount_grosze: null,
+    manual_offer: { payment_started: false },
+  });
+  expect(new Set(order.lines.map((l: { line_id: string }) => l.line_id)).size).toBe(2);
+  expect(order.lines.map((l: { model_id: string }) => l.model_id)).toEqual([model.id, model.id]);
+  expect(order.lines.map((l: { quantity: number }) => l.quantity)).toEqual([1, 2]);
+  for (const line of order.lines) expect(line.line_id).toBe(line.quote_id);
+  const persisted = inspectOwned(
+    result.order_id,
+    `SELECT json_build_object('parts',m.input->'parts','amount',o.amount_grosze,'offer',m.offer,'payment_attempt',o.payment_attempt_id,'files',(SELECT count(*) FROM order_files f WHERE f.order_id=o.id AND f.model_id='${model.id}' AND (f.retain_until IS NULL OR f.retain_until>extract(epoch from now())::bigint)),'payment_attempts',(SELECT count(*) FROM payment_attempts p WHERE p.draft_id=o.id),'slicer_jobs',(SELECT count(*) FROM slicer_jobs WHERE model_id='${model.id}')) FROM orders o JOIN manual_quotes m ON m.order_id=o.id WHERE o.id='${result.order_id}'`,
+  );
+  expect(persisted).toEqual({
+    parts: expected.map((p) => ({
+      ...p,
+      requested_color: null,
+      options: { ...print, quantity: p.quantity },
+    })),
+    amount: null,
+    offer: null,
+    payment_attempt: null,
+    files: 2,
+    payment_attempts: 0,
+    slicer_jobs: 0,
+  });
+  const duplicate = await page.request.post('/api/account/manual-quotes', {
+    headers: await headers(page),
+    data: { ...body, request_id: randomUUID(), parts: [body.parts[0], body.parts[0]] },
+  });
+  expect(duplicate.status()).toBe(400);
+  expect(await duplicate.json()).toMatchObject({ code: 'invalid_manual_parts' });
+  expect(uploads).toBe(1);
+  await test
+    .info()
+    .attach('manual-variants-evidence', {
+      body: JSON.stringify({
+        model_id: model.id,
+        upload_count: uploads,
+        order_id: result.order_id,
+        lines: order.lines,
+        persisted,
+        exact_duplicate_status: duplicate.status(),
+      }),
+      contentType: 'application/json',
+    });
+});

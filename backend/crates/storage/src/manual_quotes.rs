@@ -64,7 +64,7 @@ impl Storage {
         let owner = account_owner(user);
         let id = uuid::Uuid::new_v4().to_string();
         let until = now + 14 * 86400;
-        let mut ids = HashSet::new();
+        let mut configurations = HashSet::new();
         let mut quotes = Vec::new();
         let mut lines = Vec::new();
         for part in parts {
@@ -78,7 +78,7 @@ impl Storage {
             else {
                 return Ok(None);
             };
-            if !ids.insert(model_id) {
+            if !configurations.insert(part.to_string()) {
                 return Ok(None);
             }
             let Some(model)=sqlx::query("SELECT * FROM private_models WHERE id=$1 AND user_id=$2 AND owner_hash=$3 AND expires_at>$4 AND NOT deletion_started FOR UPDATE").bind(model_id).bind(user).bind(&owner).bind(now).fetch_optional(&mut *tx).await? else{return Ok(None);};
@@ -105,7 +105,7 @@ impl Storage {
                 .execute(&mut *tx)
                 .await?;
             lines.push(
-                json!({"model_id":model_id,"quote_id":q,"filename":filename,"quantity":quantity}),
+                json!({"line_id":q,"model_id":model_id,"quote_id":q,"filename":filename,"quantity":quantity}),
             );
             quotes.push(q);
         }
@@ -355,7 +355,40 @@ mod tests {
             expires_at: now + 86400,
         };
         assert!(db.insert_model(&model).await.unwrap());
-        let input = json!({"parts":[{"model_id":model.id,"quantity":5,"material_id":"GFA00","color_code":"10100","options":{"quality":"standard","wall_loops":2,"infill_percent":15}}],"contact":{"email":email,"name":"Test Client"},"delivery":{"method":"courier"},"notes":"Cut model into smaller parts"});
+        let input = json!({"parts":[
+            {"model_id":model.id,"quantity":3,"material_id":"GFA00","color_code":"10100","requested_color":null,"options":{"quantity":3,"quality":"standard","wall_loops":2,"infill_percent":15}},
+            {"model_id":model.id,"quantity":2,"material_id":"GFG02","color_code":"33102","requested_color":null,"options":{"quantity":2,"quality":"fine","wall_loops":4,"infill_percent":40}}
+        ],"contact":{"email":email,"name":"Test Client"},"delivery":{"method":"courier"},"notes":"Cut model into smaller parts"});
+        let foreign = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO private_models(id,owner_hash,user_id,filename,extension,source_bytes,mesh_bytes,sha256,dimensions_mm,expires_at,preview_bytes) SELECT $1,$2,$3,filename,extension,source_bytes,mesh_bytes,sha256,dimensions_mm,expires_at,preview_bytes FROM private_models WHERE id=$4")
+            .bind(&foreign).bind(account_owner(&other)).bind(&other).bind(&model.id).execute(&db.pool).await.unwrap();
+        let mut duplicate = input.clone();
+        duplicate["parts"][1] = duplicate["parts"][0].clone();
+        assert!(
+            db.manual_request(&user, &uuid::Uuid::new_v4().to_string(), &duplicate, now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let mut foreign_part = input.clone();
+        foreign_part["parts"][1]["model_id"] = json!(foreign);
+        assert!(
+            db.manual_request(&user, &uuid::Uuid::new_v4().to_string(), &foreign_part, now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let orphan_quotes: i64 = sqlx::query_scalar("SELECT count(*) FROM quotes WHERE user_id=$1")
+            .bind(&user)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(orphan_quotes, 0);
+        sqlx::query("DELETE FROM private_models WHERE id=$1")
+            .bind(&foreign)
+            .execute(&db.pool)
+            .await
+            .unwrap();
         let request = uuid::Uuid::new_v4().to_string();
         let id = db
             .manual_request(&user, &request, &input, now)
@@ -370,7 +403,7 @@ mod tests {
             Some(id.as_str())
         );
         let mut changed = input.clone();
-        changed["notes"] = json!("Different request");
+        changed["parts"][1]["options"]["wall_loops"] = json!(5);
         assert!(
             db.manual_request(&user, &request, &changed, now + 1)
                 .await
@@ -387,6 +420,24 @@ mod tests {
         );
         assert!(db.order(&id, Some(&other), None).await.unwrap().is_none());
         let original = db.order(&id, Some(&user), None).await.unwrap().unwrap();
+        let lines = original["lines"].as_array().unwrap();
+        let files = db.order_files(&id, now).await.unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(files.len(), 2);
+        assert_ne!(lines[0]["line_id"], lines[1]["line_id"]);
+        for (index, line) in lines.iter().enumerate() {
+            assert_eq!(line["line_id"], line["quote_id"]);
+            assert_eq!(line["model_id"], model.id);
+            assert_eq!(line["quantity"], input["parts"][index]["quantity"]);
+            let file = files
+                .iter()
+                .find(|f| f["quote_id"] == line["quote_id"])
+                .unwrap();
+            assert_eq!(file["options"], input["parts"][index]["options"]);
+            assert_eq!(file["material_id"], input["parts"][index]["material_id"]);
+            assert_eq!(file["retain_until"], now + 14 * 86400);
+            assert_eq!(file["available"], true);
+        }
         assert!(original["amount_grosze"].is_null());
         assert_eq!(original["status"], "awaiting_quote");
         assert_eq!(original["manual_offer"]["version"], 1);
