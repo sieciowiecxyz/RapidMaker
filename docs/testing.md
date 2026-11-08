@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+Uprawnienia operatora: `E2E_REPORT_NAME=admin-boundaries-current python frontend/tests/run-integration.py --local-accounts admin-boundaries.spec.ts`. Bieżący OpenAPI dostarcza trasy i deserializowalne body. Gość, klient, admin przed 2FA oraz admin bez CSRF/z obcym Origin; dodatnie kontrole klienta/admina i hash 17 tabel biznesowych. Jeden headless test, własna DB/root, bez dostawców/emaila; należy do `privacy`.
+
 Podgląd a sesja: po buildzie `E2E_REPORT_NAME=preview-auth-current python frontend/tests/run-integration.py --local-accounts preview-auth.spec.ts`. Rzeczywisty upload STEP/GLB i logout w drugiej karcie; kontrolowane wstrzymanie odczytu body. Spóźniony wynik nie trafia do podglądu. Drugi przypadek zachowuje lokalny STL mimo błędu uploadu i zmiany markera auth. Własna DB/root, bez email/providerów; należy do grupy `privacy`.
 
 Kwoty przed konwersją: `E2E_REPORT_NAME=model-quota-current python frontend/tests/run-integration.py upload-quota.spec.ts`. Własna DB/root, syntetyczne rekordy kwot: cztery pełne limity odrzucają przed plikami; gdy mieści się tylko oryginał, wynik nadal blokuje końcowa kontrola. Po zwolnieniu kwoty upload201/GLB200; watcher katalogu, bez zapisywania fizycznych8GiB/providerów/UI. Gotowa binarka API wymagana.
