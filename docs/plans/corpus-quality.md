@@ -33,7 +33,7 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
-Nowsza poprawka logout: zero usuniętych tokenów po równoczesnej rotacji daje401 bezSet-Cookie, nie fałszywy200. NativeHTTP/PG i lokalnecookie testyPASS; ponowienie zaktualnąsesją działa. Bez gwarancji revocationcałejrodziny; security opisuje granice.
+[Wylogowanie rodziny](session-family-logout.md) domyka wyścig: sukces obejmuje równoczesnego następcę, niezależne sesje pozostają.4nativeAPI/3PG/2cookie testyPASS oraz migracja24→25 i headless virtualpasskey. Netto41linii produktu/SQL, brak nowych zależności. Normalny schemat/serwer bez wdrożenia; granice w security.
 
 Nowsza poprawka prywatności checkoutu: zmiana konta zamyka prywatny formularz; nowe uwagi kontaktowe pozostają kontowe zamiast wspólnego model cart.5headlessHTTP-mockPASS oraz osobno1realbackend/cookies/TOTP/UI/SQLPASS,buildPASS. Stare wymieszane uwagi bez migracji, brak pełnej serializacji kart; szczegóły w security.
 

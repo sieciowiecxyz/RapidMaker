@@ -15,6 +15,8 @@ pub struct AuthUser {
 
 #[derive(Debug, Serialize)]
 pub struct AuthSession {
+    #[serde(skip)]
+    pub(crate) family_id: String,
     pub user: AuthUser,
     pub expires_at: i64,
     pub admin_verified_at: Option<i64>,
@@ -207,11 +209,12 @@ impl Storage {
         sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY created_at DESC OFFSET 19)")
             .bind(&user.id).execute(&mut *tx).await?;
         let expires_at = now + 600;
-        sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)")
+        let family_id = sqlx::query_scalar("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4) RETURNING family_id")
             .bind(hash_token(session_token).as_slice()).bind(&user.id).bind(now).bind(expires_at)
-            .execute(&mut *tx).await?;
+            .fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(Some(AuthSession {
+            family_id,
             user,
             expires_at,
             admin_verified_at: None,
@@ -241,12 +244,13 @@ impl Storage {
             return Ok(None);
         }
         let mut tx = self.pool.begin().await?;
-        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,u.totp_secret IS NOT NULL AS has_totp,s.expires_at,s.admin_verified_at,s.stage,s.factor_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL")
+        let row = sqlx::query("SELECT u.id,u.email,u.role,u.email_order_updates,u.email_chat_messages,u.totp_secret IS NOT NULL AS has_totp,s.expires_at,s.admin_verified_at,s.stage,s.factor_verified_at,s.family_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL")
             .bind(hash_token(token).as_slice()).bind(now)
             .fetch_optional(&mut *tx).await?;
         let result = row
             .map(|row| {
                 Ok::<_, StorageError>(AuthSession {
+                    family_id: row.try_get("family_id")?,
                     user: user(&row)?,
                     expires_at: row.try_get("expires_at")?,
                     admin_verified_at: row.try_get("admin_verified_at")?,
@@ -275,6 +279,22 @@ impl Storage {
         Ok(result)
     }
 
+    pub async fn auth_logout_family(&self, observed: &AuthSession) -> Result<bool, StorageError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            .execute(&mut *tx)
+            .await?;
+        crate::credentials::lock(&mut tx).await?;
+        let deleted = sqlx::query("DELETE FROM sessions WHERE user_id=$1 AND family_id=$2")
+            .bind(&observed.user.id)
+            .bind(&observed.family_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        tx.commit().await?;
+        Ok(deleted > 0)
+    }
+
     pub async fn auth_logout(&self, token: &str) -> Result<bool, StorageError> {
         Ok(sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
             .bind(hash_token(token).as_slice())
@@ -285,10 +305,16 @@ impl Storage {
     }
 
     pub async fn auth_logout_all(&self, user_id: &str) -> Result<(), StorageError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            .execute(&mut *tx)
+            .await?;
+        crate::credentials::lock(&mut tx).await?;
         sqlx::query("DELETE FROM sessions WHERE user_id=$1")
             .bind(user_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -519,9 +545,21 @@ mod tests {
         let other = random_token().unwrap();
         sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$3+600)")
             .bind(hash_token(&other).as_slice()).bind(&user.id).bind(now+65).execute(&db.pool).await.unwrap();
+        let observed = db.auth_pending(&session, now + 65).await.unwrap().unwrap();
+        let other_observed = db.auth_pending(&other, now + 65).await.unwrap().unwrap();
+        assert_ne!(observed.family_id, other_observed.family_id);
+        assert!(
+            serde_json::to_value(&observed)
+                .unwrap()
+                .get("family_id")
+                .is_none()
+        );
         assert!(db.auth_logout(&session).await.unwrap());
         assert!(!db.auth_logout(&session).await.unwrap());
         assert!(db.auth_pending(&other, now + 65).await.unwrap().is_some());
+        assert!(!db.auth_logout_family(&observed).await.unwrap());
+        assert!(db.auth_logout_family(&other_observed).await.unwrap());
+        assert!(db.auth_pending(&other, now + 65).await.unwrap().is_none());
         sqlx::query("UPDATE users SET role='admin' WHERE id=$1")
             .bind(&user.id)
             .execute(&db.pool)

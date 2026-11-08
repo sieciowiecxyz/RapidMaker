@@ -3,6 +3,9 @@
 - [Cel modeli i jakości](plans/corpus-quality.md)
   - przeczytaj gdy: wznawiasz bieżący goal.
   - opis: kryteria, checkpoint i dalsza praca.
+- [Wylogowanie rodziny sesji](plans/session-family-logout.md)
+  - przeczytaj gdy: naprawiasz wyścig logout/rotacja.
+  - opis: mała migracja, blokady i testy revocation.
 - [E2E — dowody pokrycia](e2e-coverage.md)
   - przeczytaj gdy: oceniasz wymagania i wyniki.
   - opis: mapa testów, rzeczywistych dowodów i ograniczeń.

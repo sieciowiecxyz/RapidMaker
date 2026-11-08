@@ -95,3 +95,5 @@ Tożsamość pozycji: publiczne checkout `print_lines.model_id` zachowuje lokaln
 Warianty konfiguratora: lokalne row ID rozróżnia ustawienia tego samego analysis.id. „Powiel wariant” nie tworzy nowego uploadu; Storefront/Configure zwalniają wspólny model dopiero po ostatniej referencji. Checkout zapisuje/przywraca ustawienia po row ID.
 
 Frontend auth: lib/authSync.ts przekazuje między kartami losowy marker zmiany sesji, bez danych konta/tokenów. lib/http.ts odrzuca stare odpowiedzi i czyści CSRF; Workspace i admin odmontowują prywatne widoki, sprawdzają/me i bronią się generacją requestów. Nie kasuje szkiców koszyka lub idempotencji płatności.
+
+Sesje auth mają prywatną rodzinę dziedziczoną przez rotacje. Zwykły logout usuwa obserwowaną rodzinę pod wspólną blokadą auth, logout-all wszystkie rodziny konta; nowe niezależne logowanie zaczyna osobną. Publiczny format cookie/JSON bez zmian. Kontrakt i migracja: [auth](auth.md).

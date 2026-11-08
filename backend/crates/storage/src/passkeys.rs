@@ -182,7 +182,16 @@ impl Storage {
                 .await?;
         }
         crate::credentials::revoke_others(&mut tx, &user_id, token).await?;
-        let result = rotate(&mut tx, token, &user_id, new_token, now).await?;
+        let result = crate::credentials::rotate(
+            &mut tx,
+            token,
+            &user_id,
+            new_token,
+            "authenticated",
+            now,
+            Some(row.try_get("family_id")?),
+        )
+        .await?;
         tx.commit().await?;
         Ok(Some(result))
     }
@@ -282,9 +291,16 @@ impl Storage {
             tx.commit().await?;
             return Ok(None);
         }
-        let session =
-            crate::credentials::rotate(&mut tx, token, &user_id, new_token, "second_factor", now)
-                .await?;
+        let session = crate::credentials::rotate(
+            &mut tx,
+            token,
+            &user_id,
+            new_token,
+            "second_factor",
+            now,
+            None,
+        )
+        .await?;
         tx.commit().await?;
         Ok(Some(session))
     }
@@ -463,16 +479,6 @@ async fn consume(
     Ok(sqlx::query("UPDATE passkey_challenges SET consumed_at=$4 WHERE id=$1 AND session_hash=$2 AND purpose=$3 AND expires_at>$4 AND consumed_at IS NULL RETURNING state,bootstrap")
         .bind(id).bind(hash_token(token).as_slice()).bind(purpose).bind(now).fetch_optional(&mut **tx).await?)
 }
-async fn rotate(
-    tx: &mut Transaction<'_, Postgres>,
-    token: &str,
-    user_id: &str,
-    new_token: &str,
-    now: i64,
-) -> Result<AuthSession, StorageError> {
-    crate::credentials::rotate(tx, token, user_id, new_token, "authenticated", now).await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -569,6 +575,12 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+        let observed_family = db
+            .auth_pending(&token, now + 3)
+            .await
+            .unwrap()
+            .unwrap()
+            .family_id;
         // Role changes revoke old sessions; local recovery cannot start from email-only state.
         sqlx::query("UPDATE users SET role='admin' WHERE id=$1")
             .bind(&id)
@@ -577,6 +589,30 @@ mod tests {
             .unwrap();
         assert!(db.auth_session(&token, now + 4).await.unwrap().is_none());
         assert!(db.recover_admin(&email, now + 4).await.unwrap().is_none());
+        // Bootstrap's role trigger deletes the old SID; the locked observation retains lineage.
+        let mut tx = db.pool.begin().await.unwrap();
+        lock(&mut tx).await.unwrap();
+        let new_token = random_token().unwrap();
+        let rotated = crate::credentials::rotate(
+            &mut tx,
+            &token,
+            &id,
+            &new_token,
+            "authenticated",
+            now + 4,
+            Some(observed_family.clone()),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(rotated.family_id, observed_family);
+        assert_eq!(rotated.user.role, "admin");
+        assert!(
+            db.auth_session(&new_token, now + 4)
+                .await
+                .unwrap()
+                .is_some()
+        );
         sqlx::query("DELETE FROM users WHERE id=$1")
             .bind(id)
             .execute(&db.pool)

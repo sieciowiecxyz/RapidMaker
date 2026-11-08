@@ -608,10 +608,10 @@ async fn logout(
     headers: HeaderMap,
     Json(_input): Json<Value>,
 ) -> Result<Response, Error> {
-    auth.pending_mutation(&headers).await?;
+    let observed = auth.pending_mutation(&headers).await?;
     if !auth
         .database()?
-        .auth_logout(session_cookie(&headers)?.ok_or_else(unavailable)?)
+        .auth_logout_family(&observed)
         .await
         .map_err(|_| unavailable())?
     {

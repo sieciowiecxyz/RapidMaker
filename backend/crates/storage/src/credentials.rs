@@ -50,7 +50,7 @@ pub(crate) async fn row(
     if !valid_token(token) {
         return Ok(None);
     }
-    Ok(sqlx::query("SELECT u.*,s.stage,s.created_at AS session_created_at,s.primary_verified_at,s.factor_verified_at,s.factor_verifier,s.factor_sent_at,s.factor_expires_at,s.factor_attempts FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL FOR UPDATE OF u,s").bind(hash_token(token).as_slice()).bind(now).fetch_optional(&mut **tx).await?)
+    Ok(sqlx::query("SELECT u.*,s.stage,s.created_at AS session_created_at,s.primary_verified_at,s.factor_verified_at,s.factor_verifier,s.factor_sent_at,s.factor_expires_at,s.factor_attempts,s.family_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.last_seen_at>$2-CASE WHEN u.role='admin' THEN 1800 ELSE 604800 END AND u.disabled_at IS NULL FOR UPDATE OF u,s").bind(hash_token(token).as_slice()).bind(now).fetch_optional(&mut **tx).await?)
 }
 pub(crate) async fn rotate(
     tx: &mut Transaction<'_, Postgres>,
@@ -59,13 +59,18 @@ pub(crate) async fn rotate(
     new_token: &str,
     stage: &str,
     now: i64,
+    family_override: Option<String>,
 ) -> Result<AuthSession, StorageError> {
     if !valid_token(new_token) || !matches!(stage, "primary" | "second_factor" | "authenticated") {
         return Err("invalid session rotation".into());
     }
     // Credential edits rotate the cookie but never extend the fresh-MFA window.
-    let previous = sqlx::query("SELECT stage,created_at,primary_verified_at,factor_verified_at FROM sessions WHERE token_hash=$1 AND user_id=$2")
+    let previous = sqlx::query("SELECT stage,created_at,primary_verified_at,factor_verified_at,family_id FROM sessions WHERE token_hash=$1 AND user_id=$2")
         .bind(hash_token(token).as_slice()).bind(id).fetch_optional(&mut **tx).await?;
+    let family = family_override.or(previous
+        .as_ref()
+        .map(|row| row.try_get::<String, _>("family_id"))
+        .transpose()?);
     sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
         .bind(hash_token(token).as_slice())
         .execute(&mut **tx)
@@ -99,13 +104,14 @@ pub(crate) async fn rotate(
     } else {
         None
     };
-    sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at,stage,primary_verified_at,factor_verified_at) VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8)")
-        .bind(hash_token(new_token).as_slice()).bind(id).bind(now).bind(expires_at).bind(admin).bind(stage).bind(primary).bind(factor).execute(&mut **tx).await?;
+    let family_id = sqlx::query_scalar("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at,admin_verified_at,stage,primary_verified_at,factor_verified_at,family_id) VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8,COALESCE($9,gen_random_uuid()::text)) RETURNING family_id")
+        .bind(hash_token(new_token).as_slice()).bind(id).bind(now).bind(expires_at).bind(admin).bind(stage).bind(primary).bind(factor).bind(family).fetch_one(&mut **tx).await?;
     if full {
         sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 AND stage='authenticated' AND token_hash<>$2 ORDER BY created_at DESC OFFSET 19)")
             .bind(id).bind(hash_token(new_token).as_slice()).execute(&mut **tx).await?;
     }
     Ok(AuthSession {
+        family_id,
         user,
         expires_at,
         admin_verified_at: admin,
@@ -217,6 +223,7 @@ impl Storage {
                 "primary"
             },
             now,
+            Some(uuid::Uuid::new_v4().to_string()),
         )
         .await?;
         tx.commit().await?;
@@ -360,7 +367,7 @@ impl Storage {
             tx.commit().await?;
             return Ok(None);
         }
-        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now).await?;
+        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now, None).await?;
         tx.commit().await?;
         Ok(Some(result))
     }
@@ -411,7 +418,7 @@ impl Storage {
             .execute(&mut *tx)
             .await?;
         revoke_others(&mut tx, &id, token).await?;
-        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now).await?;
+        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now, None).await?;
         tx.commit().await?;
         Ok(Some(result))
     }
@@ -506,7 +513,7 @@ impl Storage {
             .collect();
         sqlx::query("UPDATE users SET totp_secret=$2,totp_pending=NULL,totp_pending_until=NULL,totp_last_step=$3,recovery_hashes=$4 WHERE id=$1").bind(&id).bind(sealed).bind(step as i64).bind(json!(hashes)).execute(&mut *tx).await?;
         revoke_others(&mut tx, &id, token).await?;
-        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now).await?;
+        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now, None).await?;
         tx.commit().await?;
         Ok(Some(result))
     }
@@ -527,7 +534,7 @@ impl Storage {
         let id: String = r.try_get("id")?;
         sqlx::query("UPDATE users SET totp_secret=NULL,totp_pending=NULL,totp_pending_until=NULL,totp_last_step=-1,recovery_hashes='[]' WHERE id=$1").bind(&id).execute(&mut *tx).await?;
         revoke_others(&mut tx, &id, token).await?;
-        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now).await?;
+        let result = rotate(&mut tx, token, &id, new_token, "authenticated", now, None).await?;
         tx.commit().await?;
         Ok(Some(result))
     }
@@ -691,12 +698,26 @@ mod tests {
         sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$4)").bind(hash_token(&setup).as_slice()).bind(&id).bind(now).bind(now+600).execute(&db.pool).await.unwrap();
         assert!(db.auth_session(&setup, now).await.unwrap().is_none());
         let hash = hash_password("this is a test password").unwrap();
+        let setup_family = db
+            .auth_pending(&setup, now)
+            .await
+            .unwrap()
+            .unwrap()
+            .family_id;
         let full = random_token().unwrap();
         assert!(
             db.auth_password_set(&setup, &hash, &full, now)
                 .await
                 .unwrap()
                 .is_some()
+        );
+        assert_eq!(
+            db.auth_pending(&full, now)
+                .await
+                .unwrap()
+                .unwrap()
+                .family_id,
+            setup_family
         );
         assert!(db.auth_pending(&setup, now).await.unwrap().is_none());
         assert!(!db.auth_enrollment_allowed(&email).await.unwrap());
@@ -710,6 +731,13 @@ mod tests {
                 .stage,
             "second_factor"
         );
+        let primary_family = db
+            .auth_pending(&pending, now + 1)
+            .await
+            .unwrap()
+            .unwrap()
+            .family_id;
+        assert_ne!(primary_family, setup_family);
         assert!(db.auth_session(&pending, now + 1).await.unwrap().is_none());
         assert!(
             db.auth_password_set(&pending, &hash, &random_token().unwrap(), now + 1)
@@ -750,6 +778,14 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+        assert_eq!(
+            db.auth_pending(&verified, now + 2)
+                .await
+                .unwrap()
+                .unwrap()
+                .family_id,
+            primary_family
+        );
         assert!(db.auth_pending(&pending, now + 2).await.unwrap().is_none());
         // Security changes rotate without extending the original primary/MFA freshness window.
         let edited = random_token().unwrap();
@@ -758,6 +794,13 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        assert_eq!(edited_state.family_id, primary_family);
+        assert!(
+            serde_json::to_value(&edited_state)
+                .unwrap()
+                .get("family_id")
+                .is_none()
+        );
         assert_eq!(edited_state.factor_verified_at, Some(now + 2));
         assert!(
             db.auth_password_set(&edited, &hash, &random_token().unwrap(), now + 303)
@@ -787,6 +830,14 @@ mod tests {
                 .await
                 .unwrap()
                 .is_some()
+        );
+        assert_eq!(
+            db.auth_pending(&totp_session, now + 63)
+                .await
+                .unwrap()
+                .unwrap()
+                .family_id,
+            primary_family
         );
         assert!(db.auth_session(&full, now + 63).await.unwrap().is_none());
         assert!(
