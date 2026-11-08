@@ -301,17 +301,16 @@ async fn remove(
     State(auth): State<Arc<Auth>>,
     Path(id): Path<String>,
     headers: HeaderMap,
-) -> Result<Json<Value>, Error> {
+) -> Result<axum::response::Response, Error> {
     auth.mutation(&headers).await?;
-    if !auth
+    let new_token = random_token().map_err(|_| unavailable())?;
+    let session = auth
         .database()?
-        .passkey_remove(token(&headers)?, &id, now())
+        .passkey_remove(token(&headers)?, &id, &new_token, now())
         .await
         .map_err(|_| unavailable())?
-    {
-        return Err(denied());
-    }
-    Ok(Json(json!({"ok":true})))
+        .ok_or_else(denied)?;
+    finish(&auth, &new_token, session)
 }
 
 #[cfg(test)]

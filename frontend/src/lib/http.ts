@@ -110,7 +110,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (
     response.ok &&
     ['POST', 'PUT', 'DELETE'].includes(method) &&
-    sessionChanges.has(url.pathname)
+    (sessionChanges.has(url.pathname) ||
+      (method === 'DELETE' && /^\/api\/auth\/passkeys\/[^/]+$/.test(url.pathname)))
   ) {
     clearAuthToken();
     announceAuthChange();

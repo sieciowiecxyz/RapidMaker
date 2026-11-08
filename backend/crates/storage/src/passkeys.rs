@@ -341,21 +341,22 @@ impl Storage {
         &self,
         token: &str,
         id: &str,
+        new_token: &str,
         now: i64,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<AuthSession>, StorageError> {
         let mut tx = self.pool.begin().await?;
         lock(&mut tx).await?;
         let Some(row) = session(&mut tx, token, now).await? else {
-            return Ok(false);
+            return Ok(None);
         };
         if !fresh_admin(&row, now)? {
-            return Ok(false);
+            return Ok(None);
         }
         let user_id: String = row.try_get("id")?;
         if keys(&mut tx, &user_id).await?.len() <= 1
             && row.try_get::<Option<String>, _>("password_hash")?.is_none()
         {
-            return Ok(false);
+            return Ok(None);
         }
         let deleted = sqlx::query("DELETE FROM passkeys WHERE id=$1 AND user_id=$2")
             .bind(id)
@@ -364,11 +365,22 @@ impl Storage {
             .await?
             .rows_affected()
             == 1;
-        if deleted {
-            crate::credentials::revoke_others(&mut tx, &user_id, token).await?;
+        if !deleted {
+            return Ok(None);
         }
+        crate::credentials::revoke_others(&mut tx, &user_id, token).await?;
+        let session = crate::credentials::rotate(
+            &mut tx,
+            token,
+            &user_id,
+            new_token,
+            "authenticated",
+            now,
+            None,
+        )
+        .await?;
         tx.commit().await?;
-        Ok(deleted)
+        Ok(Some(session))
     }
 }
 

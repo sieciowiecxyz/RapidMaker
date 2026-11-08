@@ -170,8 +170,33 @@ test('real security settings rotate sessions, change password, use passkey and r
   const recovery = await security.locator('.recovery-codes code').first().innerText();
   await security.getByRole('button', { name: 'Zapisałem kody — ukryj', exact: true }).click();
   await expect(security.locator('.recovery-codes code')).toHaveCount(0);
-  await keys.getByRole('button', { name: 'Usuń klucz', exact: true }).click();
-  await expect(keys.getByText('E2E security key', { exact: true })).toHaveCount(0);
+  const oldActor = await browser.newContext({ storageState: await context.storageState() });
+  const otherDevice = await browser.newContext();
+  const oldPending = await browser.newContext();
+  try {
+    await login(await otherDevice.newPage(), { ...account, password, totp_uri: setup.otpauth_uri });
+    const primary = await oldPending.request.post(`${origin}/api/auth/password/login`, {
+      headers: { Origin: origin },
+      data: { email: account.email, password },
+    });
+    expect(primary.status()).toBe(200);
+    expect((await (await oldPending.request.get(`${origin}/api/auth/me`)).json()).stage).toBe(
+      'second_factor',
+    );
+    expect((await (await otherDevice.request.get(`${origin}/api/auth/me`)).json()).stage).toBe(
+      'authenticated',
+    );
+    const beforeDelete = await (await page.request.get('/api/auth/me')).json();
+    await keys.getByRole('button', { name: 'Usuń klucz', exact: true }).click();
+    await expect(keys.getByText('E2E security key', { exact: true })).toHaveCount(0);
+    for (const stale of [oldActor, otherDevice, oldPending])
+      expect((await stale.request.get(`${origin}/api/auth/me`)).status()).toBe(401);
+    const afterDelete = await (await page.request.get('/api/auth/me')).json();
+    expect(afterDelete.stage).toBe('authenticated');
+    expect(afterDelete.csrf_token !== beforeDelete.csrf_token).toBe(true);
+  } finally {
+    await Promise.all([oldActor.close(), otherDevice.close(), oldPending.close()]);
+  }
   await security.getByLabel('Nowe hasło', { exact: true }).fill(account.password);
   await security.getByLabel('Powtórz hasło', { exact: true }).fill(account.password);
   await security.getByRole('button', { name: 'Zapisz hasło', exact: true }).click();
