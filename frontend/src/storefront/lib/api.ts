@@ -151,6 +151,25 @@ function productionModel(
     notes: previous?.notes ?? '',
   };
 }
+function validateVariants(models: PrintModel[]): void {
+  const seen = new Set<string>();
+  for (const model of models) {
+    const key = JSON.stringify([
+      model.analysis?.id ?? model.id,
+      model.options.materialId,
+      model.options.color,
+      model.colorPreference,
+      model.options.quality,
+      model.options.quantity,
+      model.advanced.wallCount,
+      model.advanced.infill,
+    ]);
+    if (seen.has(key))
+      throw new Error('Identyczny wariant. Zmień ustawienia lub zwiększ liczbę sztuk.');
+    seen.add(key);
+  }
+}
+
 export async function getQuote(options: QuoteOptions): Promise<Quote> {
   validate(options.models, await getMaterials());
   const [materials, catalog] = await Promise.all([
@@ -158,6 +177,7 @@ export async function getQuote(options: QuoteOptions): Promise<Quote> {
     checkout.getPrintOptions(),
   ]);
   const models = options.models.map((model) => productionModel(model, materials, catalog));
+  validateVariants(models);
   const preferences = models.filter((model) => model.colorPreference);
   // A display shade does not change the material's measured print time/consumption.
   // Quote a reference color only; checkout keeps the original preference for confirmation.
@@ -207,6 +227,7 @@ export async function prepareCheckout(models: Model[], delivery: string): Promis
     checkout.getPrintOptions(),
   ]);
   const resolved = models.map((model) => productionModel(model, materials, catalog));
+  validateVariants(resolved);
   const oldCart = await checkout.getCart();
   for (const item of oldCart.models) await checkout.removeModel(item.id);
   const savedModels: Model[] = [];

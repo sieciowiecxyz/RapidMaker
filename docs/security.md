@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — wczesna walidacja identycznych wariantów
+
+Identyczny klon mógł wcześniej pokazać cenę i przejście dalej, a dopiero później dostać 400 ręcznego zgłoszenia lub 409 płatności za powtórzoną wycenę. Adapter konfiguratora autora porównuje teraz lokalnie kanoniczny model/materiał/kod koloru/preferencję/jakość/ilość/ściany/wypełnienie przed projekcją kolorów i przed zmianą koszyka. Istniejący komunikat błędu ukrywa cenę i blokuje CTA; przycisk kopiowania i guardy backendu pozostają. Bez agregowania ilości lub usuwania kontrolek; +21 linii TypeScript, bez nowych zależności lub zmian wyglądu.
+
+Native UI 1 PASS/13,8 s: identyczna kopia blokowana przed POST, zmiana samej ilości odblokowuje, przywrócenie ilości blokuje, różny PETG wariant poprawnie zapisuje ręczne zgłoszenie. Osobny mock HTTP 1 PASS/4,9 s: dwie różne preferencje odcieni przy wspólnym referencyjnym kolorze nie są odrzucane; cena fixture nie jest dowodem wyceniarki. Różne uploady tych samych bajtów rozróżnia klucz ID źródłowo, bez nowego testu runtime. Build/fmt PASS, Sol xhigh bez blokera; źródła/binarka/dist zamrożone przez testy, własne zasoby usunięte, normalny API niezmieniony. Dowody: `security-identical-variants-20261108/implementation-result.json`, native-run1 i mock-run1. To wcześniejsza walidacja UI, nie automatyczne łączenie identycznych części ani zastępstwo kontroli serwera.
+
 ## 2026-11-08 — warianty jednego uploadu w ręcznej wycenie
 
 Potwierdzono błąd kontraktu: widoczny „Powiel wariant” zachowuje ID uploadu, a model-only guard odrzucał drugi wariant nawet z innym materiałem. API i storage porównują teraz całe kanoniczne części po normalizacji ilości; każda nowa pozycja ma osobne `line_id=quote_id`. Limity/własność/replay/14-dniowy hold pozostają, identyczne pozycje nadal odrzucane. Netto 0 linii produktu, bez migracji/DTO/deps lub zmian stylu.

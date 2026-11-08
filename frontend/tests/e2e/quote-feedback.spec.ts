@@ -79,15 +79,20 @@ async function configure(
     }
     if (path === '/api/checkout/quote') {
       if (checkout) return checkout(route);
-      const part = route.request().postDataJSON().parts[0];
+      const parts = route.request().postDataJSON().parts as { id: string; quantity: number }[];
       return route.fulfill({
         json: {
           id: 'cart-quote',
           expires_at: Math.floor(Date.now() / 1000) + 600,
           packing: { status: 'estimated', parcels: [], packaging_grosze: 0 },
           offers: [],
-          print_grosze: 3650,
-          print_lines: [{ model_id: part.id, quantity: 1, unit_grosze: 2450, total_grosze: 2450 }],
+          print_grosze: 1200 + parts.reduce((sum, part) => sum + 2450 * part.quantity, 0),
+          print_lines: parts.map((part) => ({
+            model_id: part.id,
+            quantity: part.quantity,
+            unit_grosze: 2450,
+            total_grosze: 2450 * part.quantity,
+          })),
           setup_grosze: 1200,
           packaging_grosze: 0,
         },
@@ -117,18 +122,34 @@ test('a cross-family shade shows the measured material price but remains an unmo
   await expect(result.getByText('Szacowana cena wydruku', { exact: true })).toBeVisible();
   await expect(result.locator('.price')).toContainText('36,50');
   await expect(result).toContainText('PETG wymaga potwierdzenia');
+  await page.getByRole('button', { name: 'Powiel wariant cube_20mm.stl', exact: true }).click();
+  await expect(
+    page.getByText('Identyczny wariant. Zmień ustawienia lub zwiększ liczbę sztuk.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'PLA-CF', exact: true }).click();
+  await page.getByRole('radio', { name: 'Lava Gray', exact: true }).check();
+  await expect(result.getByText('Szacowana cena wydruku', { exact: true })).toBeVisible();
+  await expect(result.locator('.price')).toContainText('61,00');
+  await expect(page.locator('.quote-contact')).toBeEnabled();
+
   expect(estimates.length).toBeGreaterThan(0);
   expect(estimates.every((r) => r.material_id === 'GFG02' && r.color_code === '33102')).toBe(true);
   await page.getByRole('button', { name: 'Zapytaj o wycenę', exact: true }).click();
   await expect(page.locator('#order-title')).toBeVisible();
-  const model = await page.evaluate(
-    () => JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart.models[0],
+  const models = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart.models,
   );
+  const model = models[0];
+  expect(models).toHaveLength(2);
+  expect(models[1].analysis.id).toBe(model.analysis.id);
+  expect(models[1].colorPreference).toContain('Lava Gray');
   expect(model.options.materialId).toBe('GFG02');
   expect(model.options.color).toBe('');
   expect(model.colorPreference).toContain('Matcha Green');
   await expect(page.locator('.order-total')).toContainText('Szacowana cena wydruku');
-  await expect(page.locator('.order-total')).toContainText('36,50');
+  await expect(page.locator('.order-total')).toContainText('61,00');
   await expect(
     page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }),
   ).toBeVisible();

@@ -439,9 +439,11 @@ test('different manual configurations share one upload and preserve separate ord
         const offset = 84 + triangle * 50 + 12 + vertex * 12 + axis * 4;
         buffer.writeFloatLE(buffer.readFloatLE(offset) * 15, offset);
       }
-  let uploads = 0;
+  let uploads = 0,
+    manualRequests = 0;
   page.on('request', (r) => {
     if (r.url().endsWith('/api/models') && r.method() === 'POST') uploads++;
+    if (r.url().endsWith('/api/account/manual-quotes') && r.method() === 'POST') manualRequests++;
   });
   const uploaded = page.waitForResponse(
     (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',
@@ -465,6 +467,29 @@ test('different manual configurations share one upload and preserve separate ord
   await page.getByRole('button', { name: 'Powiel wariant oversized300.stl', exact: true }).click();
   const rows = page.locator('.model-row');
   await expect(rows).toHaveCount(2);
+  const identical = page.getByText(
+    'Identyczny wariant. Zmień ustawienia lub zwiększ liczbę sztuk.',
+    { exact: true },
+  );
+  await expect(identical).toBeVisible();
+  await expect(page.locator('.quote-result .price')).toHaveCount(0);
+  await expect(page.locator('.quote-contact')).toBeDisabled();
+  expect(manualRequests).toBe(0);
+  await rows.nth(1).getByRole('spinbutton').fill('2');
+  await expect(page.getByText('Wymagana ręczna wycena', { exact: true })).toBeVisible();
+  await expect(page.locator('.quote-contact')).toBeEnabled();
+  expect(
+    (await draft()).map((m: { settings: { material: string } }) => m.settings.material),
+  ).toEqual(['pla', 'pla']);
+  expect((await draft()).map((m: { settings: { color: string } }) => m.settings.color)).toEqual([
+    'black',
+    'black',
+  ]);
+  await rows.nth(1).getByRole('spinbutton').fill('1');
+  await expect(identical).toBeVisible();
+  await expect(page.locator('.quote-contact')).toBeDisabled();
+  expect(manualRequests).toBe(0);
+
   await rows
     .nth(1)
     .getByRole('button', { name: 'Konfiguruj oversized300.stl', exact: true })
