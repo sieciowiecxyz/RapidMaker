@@ -33,7 +33,7 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
-Wolne pobieranie: potwierdzone4stalledTCP→503 naprawiono niezależnym producentem/deadline300s.7focusedPASS, TCP odzyskuje200 przy nadal otwartych gniazdach; netto35linii produktu, bez zależności. Solxhigh bez blokera, normalneAPI bez wdrożenia; granice w security.
+Wolne pobieranie: potwierdzone4stalledTCP→503 naprawiono niezależnym producentem/deadline300s.7focusedPASS, TCP odzyskuje200 przy nadal otwartych gniazdach; netto35linii produktu, bez zależności. Osobny native headless11PASS: GLB/izolacja/expiry/auth, bez oryginałów/plików zamówień i pikselowego audytu. Solxhigh bez blokera, normalneAPI bez wdrożenia; dowody i granice w security.
 
 Rozdział odpowiedzi klient/admin: audyt nie potwierdził wycieku; istniejący native router/PG test rozszerzony o prywatność szkicu faktury,1PASS. Netto5linii testu, produkt bezzmian; Solxhigh bez blokera. Szczegóły i granice w security.
 

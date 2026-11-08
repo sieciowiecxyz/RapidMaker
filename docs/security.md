@@ -178,6 +178,8 @@ Poprawka: jeden producent na odczyt, kanał1×64KiB, niezależny deadline300s i 
 
 Solxhigh bez blokera. Dowody `security-file-download-20261108/transport-probe-result.json`, `fix-result.json`, `final-hashes.json`; pierwotny błąd kompilacji zachowany, poprawiony przed testami. Po usunięciu zbędnego testowego SO_LINGER ponowiono tylko test TCP. Normalny API/DB bez restartu lub wdrożenia. Legalny odczyt ponad5min zostanie przerwany; uprawniony klient nadal może ponawiać żądania, więc nie jest to gwarancja fairness ani całkowitej odporności na DoS. Pozostałe połączenia/bufory transportu nie podlegają kwocie tych czterech plików.
 
+Osobno po poprawce: jeden rzeczywisty headless przebieg `--local-accounts models.spec.ts two-client-upload.spec.ts security.spec.ts`,11PASS/0FAIL/SKIP/flaky,20,04s. Potwierdza GLB200/glTF dlaSTL/STEP/3MF, widoczność viewera, obcy401/404, no-store, izolację wycen, upload429/recovery, usunięcie wygasłych plików i lokalne logowanie/TOTP/ustawienia. Nie dowodzi renderu pikseli, pobierania oryginałów/plików zamówień lub deadline300s. Prywatny przypięty API zawiera poprawkę; hashe źródeł/dist niezmienne, własnaDB/procesy/pliki usunięte, normalneAPI niezmienione. Bez providerów/emaila; Solxhigh potwierdził zakres. Dowody `download-security-native-20261108/result.json`, build-manifest.json i cleanup.json.
+
 ## 2026-11-08 — granica zaufania webhooka Stripe
 
 Przegląd źródeł nie wykazał obejścia: podpis surowego body i czas sprawdzane przed zapisem; zdarzenie inicjuje ponowne pobranie obiektu Stripe z weryfikacją ID/kwoty/PLN/metadanych/testmode. Rozliczenie blokuje próbę płatności, stan paid jest końcowy, zapis zamówienia i outbox atomowy. Dwa istniejące testy offline podpisu/korelacji PASS.
