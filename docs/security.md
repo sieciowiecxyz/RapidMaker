@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — wywołania HTTP płatności i dostawy
+
+W sprawdzonych ścieżkach nie potwierdzono podatności: stałe hosty HTTPS, walidacja ID przed budową ścieżek i wyłączone przekierowania. Etykieta pochodzi z endpointu Furgonetki, nie z URL zwróconego przez dostawcę; dostęp wymaga admina, format a4/a6, limit8MiB i sygnatura PDF. Stripe ogranicza odpowiedź do512KiB; Furgonetka JSON do1/5MiB, błędy64KiB. Limity czasu: Stripe connect5s/request20s, Furgonetka3s/8s.
+
+Pięć istniejących testów offline walidacji ID/URL i kontraktów żądań PASS; redirect/limity transmisji/timeouty sprawdzono źródłowo, bez symulacji transportu. Brak zmian produktu lub nowych testów; bez providerów/DB/przeglądarki. Dowody `security-provider-http-20261108/result.json`, tests.json i niezmienione hashe źródeł. Solxhigh potwierdził zakres i brak konkretnej luki. To nie dowód odporności wszystkich tras na SSRF/DoS ani działania produkcyjnych integracji.
+
 ## 2026-11-08 — odpowiedzi zamówień klienta
 
 Przegląd źródeł nie wykazał wycieku prywatnych danych produkcji/faktury, identyfikatorów uczestników rozmowy ani plików innych klientów. Istniejący test routera/PostgreSQL sprawdzał kanarek produkcji; dodano kanarek szkicu faktury, potwierdzenie jego odczytu przez admina i brak obu pól w odpowiedzi klienta. Zmiana tylko testowa: netto5linii, bez kodu produktu/zależności.
