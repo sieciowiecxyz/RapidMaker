@@ -117,3 +117,10 @@ Cargo audit: 0 podatności, informacyjne [RUSTSEC-2026-0441](https://rustsec.org
 npm audit: 3 wpisy LOW, jeden źródłowy [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4) dla `deepmerge 4.3.1`, `fixAvailable:false`; dwa pluginy Svelte dziedziczą ostrzeżenie. Wszystkie oznaczone dev, plugin używa merge konfiguracji kompilatora. Nie znaleziono ścieżki od danych klienta; `npm audit --omit=dev` daje 0, co nie jest dowodem bezpieczeństwa całego bundla. Nie wdrożono bezcelowej aktualizacji major/override ani wyciszenia ostrzeżenia.
 
 Surowe raporty, kody wyjścia, drzewo i niezmienione sumy manifestów/locków: `frontend/tests/artifacts/security-dependencies-20261108/`. Sol xhigh potwierdził klasyfikację; dokładna deklaracja najnowszej wersji pluginu nie jest podstawą wniosku. Audyt nie obejmuje bibliotek systemowych lub wszystkich podatności aplikacji. Bez zmian kodu/zależności, dostawców i usług.
+
+
+## 2026-11-08 — defensywny przegląd email → chat
+
+Nie potwierdzono nowej luki w sprawdzonym kodzie. Limit 256 KiB jest przed parserem; po odczycie odrzucane są załączniki, ponad32części i głębokość>8. Sprawdzenie liczby części poprzedza lokalną rekurencję. IMAP ma1slot/30s/20UIDna partię, kontrolę RFC822.SIZE, częściowe BODY.PEEK i8MiB budżetu odczytu. From jest tylko nagłówkiem — dostęp opiera się na podpisanej HMAC referencji oraz aktualnym sprawdzeniu uczestnika, roli, własności, wygaśnięcia i revocation w storage. Dedup i limit10wiadomości/order/min pozostają.
+
+Istniejące offline `replies::tests`: **2 PASS**, artefakty `security-inbound-mail-20261108/`. Główny agent i Solxhigh przejrzeli źródła. Subagent audytowy został zablokowany przez filtr narzędzia; kontynuowano jedynie defensywny odczyt kodu i istniejące testy, bez nowych payloadów, IMAP/SMTP lub prób penetracyjnych. Brak zmian produktu; nie jest to dowód bezpieczeństwa wszystkich gałęzi parsera ani kryptograficzne uwierzytelnienie From.
