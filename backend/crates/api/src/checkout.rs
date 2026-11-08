@@ -519,14 +519,17 @@ pub(super) async fn quote_draft(
             Err(conflict())
         };
     }
-    let mut plans = rapidmaker_packing::candidates(EstimateRequest {
-        parts: cart.parts,
-        delivery: match input.delivery.method {
-            Method::Courier => Delivery::Courier,
-            Method::Locker => Delivery::Locker,
-            Method::Pickup => Delivery::Pickup,
-        },
-    });
+    let mut plans = super::packing::compute(move || {
+        rapidmaker_packing::candidates(EstimateRequest {
+            parts: cart.parts,
+            delivery: match input.delivery.method {
+                Method::Courier => Delivery::Courier,
+                Method::Locker => Delivery::Locker,
+                Method::Pickup => Delivery::Pickup,
+            },
+        })
+    })
+    .await?;
     for plan in &mut plans {
         plan.geometry_source = "parsed_model_slicer_mass_upper_bound";
     }

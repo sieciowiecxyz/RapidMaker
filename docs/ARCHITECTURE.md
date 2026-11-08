@@ -4,6 +4,8 @@
 
 Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zależności i warstw. `app → api → moduły`; logika obliczeń nie zna HTTP. Nie przenosimy całego kodu do routera. Zewnętrzne dane są niezaufane; granice uprawnień, kwot i zasobów pozostają obowiązkowe w POC.
 
+Pakowanie w API i checkout działa przez `spawn_blocking`: maksymalnie dwa obliczenia na proces, w tym jedno z publicznego endpointu; zajęcie zwraca 429. Anulowanie HTTP nie zwalnia miejsca przed końcem obliczenia.
+
 Warstwy geometrii i slicera ograniczają także zapisywalne systemy plików: `/dev` jest RO, osobne `/dev/shm` ma 128 MiB. Slicer ma `/out` tmpfs512 MiB i eksportuje na host wyłącznie prywatny `result.json`, bez G-code. AS/CPU to limity pojedynczego procesu; szczegóły i granice: [bezpieczeństwo](security.md#pamięć-tymczasowa-workerów).
 
 ## Faktyczna mapa
