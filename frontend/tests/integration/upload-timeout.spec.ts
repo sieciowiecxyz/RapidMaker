@@ -5,6 +5,49 @@ import { resolve } from 'node:path';
 
 test.use({ screenshot: 'off', trace: 'off', video: 'off' });
 
+test('invalid filename cannot hold upload admission while its body stalls', async ({ request }) => {
+  const source = readFileSync(resolve('../backend/crates/geometry/tests/fixtures/cube_20mm.stl'));
+  const origin = { Origin: 'http://localhost:18437' };
+  const waiting = httpRequest('http://127.0.0.1:18436/api/models', {
+    method: 'POST',
+    headers: {
+      ...origin,
+      Host: 'localhost:18437',
+      'x-model-filename': 'unsupported.exe',
+      'Content-Length': source.length,
+    },
+  });
+  const refused = new Promise<number>((done) => {
+    waiting.once('response', (response) => {
+      response.resume();
+      response.once('end', () => done(response.statusCode ?? 0));
+    });
+    waiting.once('error', () => done(0));
+  });
+  let created: string | undefined;
+  try {
+    waiting.write(source.subarray(0, 4)); // Deliberately leave the declared body unfinished.
+    const earlyStatus = await Promise.race([
+      refused,
+      new Promise<null>((done) => setTimeout(() => done(null), 500)),
+    ]);
+    const healthy = await request.post('/api/models', {
+      headers: { ...origin, 'x-model-filename': 'cube_20mm.stl' },
+      data: source,
+    });
+    if (healthy.status() === 201) created = (await healthy.json()).id;
+    await test.info().attach('early-upload-rejection', {
+      body: JSON.stringify({ earlyStatus, healthyStatus: healthy.status() }),
+      contentType: 'application/json',
+    });
+    expect(earlyStatus).toBe(400);
+    expect(healthy.status()).toBe(201);
+  } finally {
+    waiting.destroy();
+    if (created) await request.delete(`/api/models/${created}`, { headers: origin });
+  }
+});
+
 test('stalled upload expires, releases admission and permits a private model upload', async ({
   request,
   playwright,

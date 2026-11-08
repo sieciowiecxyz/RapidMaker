@@ -82,6 +82,9 @@ async fn admit_upload(State(state): State<FileState>, request: Request, next: Ne
     if let Err(error) = database(&state) {
         return error.into_response();
     }
+    if let Err(error) = filename(request.headers()) {
+        return error.into_response();
+    }
     let Ok(_permit) = UPLOAD_BUSY.try_acquire() else {
         return upload_busy();
     };
