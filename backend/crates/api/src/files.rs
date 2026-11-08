@@ -621,13 +621,12 @@ async fn upload(
             &record,
             state.profile.input_bytes(),
             state.profile.stl_bytes(),
+            || pending.0 = None,
         )
         .await
         .map_err(|failure| {
             if failure.is::<ModelCommitUncertain>() {
-                // A committed row may already reference these files. Without a row,
-                // the worker reconciles the aged directory under both locks.
-                pending.0 = None;
+                // Files were retained before COMMIT; the worker reconciles aged orphans.
                 tracing::error!(event="model_commit_uncertain", model_id=%record.id, reason="prepared files retained for reconciliation");
             }
             error(
@@ -641,7 +640,6 @@ async fn upload(
             "Przekroczono limit zapisanych modeli. Spróbuj po wygaśnięciu starszych plików.",
         ));
     }
-    pending.0 = None;
     tracing::info!(event="model_uploaded", model_id=%record.id, source_bytes=record.source_bytes, mesh_bytes=record.mesh_bytes, preview_bytes=record.preview_bytes);
     let mut response = (StatusCode::CREATED, Json(public_metadata(&record))).into_response();
     if record.user_id.is_none() {

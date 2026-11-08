@@ -28,7 +28,7 @@ Warstwy geometrii i slicera ograniczają także zapisywalne systemy plików: `/d
 
 Prywatne pliki: `api/files.rs` wysyła asynchronicznie po 64 KiB, z limitem czterech aktywnych ciał odpowiedzi na proces (503 przy zajęciu). Uprawnienia poprzedzają otwarcie; jeden deskryptor sprawdza typ/długość i nie podąża za symlinkiem. Upload ma 60 s wyłącznie na odbiór body (408); konwersja i commit DB nie są przerywane tym timeoutem.
 
-Trwałość uploadu: pliki, katalog UUID i katalog nadrzędny są fsync przed insertem. `storage::ModelCommitUncertain` rozróżnia błąd COMMIT od błędu wcześniejszego inserta: API zachowuje przygotowane pliki przy niepewnym wyniku i zwraca 503. Niezarejestrowane katalogi starsze niż 24 h uzgadnia istniejący worker: współdzielony root flock, osobny odczyt po blokadzie inserta PostgreSQL, aktywne zadania/holdy chronione. `ModelCleanupCursor` przechodzi po 64 wpisy na przebieg; busy/błąd bazy zachowuje pliki. Root jest stały podczas pracy; wszystkie procesy uploadu muszą być zaktualizowane.
+Trwałość uploadu: pliki, katalog UUID i katalog nadrzędny są fsync przed insertem. Storage wywołuje przekazany `before_commit` tuż przed COMMIT; API wyłącza wtedy usuwanie plików także na wypadek anulowania HTTP. `storage::ModelCommitUncertain` rozróżnia błąd COMMIT od błędu wcześniejszego inserta: API zachowuje przygotowane pliki przy niepewnym wyniku i zwraca 503. Niezarejestrowane katalogi starsze niż 24 h uzgadnia istniejący worker: współdzielony root flock, osobny odczyt po blokadzie inserta PostgreSQL, aktywne zadania/holdy chronione. `ModelCleanupCursor` przechodzi po 64 wpisy na przebieg; busy/błąd bazy zachowuje pliki. Root jest stały podczas pracy; wszystkie procesy uploadu muszą być zaktualizowane.
 
 ## Nowa wycena a istniejący checkout
 

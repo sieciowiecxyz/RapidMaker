@@ -66,16 +66,18 @@ impl Storage {
     /// All writers take one database lock; concurrent processes cannot exceed quotas.
     /// Return false for quota refusal, while database failures remain errors.
     pub async fn insert_model(&self, model: &StoredModel) -> Result<bool, StorageError> {
-        self.insert_model_with_limits(model, 32 * 1024 * 1024, 50 * 1024 * 1024)
+        self.insert_model_with_limits(model, 32 * 1024 * 1024, 50 * 1024 * 1024, || {})
             .await
     }
 
     /// Explicit per-file allowances; aggregate quotas and preview cap stay fixed.
+    /// Hand off file cleanup before COMMIT, including when the caller is cancelled.
     pub async fn insert_model_with_limits(
         &self,
         model: &StoredModel,
         max_source_bytes: usize,
         max_mesh_bytes: usize,
+        before_commit: impl FnOnce() + Send,
     ) -> Result<bool, StorageError> {
         if !(1..=96 * 1024 * 1024).contains(&max_source_bytes)
             || !(84..=200 * 1024 * 1024).contains(&max_mesh_bytes)
@@ -122,6 +124,7 @@ impl Storage {
             .bind(model.source_bytes).bind(model.mesh_bytes).bind(&model.sha256)
             .bind(model.dimensions_mm.as_slice()).bind(model.expires_at).bind(&model.user_id).bind(model.preview_bytes).execute(&mut *tx).await?;
         // Even an error may follow a successful server-side commit (lost ACK).
+        before_commit();
         tx.commit().await.map_err(|_| ModelCommitUncertain)?;
         Ok(true)
     }
@@ -921,7 +924,7 @@ mod tests {
             (source_limit, mesh_limit + 1),
         ] {
             assert_eq!(
-                db.insert_model_with_limits(&model, source, mesh)
+                db.insert_model_with_limits(&model, source, mesh, || unreachable!())
                     .await
                     .unwrap_err()
                     .to_string(),
@@ -931,7 +934,7 @@ mod tests {
         model.source_bytes = source_limit as i64;
         model.mesh_bytes = mesh_limit as i64;
         let error = db
-            .insert_model_with_limits(&model, source_limit, mesh_limit)
+            .insert_model_with_limits(&model, source_limit, mesh_limit, || {})
             .await
             .unwrap_err();
         assert!(matches!(
@@ -940,7 +943,7 @@ mod tests {
         ));
         model.source_bytes += 1;
         assert_eq!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .unwrap_err()
                 .to_string(),
@@ -949,7 +952,7 @@ mod tests {
         model.source_bytes -= 1;
         model.mesh_bytes += 1;
         assert_eq!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .unwrap_err()
                 .to_string(),
@@ -958,7 +961,7 @@ mod tests {
         model.mesh_bytes -= 1;
         model.preview_bytes += 1;
         assert_eq!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .unwrap_err()
                 .to_string(),
@@ -1030,38 +1033,38 @@ mod tests {
         let source_limit = 96 * 1024 * 1024;
         let mesh_limit = 200 * 1024 * 1024;
         assert!(
-            db.insert_model_with_limits(&model, source_limit + 1, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit + 1, mesh_limit, || {})
                 .await
                 .is_err()
         );
         assert!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit + 1)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit + 1, || {})
                 .await
                 .is_err()
         );
         assert!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .unwrap()
         );
         model.id = uuid::Uuid::new_v4().to_string();
         model.source_bytes = source_limit as i64 + 1;
         assert!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .is_err()
         );
         model.source_bytes = 33 * 1024 * 1024;
         model.mesh_bytes = mesh_limit as i64 + 1;
         assert!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .is_err()
         );
         model.mesh_bytes = 51 * 1024 * 1024;
         model.preview_bytes = 25 * 1024 * 1024 + 1;
         assert!(
-            db.insert_model_with_limits(&model, source_limit, mesh_limit)
+            db.insert_model_with_limits(&model, source_limit, mesh_limit, || {})
                 .await
                 .is_err()
         );
