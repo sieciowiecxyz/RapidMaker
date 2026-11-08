@@ -265,8 +265,11 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        let first = enqueue("one").await.unwrap();
-        assert_eq!(first.id, enqueue("one").await.unwrap().id);
+        let (first, duplicate) = tokio::join!(enqueue("one"), enqueue("one"));
+        let first = first.unwrap();
+        assert_eq!(first.id, duplicate.unwrap().id);
+        let count:i64=sqlx::query_scalar("SELECT count(*) FROM slicer_jobs WHERE owner_hash=$1 AND model_id=$2 AND fingerprint='one'").bind(&owner).bind(model_id).fetch_one(&db.pool).await.unwrap();
+        assert_eq!(count, 1);
         assert!(
             db.expired_model_ids(now + 2)
                 .await
