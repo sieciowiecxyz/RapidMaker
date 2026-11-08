@@ -9,7 +9,7 @@ Modele zostają w prywatnych plikach lokalnych; PostgreSQL przechowuje metadane,
 3. `GET /api/quotes/jobs/{id}` zwraca ten sam kształt tylko właścicielowi; obcy dostaje 404. Status: `queued`, `running`, `succeeded`, `failed`. Wynik jest dostępny przy `succeeded`; komunikat błędu przy `failed`. Ścieżki, dane właściciela i token lease nie trafiają do odpowiedzi.
 4. Worker przejmuje zadanie, uruchamia izolowany Bambu Studio i oblicza cenę. Snapshot wyceny i sukces zadania zapisuje w jednej transakcji. ID zadania jest też ID wyceny dla checkoutu.
 
-Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie odpytywania nie kasuje zadania; powtórny identyczny POST zwraca istniejące aktywne zadanie lub jeszcze ważny wynik. Fingerprint obejmuje model, materiał/kolor, opcje, profile, cenę zakupu i stawki; deduplikacja jest prywatna dla właściciela. Poprzedni cache pomiarów w RAM został zastąpiony deduplikacją zadań w DB. Jawne ponowienie po terminalnym błędzie może utworzyć nowe zadanie; limity kolejki nie ograniczają łącznego czasu CPU właściciela.
+Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie odpytywania nie kasuje zadania; powtórny identyczny POST zwraca istniejące aktywne zadanie lub jeszcze ważny wynik. Fingerprint obejmuje model, materiał/kolor, opcje, profile, cenę zakupu i stawki; deduplikacja jest prywatna dla właściciela. Poprzedni cache pomiarów w RAM został zastąpiony deduplikacją zadań w DB. Błąd zakończonej pracy jest ponownie używany przez 60 s dla identycznego właściciela/modelu/wejścia; później można ponowić. Limity kolejki nie ograniczają łącznego czasu CPU właściciela.
 
 ## Wykonanie i granice
 

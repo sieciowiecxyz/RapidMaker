@@ -67,7 +67,7 @@ impl Storage {
             .bind(model_id).bind(owner).bind(now).fetch_optional(&mut *tx).await?.is_none() { return Ok(None); }
         sqlx::query("DELETE FROM slicer_jobs WHERE expires_at<=$1 AND (status<>'running' OR lease_until<=$1)")
             .bind(now).execute(&mut *tx).await?;
-        if let Some(row) = sqlx::query("SELECT * FROM slicer_jobs WHERE owner_hash=$1 AND fingerprint=$2 AND model_id=$3 AND expires_at>$4 AND (status IN ('queued','running') OR (status='succeeded' AND expires_at>$4+30)) ORDER BY created_at DESC LIMIT 1")
+        if let Some(row) = sqlx::query("SELECT * FROM slicer_jobs WHERE owner_hash=$1 AND fingerprint=$2 AND model_id=$3 AND expires_at>$4 AND (status IN ('queued','running') OR (status='succeeded' AND expires_at>$4+30) OR (status='failed' AND available_at>$4)) ORDER BY created_at DESC LIMIT 1")
             .bind(owner).bind(fingerprint).bind(model_id).bind(now).fetch_optional(&mut *tx).await? { return Ok(Some(job(row)?)); }
         let counts = sqlx::query("SELECT count(*) AS retained,count(*) FILTER (WHERE status IN ('queued','running')) AS active,count(*) FILTER (WHERE owner_hash=$1 AND status IN ('queued','running')) AS owned FROM slicer_jobs")
             .bind(owner).fetch_one(&mut *tx).await?;
@@ -182,7 +182,7 @@ impl Storage {
             return Err("slicer error too long".into());
         }
         let mut tx = self.queue_transaction().await?;
-        let updated = sqlx::query("UPDATE slicer_jobs SET status=CASE WHEN $3 AND attempts<3 AND expires_at>$5 THEN 'queued' ELSE 'failed' END,lease_token=NULL,lease_until=NULL,available_at=$5+5*attempts,error=$4 WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>$5")
+        let updated = sqlx::query("UPDATE slicer_jobs SET status=CASE WHEN $3 AND attempts<3 AND expires_at>$5 THEN 'queued' ELSE 'failed' END,lease_token=NULL,lease_until=NULL,available_at=$5+CASE WHEN $3 AND attempts<3 AND expires_at>$5 THEN 5*attempts ELSE 60 END,error=$4 WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>$5")
             .bind(id).bind(token).bind(retry).bind(safe_error).bind(now).execute(&mut *tx).await?.rows_affected();
         tx.commit().await?;
         Ok(updated == 1)
@@ -411,6 +411,30 @@ mod tests {
             .unwrap();
         assert_eq!(terminal.status, "failed");
         assert_eq!(terminal.attempts, 1);
+        let replay = db
+            .enqueue_slice(&account, model_id, "stopped", &json!({}), now + 193)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            replay.id, stopped.id,
+            "A failed input must not immediately consume another slice"
+        );
+        assert!(db.claim_slice(now + 194).await.unwrap().is_none());
+        let fresh = db
+            .enqueue_slice(&account, model_id, "stopped", &json!({}), now + 252)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            fresh.id, stopped.id,
+            "A transient failure can be retried after cooldown"
+        );
+        sqlx::query("DELETE FROM slicer_jobs WHERE id=$1")
+            .bind(&fresh.id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
         let lease: (Option<String>, Option<i64>) =
             sqlx::query_as("SELECT lease_token,lease_until FROM slicer_jobs WHERE id=$1")
                 .bind(&stopped.id)
