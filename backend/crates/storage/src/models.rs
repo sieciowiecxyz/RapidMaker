@@ -184,7 +184,29 @@ impl Storage {
         Ok(eligible)
     }
 
+    // Separate bounded-time transaction: a busy quote sweep must not prevent file cleanup.
+    async fn cleanup_expired_quotes(&self, now: i64) -> Result<(), StorageError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::raw_sql("SET LOCAL lock_timeout='100ms'; SET LOCAL statement_timeout='1s'")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(crate::jobs::QUEUE_LOCK)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM slicer_jobs WHERE expires_at<=$1 AND (status<>'running' OR lease_until<=$1)")
+            .bind(now).execute(&mut *tx).await?;
+        // Keep historical references and live/locked drafts after payment or physical file expiry.
+        sqlx::query("DELETE FROM quotes WHERE id IN (SELECT q.id FROM quotes q WHERE jsonb_typeof(q.request->'expires_at')='number' AND q.request->'expires_at'<=to_jsonb($1::bigint) AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.id=q.id) AND NOT EXISTS(SELECT 1 FROM order_files f WHERE f.quote_id=q.id) AND NOT EXISTS(SELECT 1 FROM checkout_drafts d WHERE (d.expires_at>$1 OR d.locked) AND d.input->'parts' @> jsonb_build_array(jsonb_build_object('quote_id',q.id))) AND NOT EXISTS(SELECT 1 FROM checkout_drafts d WHERE (d.expires_at>$1 OR d.locked) AND d.quote->'quote_ids' @> jsonb_build_array(q.id)) AND NOT EXISTS(SELECT 1 FROM orders o WHERE o.lines @> jsonb_build_array(jsonb_build_object('quote_id',q.id))) LIMIT 100)")
+            .bind(now).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn expired_model_ids(&self, now: i64) -> Result<Vec<String>, StorageError> {
+        if self.cleanup_expired_quotes(now).await.is_err() {
+            tracing::warn!(event = "quote_cleanup_failed", reason = "database");
+        }
         let mut tx = self.queue_transaction().await?;
         let ids = sqlx::query_scalar("UPDATE private_models m SET deletion_started=true WHERE expires_at<=$1 AND NOT EXISTS(SELECT 1 FROM slicer_jobs j WHERE j.model_id=m.id AND j.status IN ('queued','running') AND (j.expires_at>$1 OR j.lease_until>$1)) AND NOT EXISTS(SELECT 1 FROM order_files f WHERE f.model_id=m.id AND (f.retain_until IS NULL OR f.retain_until>$1)) RETURNING id")
             .bind(now).fetch_all(&mut *tx).await?;
@@ -303,6 +325,200 @@ impl Storage {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    #[ignore = "requires isolated TEST_DATABASE_URL"]
+    async fn expired_quotes_preserve_references_bound_batches_and_fence_stale_draft_writes() {
+        let url = std::env::var("TEST_DATABASE_URL").unwrap();
+        assert!(
+            url.rsplit('/')
+                .next()
+                .unwrap()
+                .starts_with("rapidmaker_test_security_")
+        );
+        let db = Storage::connect(&url).await.unwrap();
+        let now = 2_000_000_000;
+        let owner = "a".repeat(64);
+        async fn exists(db: &Storage, id: &str) -> bool {
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM quotes WHERE id=$1)")
+                .bind(id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap()
+        }
+        for id in [
+            "orphan",
+            "held",
+            "history",
+            "input",
+            "result",
+            "stale",
+            "abandoned-input",
+            "abandoned-result",
+        ] {
+            db.save_quote(id, &json!({"expires_at":now-1,"quantity":2,"material_name":"Saved material","options":{"wall_loops":3}}), &json!({"total_grosze":123})).await.unwrap();
+        }
+        db.save_quote("live", &json!({"expires_at":now+1}), &json!({}))
+            .await
+            .unwrap();
+        // Legacy snapshots without usable expiry survive both migration and sweeping.
+        db.save_quote("legacy", &json!({"expires_at":"unknown"}), &json!({}))
+            .await
+            .unwrap();
+        let input = db
+            .checkout_create(&owner, None, &json!({"parts":[{"quote_id":"input"}]}), now)
+            .await
+            .unwrap();
+        let result = db
+            .checkout_create(&owner, None, &json!({}), now)
+            .await
+            .unwrap();
+        db.checkout_quote(
+            &result.id,
+            &owner,
+            1,
+            &json!({"quote_ids":["result"]}),
+            now + 60,
+            now,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        sqlx::query("UPDATE checkout_drafts SET expires_at=$1,locked=true WHERE id=ANY($2)")
+            .bind(now - 1)
+            .bind(vec![&input.id, &result.id])
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        // Expired unlocked drafts are unusable and retain neither reference shape.
+        sqlx::query(r#"INSERT INTO checkout_drafts(id,owner_hash,input,quote,expires_at,created_at) VALUES('abandoned',$1,'{"parts":[{"quote_id":"abandoned-input"}]}','{"quote_ids":["abandoned-result"]}',$2,$2)"#)
+            .bind(&owner).bind(now-1).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO order_file_holds VALUES('held',$1,$2)")
+            .bind(&owner)
+            .bind(now)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO order_files VALUES('held','held','deleted-model','part.stl',$1)")
+            .bind(now - 1)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO orders(id,owner_hash,contact,lines,amount_grosze,provider_kind,provider_id,status,guest_updates,created_at) VALUES('history',$1,'{}','[{"quote_id":"history"}]',123,'intent','pi_history','completed',false,$2)"#).bind(&owner).bind(now).execute(&db.pool).await.unwrap();
+        let model = StoredModel {
+            id: uuid::Uuid::new_v4().to_string(),
+            owner_hash: owner.clone(),
+            user_id: None,
+            filename: "tiny.stl".into(),
+            extension: "stl".into(),
+            source_bytes: 84,
+            mesh_bytes: 84,
+            preview_bytes: 0,
+            sha256: "b".repeat(64),
+            dimensions_mm: [1.; 3],
+            expires_at: now + 10000,
+        };
+        assert!(db.insert_model(&model).await.unwrap());
+        let job = db
+            .enqueue_slice(&owner, &model.id, "active", &json!({}), now)
+            .await
+            .unwrap()
+            .unwrap();
+        db.save_quote(&job.id, &json!({"expires_at":now-1}), &json!({}))
+            .await
+            .unwrap();
+        db.expired_model_ids(now).await.unwrap();
+        for id in [
+            "held", "history", "input", "result", "live", "legacy", &job.id,
+        ] {
+            assert!(exists(&db, id).await, "lost referenced/live quote {id}");
+        }
+        assert!(!exists(&db, "orphan").await && !exists(&db, "stale").await);
+        assert!(!exists(&db, "abandoned-input").await);
+        assert!(!exists(&db, "abandoned-result").await);
+        assert!(
+            db.checkout_get("abandoned", &owner, now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let history = db.order_files("held", now).await.unwrap();
+        assert_eq!(history[0]["options"]["wall_loops"], 3);
+        assert_eq!(history[0]["material_name"], "Saved material");
+        assert_eq!(history[0]["available"], false);
+        assert_eq!(
+            sqlx::query_scalar::<_, serde_json::Value>("SELECT result FROM quotes WHERE id='held'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap(),
+            json!({"total_grosze":123})
+        );
+        // Simulate HTTP validation preceding GC: stale IDs must be rechecked at every write.
+        let stale = json!({"parts":[{"quote_id":"stale"}]});
+        assert!(db.checkout_create(&owner, None, &stale, now).await.is_err());
+        let draft = db
+            .checkout_create(&owner, None, &json!({}), now)
+            .await
+            .unwrap();
+        assert!(
+            db.checkout_update(&draft.id, &owner, 1, &stale, now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db.checkout_quote(
+                &draft.id,
+                &owner,
+                1,
+                &json!({"quote_ids":["stale"]}),
+                now + 60,
+                now
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+        // Actual concurrent writer/sweeper: either the reference wins or the writer refuses it.
+        db.save_quote("race", &json!({"expires_at":now-1}), &json!({}))
+            .await
+            .unwrap();
+        let race = json!({"parts":[{"quote_id":"race"}]});
+        let (swept, written) = tokio::join!(
+            db.cleanup_expired_quotes(now),
+            db.checkout_update(&draft.id, &owner, 1, &race, now)
+        );
+        swept.unwrap();
+        assert_eq!(written.unwrap().is_some(), exists(&db, "race").await);
+        let blocked = db.queue_transaction().await.unwrap();
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_secs(1),
+                db.cleanup_expired_quotes(now)
+            )
+            .await
+            .unwrap()
+            .is_err()
+        );
+        drop(blocked);
+        sqlx::query("INSERT INTO quotes(id,request,result) SELECT 'batch-'||n,jsonb_build_object('expires_at',$1::bigint),'{}' FROM generate_series(1,101) n").bind(now-1).execute(&db.pool).await.unwrap();
+        db.cleanup_expired_quotes(now).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM quotes WHERE id LIKE 'batch-%'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap(),
+            1
+        );
+        db.cleanup_expired_quotes(now).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM quotes WHERE id LIKE 'batch-%'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap(),
+            0
+        );
+    }
 
     #[test]
     fn account_owner_has_a_distinct_stable_namespace() {

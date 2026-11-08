@@ -134,6 +134,29 @@ fn hash(value: &str) -> bool {
             .bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
+// Queue admission and reference checks must share a transaction with draft writes and GC.
+async fn draft_quotes_exist(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    value: &Value,
+    quoted: bool,
+) -> Result<bool, StorageError> {
+    let ids: Vec<String> = value[if quoted { "quote_ids" } else { "parts" }]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| {
+            if quoted {
+                v.as_str()
+            } else {
+                v["quote_id"].as_str()
+            }
+        })
+        .map(str::to_owned)
+        .collect();
+    Ok(sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM unnest($1::text[]) refs(id) WHERE NOT EXISTS(SELECT 1 FROM quotes q WHERE q.id=refs.id))")
+        .bind(ids).fetch_one(&mut **tx).await?)
+}
+
 impl Storage {
     /// Bound paid external lookups across processes and guest identities.
     pub async fn checkout_provider_allowed(
@@ -174,6 +197,9 @@ impl Storage {
             return Err("invalid checkout input".into());
         }
         let mut tx = self.queue_transaction().await?;
+        if !draft_quotes_exist(&mut tx, input, false).await? {
+            return Err("checkout quote unavailable".into());
+        }
         sqlx::query("DELETE FROM checkout_drafts d WHERE expires_at<=$1 AND NOT locked AND NOT EXISTS(SELECT 1 FROM payment_attempts WHERE draft_id=d.id)").bind(now).execute(&mut *tx).await?;
         let global: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM checkout_drafts WHERE expires_at>$1 AND NOT locked",
@@ -218,8 +244,14 @@ impl Storage {
         if !bounded(input, 65536) {
             return Err("invalid checkout input".into());
         }
-        sqlx::query("UPDATE checkout_drafts SET input=$4,version=version+1,quote=NULL,quote_expires_at=NULL WHERE id=$1 AND owner_hash=$2 AND version=$3 AND NOT locked AND expires_at>$5 RETURNING *")
-            .bind(id).bind(owner).bind(version).bind(input).bind(now).fetch_optional(&self.pool).await?.map(draft).transpose()
+        let mut tx = self.queue_transaction().await?;
+        if !draft_quotes_exist(&mut tx, input, false).await? {
+            return Ok(None);
+        }
+        let row = sqlx::query("UPDATE checkout_drafts SET input=$4,version=version+1,quote=NULL,quote_expires_at=NULL WHERE id=$1 AND owner_hash=$2 AND version=$3 AND NOT locked AND expires_at>$5 RETURNING *")
+            .bind(id).bind(owner).bind(version).bind(input).bind(now).fetch_optional(&mut *tx).await?;
+        tx.commit().await?;
+        row.map(draft).transpose()
     }
     pub async fn checkout_quote(
         &self,
@@ -233,8 +265,14 @@ impl Storage {
         if !bounded(quote, 131072) || valid_until <= now || valid_until > now + 3600 {
             return Err("invalid checkout quote".into());
         }
-        sqlx::query("UPDATE checkout_drafts SET quote=$4,quote_expires_at=$5,version=version+1 WHERE id=$1 AND owner_hash=$2 AND version=$3 AND NOT locked AND expires_at>$6 RETURNING *")
-            .bind(id).bind(owner).bind(version).bind(quote).bind(valid_until).bind(now).fetch_optional(&self.pool).await?.map(draft).transpose()
+        let mut tx = self.queue_transaction().await?;
+        if !draft_quotes_exist(&mut tx, quote, true).await? {
+            return Ok(None);
+        }
+        let row = sqlx::query("UPDATE checkout_drafts SET quote=$4,quote_expires_at=$5,version=version+1 WHERE id=$1 AND owner_hash=$2 AND version=$3 AND NOT locked AND expires_at>$6 RETURNING *")
+            .bind(id).bind(owner).bind(version).bind(quote).bind(valid_until).bind(now).fetch_optional(&mut *tx).await?;
+        tx.commit().await?;
+        row.map(draft).transpose()
     }
     /// Persist the exact provider request, immutable order and model holds before network IO.
     pub async fn checkout_prepare(

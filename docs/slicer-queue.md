@@ -16,7 +16,7 @@ Frontend odpytuje co sekundę, maks. 10 min, respektuje anulowanie. Przerwanie o
 - Jedno aktywne zadanie globalnie, także przy kilku procesach. Krótka transakcja/advisory lock oraz `FOR UPDATE SKIP LOCKED`; transakcja nie trwa podczas slicowania.
 - Lease 180 s, twardy timeout zadania 150 s. Zapis sukcesu/błędu wymaga aktualnego tokena i niewygasłego lease. Stary worker nie nadpisze nowej próby.
 - Maks. 3 próby. Błędy chwilowe wracają do kolejki z opóźnieniem 5/10 s; błędne wejście lub zmieniona konfiguracja kończą zadanie. Utracony worker jest odzyskiwany po wygaśnięciu lease.
-- Zadanie czeka maks. 30 min. Limity: 4 aktywne/właściciela, 64 globalnie, 1000 zachowanych wpisów. Pełna kolejka daje 429. Wygasłe wpisy są usuwane przy przyjmowaniu kolejnych zadań. Wynik wyceny jest ważny 10 min od ukończenia.
+- Zadanie czeka maks. 30 min. Limity: 4 aktywne/właściciela, 64 globalnie, 1000 zachowanych wpisów. Pełna kolejka daje 429. Wygasłe wpisy są usuwane przy przyjmowaniu kolejnych zadań oraz przez cleanup modeli. Wynik wyceny jest ważny 10 min od ukończenia.
 - Wykonanie może się powtórzyć po awarii, lecz tylko aktualny lease może zatwierdzić wynik. Nie obiecujemy wykonania dokładnie raz.
 
 ## Pliki
@@ -65,3 +65,5 @@ Upload i orphan cleanup współdzielą nieblokującą wyłączną blokadę katal
 Wszystkie procesy zapisujące uploady muszą używać tego protokołu przed włączeniem cleanup. Katalogu magazynu nie wolno przenosić/podmieniać podczas pracy serwera; zmiana dev/inode między przebiegami resetuje kursor, ale nie jest ochroną rotacji w trakcie przebiegu. Najpierw zatrzymaj procesy, wykonaj kopię i dopiero zmieniaj katalog. Dotyczy lokalnego filesystemu z działającym flock.
 
 Retencja jest okresowa, nie dokładnym SLA 24 h: restart resetuje kursor, a częściowe nieudane usunięcie może zmienić mtime i przesunąć kolejną próbę o 24 h. Błędy jednego katalogu są logowane i nie zatrzymują przeglądania pozostałych. Nie przerywać/nie usuwać ręcznie katalogu na podstawie chwilowego braku w SELECT.
+
+Wygasłe wyceny bez powiązań sprzątane są po maks.100 na transakcję, także bez nowych żądań. Drafty aktywne/locked i historia zamówień nadal chronią snapshoty; zapis nowych referencji jest synchronizowany z GC. Timeout sweepu nie zatrzymuje cleanup modeli. Granice i dowody: [security](security.md#naprawione-w-kodzie-retencja-wygasłych-wycen).
