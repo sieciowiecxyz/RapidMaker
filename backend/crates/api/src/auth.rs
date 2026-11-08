@@ -780,6 +780,66 @@ mod tests {
     }
 
     #[test]
+    fn production_request_policy_requires_exact_host_and_origin() {
+        use axum::http::HeaderValue;
+        const HOST: &str = "rapidmaker.example";
+        const ORIGIN: &[u8] = b"https://rapidmaker.example";
+        let auth = Auth {
+            storage: None,
+            key: None,
+            dummy_password: None,
+            webauthn: None,
+            trusted_proxy: None,
+            password_work: Arc::new(tokio::sync::Semaphore::new(2)),
+            mailer: Arc::new(Mailer::from_env().unwrap()),
+            origin: "https://rapidmaker.example".into(),
+            authority: HOST.into(),
+            production: true,
+        };
+        assert!(!auth.mailer.enabled());
+        #[rustfmt::skip]
+        let cases = [
+            (false, HOST, None, None, true),
+            (false, HOST, Some(ORIGIN), None, true),
+            (true, HOST, Some(ORIGIN), None, true),
+            (true, HOST, None, None, false),
+            (false, HOST, Some(b"https://other.example"), None, false),
+            (true, HOST, Some(b"https://other.example"), None, false),
+            (false, HOST, Some(b"null"), None, false),
+            (true, HOST, Some(b"null"), None, false),
+            (false, HOST, Some(b"http://rapidmaker.example"), None, false),
+            (true, HOST, Some(b"http://rapidmaker.example"), None, false),
+            (true, HOST, Some(b"https://rapidmaker.example/path"), None, false),
+            (true, HOST, Some(b"https://rapidmaker.example/"), None, false),
+            (true, HOST, Some(b"https://sub.rapidmaker.example"), None, false),
+            (true, HOST, Some(b"https://rapidmaker.example.evil"), None, false),
+            (true, HOST, Some(b"https://rapidmaker.example:443"), None, false),
+            (false, "rapidmaker.example:443", Some(ORIGIN), None, false),
+            (false, "sub.rapidmaker.example", None, None, false),
+            (false, "rapidmaker.example.evil", None, None, false),
+            (false, HOST, Some(ORIGIN), Some(("host", HOST)), false),
+            (true, HOST, Some(ORIGIN), Some(("host", HOST)), false),
+            (false, HOST, Some(ORIGIN), Some(("origin", "https://rapidmaker.example")), false),
+            (true, HOST, Some(ORIGIN), Some(("origin", "https://rapidmaker.example")), false),
+            (false, HOST, Some(b"\xff"), None, false),
+            (true, HOST, Some(b"\xff"), None, false),
+            (false, "evil.example", None, Some(("x-forwarded-host", HOST)), false),
+            (true, HOST, Some(b"http://rapidmaker.example"), Some(("x-forwarded-proto", "https")), false),
+        ];
+        for (mutate, host, origin, extra, expected) in cases {
+            let mut headers = HeaderMap::from_iter([(header::HOST, host.parse().unwrap())]);
+            headers.extend(origin.map(|v| (header::ORIGIN, HeaderValue::from_bytes(v).unwrap())));
+            if let Some((name, value)) = extra {
+                headers.append(name, value.parse().unwrap());
+            }
+            assert!(
+                auth.allows_request(&headers, mutate) == expected,
+                "{headers:?}"
+            );
+        }
+    }
+
+    #[test]
     fn login_attempt_cookies_reject_ambiguous_or_malformed_values() {
         let token = "ab".repeat(32);
         let mut headers = HeaderMap::new();

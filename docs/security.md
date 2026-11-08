@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — Origin, Host i CSRF
+
+Przegląd nie potwierdził obejścia. Produkcja wymaga dokładnej authority i Origin przy mutacjach; brak Origin dozwolony tylko dla GET/HEAD. Powielone Host/Origin oraz nieprawidłowy Origin są odrzucane; forwarded headers nie zastępują Host/Origin. Sesje produkcyjne mają __Host/Secure/HttpOnly/Lax; zaufany proxy jest jawny. Upload sprawdza Origin i własność, nie token CSRF — nie deklarować uniwersalnej kontroli tokenu dla każdego POST.
+
+Dodano1test tabelaryczny polityki produkcyjnej:26wariantów/1PASS, netto60linii testu, produkt bez zmian. Wymaga MAIL_MODE=disabled (lub braku tej zmiennej); test nie wysyła emaila. Trzy wcześniejsze testy cookie/CSRF osobnoPASS. Solxhigh bez blokera; dowody `security-origin-csrf-20261108/regression-test.json` i `final-hashes.json`. Nie testowano tu TLS, przeglądarki, middleware HTTP ani konfiguracji proxy; normalny API/DB bez zmian.
+
 ## 2026-11-08 — wolne pobieranie prywatnych plików
 
 Pięć istniejących testów ścieżek/nagłówków/odczytu PASS; brak potwierdzonego traversal lub wycieku. Osobny rzeczywisty test TCP wykazał jednak zajęcie wszystkich4slotów: cztery nieczytające połączenia dostają200, piąte503; zamknięcie przywraca200. Fixture używa produkcyjnego odczytu, zastępuje routing/autoryzację — nie dowodzi obejścia dostępu. O_NOFOLLOW zabezpiecza ostatni komponent, nie przodków wobec lokalnego aktora z prawem do prywatnego katalogu.
