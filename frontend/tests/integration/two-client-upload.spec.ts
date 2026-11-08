@@ -136,6 +136,11 @@ test('two unrelated clients complete uploads and private quotes after upload bac
     expect(models[0].id).not.toBe(models[1].id);
     const clients = [first, second];
     for (let index = 0; index < clients.length; index++) {
+      const sourcePath = `/api/models/${models[index].id}/source`;
+      const source = await clients[index].get(sourcePath);
+      expect(source.status()).toBe(200);
+      expect(await source.body()).toEqual(cube);
+      expect((await clients[1 - index].get(sourcePath)).status()).toBe(404);
       const preview = await clients[index].get(models[index].preview_url);
       expect(preview.status()).toBe(200);
       expect(preview.headers()['cache-control']).toContain('no-store');

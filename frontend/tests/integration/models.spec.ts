@@ -51,6 +51,18 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
       const model = await metadata.json();
       expect(model.filename).toBe(name);
       expect(model.dimensions_mm.every((v: number) => Number.isFinite(v) && v > 0)).toBe(true);
+      const original = readFileSync(fixture(name));
+      const source = await page.request.get(`/api/models/${id}/source`);
+      expect(source.status(), name).toBe(200);
+      expect(await source.body()).toEqual(original);
+      expect(source.headers()['content-length']).toBe(String(original.length));
+      expect(source.headers()['content-disposition']).toMatch(/^attachment; filename=/);
+      expect(source.headers()['content-type']).toBe('application/octet-stream');
+      expect(source.headers()['x-content-type-options']).toBe('nosniff');
+      expect(source.headers()['cache-control']).toContain('no-store');
+      expect(
+        (await outsider.request.get(new URL(`/api/models/${id}/source`, page.url()).href)).status(),
+      ).toBe(401);
       const preview = await page.request.get(model.preview_url);
       expect(preview.status()).toBe(200);
       const previewBytes = await preview.body();
