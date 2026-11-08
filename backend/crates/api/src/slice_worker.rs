@@ -169,13 +169,7 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
         profile.slicer_cpu_seconds(),
     )
     .await
-    .map_err(|e| match e {
-        rapidmaker_slicer::Error::Busy | rapidmaker_slicer::Error::Failed(_) => unavailable,
-        _ => (
-            false,
-            "Nie udało się przygotować modelu. Sprawdź plik lub poproś o wycenę indywidualną.",
-        ),
-    })?;
+    .map_err(slice_failure)?;
     let price = calculate(
         measured.time_seconds,
         measured
@@ -201,4 +195,38 @@ async fn measure(db: &Storage, job: &SlicerJob) -> Result<(Value, Value), Failur
         "options":input.options,"price":price,"pricing_version":input.rates.version,"payable":false,
         "notice":"Wycena z pomiaru slicera. Dostawa i opakowanie rozliczane osobno."});
     Ok((request, result))
+}
+
+fn slice_failure(error: rapidmaker_slicer::Error) -> Failure {
+    match error {
+        rapidmaker_slicer::Error::Busy | rapidmaker_slicer::Error::Failed(_) => (
+            true,
+            "Wycena jest chwilowo niedostępna. Spróbuj ponownie lub poproś o wycenę indywidualną.",
+        ),
+        rapidmaker_slicer::Error::Stopped => (
+            false,
+            "Automatyczna wycena została zatrzymana. Poproś o wycenę indywidualną.",
+        ),
+        _ => (
+            false,
+            "Nie udało się przygotować modelu. Sprawdź plik lub poproś o wycenę indywidualną.",
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stopped_is_terminal_while_transient_failures_retry() {
+        use rapidmaker_slicer::Error;
+        let stopped = slice_failure(Error::Stopped);
+        assert!(!stopped.0);
+        assert!(stopped.1.contains("wycenę indywidualną"));
+        for error in [Error::Busy, Error::Failed("runtime unavailable".into())] {
+            assert!(slice_failure(error).0);
+        }
+        assert!(!slice_failure(Error::InvalidModel).0);
+    }
 }

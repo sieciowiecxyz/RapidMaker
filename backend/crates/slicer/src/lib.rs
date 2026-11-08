@@ -178,6 +178,7 @@ pub enum Error {
     InvalidModel,
     InvalidOptions,
     InvalidMeasurement,
+    Stopped,
     Failed(String),
 }
 impl fmt::Display for Error {
@@ -196,6 +197,7 @@ impl fmt::Display for Error {
             Self::InvalidMeasurement => {
                 f.write_str("Slicer mass is missing or exceeds exact decimal precision")
             }
+            Self::Stopped => f.write_str("Automatic slicing stopped; request a manual quote"),
             Self::Failed(message) => f.write_str(message),
         }
     }
@@ -391,6 +393,7 @@ pub async fn slice_job_with_limits(
             Error::InvalidModel => "invalid_model",
             Error::InvalidOptions => "invalid_options",
             Error::InvalidMeasurement => "invalid_measurement",
+            Error::Stopped => "slicer_stopped",
             Error::Failed(_) => "slicer_failed",
         };
         tracing::warn!(
@@ -672,7 +675,7 @@ async fn run_plate(
     let wall_seconds = cpu_seconds + 5;
     let status = tokio::time::timeout(Duration::from_secs(wall_seconds), command.status())
         .await
-        .map_err(|_| Error::Failed(format!("Slicing exceeded {wall_seconds} seconds")))??;
+        .map_err(|_| Error::Stopped)??;
     runtime_sha256().await?;
     let result = out.join("result.json");
     if !status.success() {
@@ -685,9 +688,7 @@ async fn run_plate(
         {
             return Err(Error::InvalidModel);
         }
-        return Err(Error::Failed(
-            "Isolated slicer failed; check model or runtime installation".into(),
-        ));
+        return Err(exit_error(status.code()));
     }
     let result_metadata = fs::symlink_metadata(&result)?;
     if !result_metadata.is_file() || result_metadata.len() > 1024 * 1024 {
@@ -700,6 +701,13 @@ async fn run_plate(
         ));
     }
     Ok(plate)
+}
+
+fn exit_error(code: Option<i32>) -> Error {
+    match code {
+        Some(137 | 152 | 153) => Error::Stopped,
+        _ => Error::Failed("Isolated slicer failed; check model or runtime installation".into()),
+    }
 }
 
 fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
@@ -770,6 +778,23 @@ fn parse_result(bytes: &[u8]) -> Result<PlateBatch, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selected_exit_codes_stop_without_classifying_other_failures() {
+        for code in [137, 152, 153] {
+            assert!(matches!(exit_error(Some(code)), Error::Stopped));
+        }
+        for code in [
+            None,
+            Some(1),
+            Some(126),
+            Some(127),
+            Some(134),
+            Some(139),
+            Some(143),
+        ] {
+            assert!(matches!(exit_error(code), Error::Failed(_)));
+        }
+    }
     #[test]
     fn plate_command_bounds_shared_memory_before_remounting_devices() {
         let workspace = Workspace(

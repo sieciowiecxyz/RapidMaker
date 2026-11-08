@@ -155,7 +155,11 @@ async function estimateModel(body: unknown, signal?: AbortSignal): Promise<Engin
       return job.result;
     }
     if (job.status === 'failed')
-      throw new Error(job.message || 'Nie udało się przygotować wyceny. Spróbuj ponownie.');
+      throw new ApiError(
+        422,
+        job.message || 'Automatyczna wycena została zatrzymana. Poproś o wycenę indywidualną.',
+        'manual_quote_required',
+      );
     if (job.status !== 'queued' && job.status !== 'running')
       throw new Error('Nieprawidłowy stan wyceny. Spróbuj ponownie.');
     await waitForQuotePoll(bounded);

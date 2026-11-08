@@ -7,6 +7,7 @@ async function configure(
   configured = true,
   checkout?: (route: Route) => Promise<void>,
   identity?: () => { id: string; email: string },
+  stopped = false,
 ) {
   const estimates: Record<string, unknown>[] = [];
   await page.route('**/api/**', async (route) => {
@@ -47,8 +48,18 @@ async function configure(
           weight_source: 'slicer',
         },
       });
+    if (stopped && path === '/api/quotes/jobs/stopped-quote')
+      return route.fulfill({
+        json: {
+          id: 'stopped-quote',
+          status: 'failed',
+          message: 'Automatyczna wycena została zatrzymana. Poproś o wycenę indywidualną.',
+        },
+      });
     if (path === '/api/quotes/estimate') {
       estimates.push(route.request().postDataJSON());
+      if (stopped)
+        return route.fulfill({ status: 202, json: { id: 'stopped-quote', status: 'queued' } });
       return configured
         ? route.fulfill({
             status: 202,
@@ -132,6 +143,46 @@ test('missing operator configuration preserves the backend reason instead of hid
   );
   expect(estimates.length).toBeGreaterThan(0);
   await expect(page.locator('.quote-result .price')).toHaveCount(0);
+});
+
+test('a terminal polled failure preserves the model in a manual quote draft without a payable price', async ({
+  page,
+}) => {
+  let automaticCheckout = 0;
+  const polled = page.waitForResponse('**/api/quotes/jobs/stopped-quote');
+  const estimates = await configure(
+    page,
+    true,
+    async (route) => {
+      automaticCheckout++;
+      await route.fulfill({ status: 503, json: {} });
+    },
+    undefined,
+    true,
+  );
+  await polled;
+  await expect(page.locator('.manual-heading')).toHaveText('Wymagana ręczna wycena');
+  await expect(page.locator('.quote-result')).toContainText(
+    'Automatyczna wycena została zatrzymana.',
+  );
+  await expect(page.locator('.quote-result .price')).toHaveCount(0);
+  expect(estimates.some((body) => body.model_id === modelId && body.material_id === 'GFG02')).toBe(
+    true,
+  );
+  await page.getByRole('button', { name: 'Zapytaj o wycenę', exact: true }).click();
+  await expect(page.locator('#order-title')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }),
+  ).toBeVisible();
+  const cart = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart,
+  );
+  expect(cart.models[0].analysis.id).toBe(modelId);
+  expect(cart.models[0].options.materialId).toBe('GFG02');
+  expect(cart.quote).toBeNull();
+  await expect(page.locator('.order-total')).toContainText('Wycena indywidualna');
+  await expect(page.locator('.order-total')).toContainText('Ustalimy razem');
+  expect(automaticCheckout).toBe(0);
 });
 
 // Real UI and adapters, controlled HTTP only: this is not backend pricing evidence.

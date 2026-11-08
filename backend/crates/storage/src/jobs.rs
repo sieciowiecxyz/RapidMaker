@@ -383,6 +383,39 @@ mod tests {
                 .id,
             first.id
         );
+        let stopped = db
+            .enqueue_slice(&account, model_id, "stopped", &json!({}), now + 190)
+            .await
+            .unwrap()
+            .unwrap();
+        let claimed = db.claim_slice(now + 191).await.unwrap().unwrap();
+        assert_eq!(claimed.id, stopped.id);
+        assert!(
+            db.fail_slice(
+                &claimed.id,
+                claimed.lease_token.as_deref().unwrap(),
+                false,
+                "automatic stopped",
+                now + 192
+            )
+            .await
+            .unwrap()
+        );
+        let terminal = db
+            .slice_job(&stopped.id, &account, now + 193)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(terminal.status, "failed");
+        assert_eq!(terminal.attempts, 1);
+        let lease: (Option<String>, Option<i64>) =
+            sqlx::query_as("SELECT lease_token,lease_until FROM slicer_jobs WHERE id=$1")
+                .bind(&stopped.id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(lease, (None, None));
+        assert!(db.claim_slice(now + 400).await.unwrap().is_none());
         for fingerprint in ["two", "three", "four", "five"] {
             assert!(
                 db.enqueue_slice(&account, model_id, fingerprint, &json!({}), now + 190)

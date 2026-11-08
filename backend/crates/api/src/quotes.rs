@@ -268,9 +268,9 @@ fn public_job(job: SlicerJob) -> Value {
     let message = if job.status == "failed" {
         job.error.as_deref().map(|message| match message {
             "worker_interrupted" => {
-                "Nie udało się wznowić wyceny po przerwaniu pracy. Zleć ją ponownie."
+                "Nie udało się wznowić automatycznej wyceny. Poproś o wycenę indywidualną."
             }
-            "job_expired" => "Upłynął czas oczekiwania na wycenę. Zleć ją ponownie.",
+            "job_expired" => "Upłynął czas oczekiwania na wycenę. Poproś o wycenę indywidualną.",
             other => other,
         })
     } else {
