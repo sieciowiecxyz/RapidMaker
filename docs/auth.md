@@ -14,6 +14,8 @@ Nowe konto i stare konto bez hasła/passkey: potwierdzenie email otwiera ogranic
 
 `/konto/ustawienia`: ustawienie/zmiana hasła, dodawanie i usuwanie passkey, TOTP, wylogowanie pozostałych urządzeń. Zmiana zabezpieczeń wymaga pełnego logowania z ostatnich 5 minut, rotuje cookie i unieważnia pozostałe sesje. Ostatniego passkey nie usuniesz bez ustawionego hasła. Maksymalnie pięć kluczy. TOTP dodaje się przez lokalny klucz/URI do aplikacji; kody odzyskiwania są wyświetlane tylko po aktywacji i nie trafiają do storage przeglądarki. Wyłączenie TOTP przywraca email jako drugi składnik.
 
+Frontend serializuje żądania zmieniające cookie sesji między kartami tego samego origin przez [Web Locks](https://www.w3.org/TR/web-locks/); przed wysłaniem sprawdza także aktualny marker sesji w storage. Stara kolejka jest odrzucana po zmianie konta. Bez Web Locks frontend odmawia zmiany sesji; wymaga aktualnej przeglądarki i HTTPS lub localhost. Otwarte karty starej wersji wymagają odświeżenia. API i zasady autoryzacji pozostają niezależne od tej koordynacji klienta.
+
 ## API
 
 | Metoda i ścieżka | Działanie |

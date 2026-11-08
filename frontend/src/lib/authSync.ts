@@ -11,7 +11,10 @@ function storedSignal(): string | null {
 }
 let seen = storedSignal();
 const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(key);
-export const authEpoch = () => epoch;
+export const authEpoch = () => {
+  check(); // Storage changes must be observed even before cross-tab events are delivered.
+  return epoch;
+};
 export function announceAuthChange() {
   epoch++;
   seen = crypto.randomUUID();

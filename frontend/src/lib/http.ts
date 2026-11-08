@@ -83,45 +83,50 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   )
     throw new ApiError(0, 'Nieprawidłowy adres API.');
   const method = (init.method ?? 'GET').toUpperCase();
-  const headers = new Headers(init.headers);
-  headers.delete('X-CSRF-Token');
-  if (
-    !['GET', 'HEAD', 'OPTIONS'].includes(method) &&
-    ![
-      '/api/auth/start',
-      '/api/auth/verify',
-      '/api/auth/password/login',
-      '/api/auth/passkey/login/start',
-    ].includes(url.pathname)
-  ) {
-    if (!csrfToken) await loadCsrf();
-    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
-  }
-  assertCurrent(epoch);
-  const response = await fetch(url, {
-    ...init,
-    method,
-    headers,
-    credentials: 'same-origin',
-    redirect: 'error',
-    cache: 'no-store',
-  });
-  assertCurrent(epoch);
-  if (
-    response.ok &&
+  const changes =
     ['POST', 'PUT', 'DELETE'].includes(method) &&
     (sessionChanges.has(url.pathname) ||
-      (method === 'DELETE' && /^\/api\/auth\/passkeys\/[^/]+$/.test(url.pathname)))
-  ) {
-    clearAuthToken();
-    announceAuthChange();
-  }
-  if (response.status === 401) {
-    clearAuthToken();
-    if (!url.pathname.startsWith('/api/auth/'))
-      window.dispatchEvent(new Event('rapidmaker:session-expired'));
-  }
-  return response;
+      (method === 'DELETE' && /^\/api\/auth\/passkeys\/[^/]+$/.test(url.pathname)));
+  const send = async () => {
+    const headers = new Headers(init.headers);
+    headers.delete('X-CSRF-Token');
+    if (
+      !['GET', 'HEAD', 'OPTIONS'].includes(method) &&
+      ![
+        '/api/auth/start',
+        '/api/auth/verify',
+        '/api/auth/password/login',
+        '/api/auth/passkey/login/start',
+      ].includes(url.pathname)
+    ) {
+      if (!csrfToken) await loadCsrf();
+      if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+    }
+    assertCurrent(epoch);
+    const response = await fetch(url, {
+      ...init,
+      method,
+      headers,
+      credentials: 'same-origin',
+      redirect: 'error',
+      cache: 'no-store',
+    });
+    assertCurrent(epoch);
+    if (response.ok && changes) {
+      clearAuthToken();
+      announceAuthChange();
+    }
+    if (response.status === 401) {
+      clearAuthToken();
+      if (!url.pathname.startsWith('/api/auth/'))
+        window.dispatchEvent(new Event('rapidmaker:session-expired'));
+    }
+    return response;
+  };
+  if (!changes) return send();
+  if (!navigator.locks)
+    throw new ApiError(0, 'Logowanie wymaga aktualnej przeglądarki i HTTPS lub localhost.');
+  return navigator.locks.request('rapidmaker:session', send);
 }
 export async function apiRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await apiFetch(path, {
