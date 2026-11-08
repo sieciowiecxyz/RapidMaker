@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Aktualny live journey na `f257f53`: 1 PASS, ręczna oferta → Stripe TEST 25 zł → zwrot 5 zł → email/chat bez duplikatu. 18 obserwacji potwierdza niezmienną tożsamość jednej pozycji; niezależne GET Stripe potwierdziły kwoty/korelację/tryb testowy. Pięć powiadomień SMTP sent do void, IMAP dla oferty/umowy/zwrotu/chatu i dwóch reply; payment_received bez osobnego IMAP. Bez Furgonetki/zmian normalnego API; szczegóły w testing, Sol xhigh bez blokera. To jeden wariant, nie pełna macierz płatności.
+
 Wspólny checkpoint na `9d7793a`: 4/4 PASS w jednym headless uruchomieniu na jednej prywatnej DB/API (publikacja, błąd slicera → manual UI, warianty/admin unpaid gate, fizyczna retencja). 0 pominięć/flaky/ponowień, 104,7 s; źródła/binarka/dist niezmienne, normalne API nietknięte, cleanup potwierdzony. Sol xhigh bez blokera; `manual-flows-combined-20261108/runtime-run1/result.json`. To wybrany zakres, nie full core/dostawcy/doręczenie emaila.
 
 Retencja dwóch wariantów jednego uploadu: native 1 PASS, ostatnia aktywna ochrona zachowuje pliki, po wygaśnięciu wszystkich realny GC usuwa oryginał/STL/GLB, pozostawia snapshoty i zwraca 410. Tylko testy, bez retencji opłaconych zamówień i bez zmian normalnego serwera; Sol xhigh bez blokera, dowody w security/testing.
