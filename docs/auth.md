@@ -50,7 +50,7 @@ Frontend serializuje żądania zmieniające cookie sesji między kartami tego sa
 
 ## Konfiguracja i odzyskanie
 
-AUTH_MODE=localhost albo production (domyślnie disabled). Lokalnie AUTH_ORIGIN=http://localhost:18430 — passkey wymaga localhost, nie 127.0.0.1. Production wymaga dokładnego HTTPS Origin i publicznego TLS. AUTH_TRUSTED_PROXY opcjonalnie wskazuje jeden zaufany adres proxy.
+AUTH_MODE=localhost albo production (domyślnie disabled). Lokalnie AUTH_ORIGIN=http://localhost:18430 — passkey wymaga localhost, nie 127.0.0.1. Production wymaga dokładnego HTTPS Origin i publicznego TLS. AUTH_TRUSTED_PROXY opcjonalnie wskazuje jeden zaufany adres proxy. Proxy musi nadpisywać `X-Forwarded-For` jednym polem z jednym IP; powtórzone pola są odrzucane, a nagłówki od innych peerów ignorowane. Bez tego ustawienia klienci za proxy współdzielą limit jego IP.
 
 AUTH_CODE_KEY: 32 losowe bajty hex w `.env`/SOPS. **Zachowaj kopię klucza: jego wymiana uniemożliwia odczyt istniejących sekretów TOTP.** Nie ma automatycznego przejścia na email po błędzie odszyfrowania. Hasła, kody, sekrety i pełne adresy nie trafiają do logów.
 

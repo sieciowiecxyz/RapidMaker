@@ -84,6 +84,7 @@ pub async fn slicer_worker() -> Result<SliceWorker, Box<dyn std::error::Error + 
     ))
 }
 async fn admit_write(
+    axum::Extension(auth): axum::Extension<std::sync::Arc<auth::Auth>>,
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
@@ -91,13 +92,45 @@ async fn admit_write(
     if request.method().is_safe() {
         return next.run(request).await;
     }
-    static WRITES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32);
-    let Ok(_permit) = WRITES.try_acquire() else {
-        return (
+    let busy = || {
+        (
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             [(axum::http::header::RETRY_AFTER, "1")],
             axum::Json(serde_json::json!({"code":"server_busy","message":"Serwer jest zajęty. Spróbuj ponownie za chwilę."})),
-        ).into_response();
+        ).into_response()
+    };
+    static WRITES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32);
+    let Ok(_permit) = WRITES.try_acquire() else {
+        return busy();
+    };
+    // Global lease comes first: at most 32 active requests can retain IP entries.
+    let Some(peer) = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+    else {
+        return busy();
+    };
+    let ip = match auth.client_ip(peer.0, request.headers()) {
+        Ok(ip) => ip.to_canonical(),
+        Err(error) => return error.into_response(),
+    };
+    use std::{
+        collections::HashMap,
+        sync::{Arc, LazyLock, Mutex, Weak},
+    };
+    static CLIENTS: LazyLock<Mutex<HashMap<std::net::IpAddr, Weak<tokio::sync::Semaphore>>>> =
+        LazyLock::new(Default::default);
+    let client = {
+        let mut clients = CLIENTS.lock().unwrap_or_else(|error| error.into_inner());
+        clients.retain(|_, slots| slots.strong_count() > 0);
+        clients.get(&ip).and_then(Weak::upgrade).unwrap_or_else(|| {
+            let slots = Arc::new(tokio::sync::Semaphore::new(16));
+            clients.insert(ip, Arc::downgrade(&slots));
+            slots
+        })
+    };
+    let Ok(_client_permit) = client.try_acquire() else {
+        return busy();
     };
     next.run(request).await
 }
@@ -149,9 +182,9 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
     let metrics = metrics_server::MetricsServer::from_env().await?;
     let mut router = checkout::protect(router.merge(docs::router(document)), auth.clone())
         .merge(webhook)
+        .layer(axum::middleware::from_fn(admit_write))
         .layer(axum::Extension(mailer.clone()))
         .layer(axum::Extension(auth))
-        .layer(axum::middleware::from_fn(admit_write))
         .layer(axum::middleware::from_fn(logging::request))
         .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
             std::time::Duration::from_secs(30),

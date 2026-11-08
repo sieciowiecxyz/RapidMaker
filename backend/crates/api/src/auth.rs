@@ -187,6 +187,7 @@ impl Auth {
         if self.trusted_proxy == Some(peer.ip()) {
             headers
                 .get("x-forwarded-for")
+                .filter(|_| headers.get_all("x-forwarded-for").iter().count() == 1)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse().ok())
                 .ok_or_else(|| error(StatusCode::BAD_REQUEST, "Nieprawidłowy adres proxy."))
@@ -785,7 +786,7 @@ mod tests {
         use axum::http::HeaderValue;
         const HOST: &str = "rapidmaker.example";
         const ORIGIN: &[u8] = b"https://rapidmaker.example";
-        let auth = Auth {
+        let mut auth = Auth {
             storage: None,
             key: None,
             dummy_password: None,
@@ -838,6 +839,21 @@ mod tests {
                 "{headers:?}"
             );
         }
+        let peer = "127.0.0.1:12345".parse::<SocketAddr>().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "198.51.100.10".parse().unwrap());
+        assert_eq!(auth.client_ip(peer, &headers).unwrap(), peer.ip());
+        auth.trusted_proxy = Some(peer.ip());
+        assert_eq!(
+            auth.client_ip(peer, &headers).unwrap(),
+            "198.51.100.10".parse::<std::net::IpAddr>().unwrap()
+        );
+        headers.append("x-forwarded-for", "203.0.113.8".parse().unwrap());
+        assert!(
+            auth.client_ip(peer, &headers).is_err(),
+            "Ambiguous forwarded IP: {:?}",
+            auth.client_ip(peer, &headers)
+        );
     }
 
     #[test]
