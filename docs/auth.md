@@ -41,7 +41,7 @@ Nowe konto i stare konto bez hasła/passkey: potwierdzenie email otwiera ogranic
 
 - Hasło: 12–128 znaków, maks. 512 bajtów UTF-8, bez normalizacji. Argon2id: 19 MiB, dwie iteracje, równoległość 1, losowa sól. Kosztowna praca poza pętlą async, ograniczona semaforem i limitami DB.
 - TOTP: RFC 6238, 6 cyfr, 30 s, tolerancja jednego kroku. Zużyte kroki nie działają ponownie. Sekret szyfrowany XChaCha20-Poly1305, klucz wyprowadzany z AUTH_CODE_KEY, związany z ID konta. Kody odzyskiwania przechowywane jako hashe i zużywane atomowo.
-- Próby drugiego składnika: 5 na sesję oraz 20 na konto/15 minut, dodatkowe limity IP/globalne. Nowa przeglądarka lub adres IP nie resetują limitu konta. Niepotwierdzone logowania nie wypierają działających sesji.
+- Próby drugiego składnika: 5 na sesję oraz 20 na konto/15 minut, dodatkowe limity IP/globalne. Nowa przeglądarka lub adres IP nie resetują limitu konta. Niepotwierdzone starty passkey nie wypierają sesji po poprawnym haśle oczekujących na 2FA; maks. pięć oczekujących sesji na dany etap. Pełne sesje pozostają chronione.
 - WebAuthn: webauthn-rs, dokładny Origin/RP ID, wymagane UV, jednorazowe wyzwania PostgreSQL związane z kontem i sesją. Brak własnej kryptografii podpisów.
 - Cookie HttpOnly/SameSite=Lax; w produkcji Secure i prefix __Host. DB trzyma hashe tokenów, bez JWT. Klient: 30 dni/7 dni bezczynności; admin: 8 h/30 min. Rola/blokada/logout unieważniają dostęp w DB.
 - Własność modeli, zamówień, rozmów i plików sprawdzana na serwerze. Claim gościa wymaga obu sesji; email zamówienia nie nadaje własności.

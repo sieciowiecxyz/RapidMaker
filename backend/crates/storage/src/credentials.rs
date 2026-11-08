@@ -211,17 +211,18 @@ impl Storage {
         if !capacity {
             return Ok(None);
         }
-        sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 AND stage<>'authenticated' ORDER BY created_at DESC OFFSET 4)").bind(&id).execute(&mut *tx).await?;
+        let stage = if password_hash.is_some() {
+            "second_factor"
+        } else {
+            "primary"
+        };
+        sqlx::query("DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=$1 AND stage=$2 ORDER BY created_at DESC OFFSET 4)").bind(&id).bind(stage).execute(&mut *tx).await?;
         let result = rotate(
             &mut tx,
             previous.unwrap_or(token),
             &id,
             token,
-            if password_hash.is_some() {
-                "second_factor"
-            } else {
-                "primary"
-            },
+            stage,
             now,
             Some(uuid::Uuid::new_v4().to_string()),
         )
@@ -1014,7 +1015,7 @@ mod tests {
             .is_none()
         );
         assert!(!db.auth_password_admit(&pending, now).await.unwrap());
-        // Unproven passkey/primary attempts may prune other pending attempts, not full sessions.
+        // Repeated password starts may prune the same pending stage, not full sessions.
         for i in 0..25 {
             db.auth_primary(&email, Some(&hash), &random_token().unwrap(), None, now + i)
                 .await
@@ -1032,6 +1033,36 @@ mod tests {
         db.auth_factor_start(&key, &pending, "12345678", later)
             .await
             .unwrap();
+        // Primary admission checks only key existence, not the credential JSON.
+        sqlx::query("INSERT INTO passkeys(id,credential_id,user_id,credential,name,created_at) VALUES($1,$2,$1,'{}','admission fixture',$3)")
+            .bind(&id).bind(hash_token(&id).as_slice()).bind(later).execute(&db.pool).await.unwrap();
+        for i in 1..=6 {
+            assert!(
+                db.auth_login_record(&email, &hash_token("passkey-attacker"), later + i)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+            db.auth_primary(&email, None, &random_token().unwrap(), None, later + i)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        assert!(
+            db.auth_pending(&pending, later + 7)
+                .await
+                .unwrap()
+                .is_some(),
+            "Unverified passkey attempts must not evict a password-verified MFA session"
+        );
+        let primary_count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sessions WHERE user_id=$1 AND stage='primary'",
+        )
+        .bind(&id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(primary_count, 5);
         let new = random_token().unwrap();
         assert!(
             db.auth_factor_verify(
@@ -1040,13 +1071,13 @@ mod tests {
                 "12345678",
                 &new,
                 &hash_token("new-ip"),
-                later
+                later + 7
             )
             .await
             .unwrap()
             .is_some()
         );
-        assert!(db.auth_password_admit(&new, later).await.unwrap());
+        assert!(db.auth_password_admit(&new, later + 7).await.unwrap());
         sqlx::query("DELETE FROM users WHERE id=$1")
             .bind(id)
             .execute(&db.pool)
