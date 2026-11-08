@@ -417,6 +417,7 @@ test('native terminal failure reaches a persisted manual request through the UI'
 
 test('different manual configurations share one upload and preserve separate order lines', async ({
   page,
+  browser,
 }) => {
   test.skip(
     !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
@@ -532,17 +533,90 @@ test('different manual configurations share one upload and preserve separate ord
   expect(duplicate.status()).toBe(400);
   expect(await duplicate.json()).toMatchObject({ code: 'invalid_manual_parts' });
   expect(uploads).toBe(1);
-  await test
-    .info()
-    .attach('manual-variants-evidence', {
-      body: JSON.stringify({
-        model_id: model.id,
-        upload_count: uploads,
-        order_id: result.order_id,
-        lines: order.lines,
-        persisted,
-        exact_duplicate_status: duplicate.status(),
-      }),
+  const adminContext = await browser.newContext();
+  try {
+    const operator = await adminContext.newPage(),
+      errors: string[] = [];
+    operator.on('pageerror', (error) => errors.push(error.name));
+    const admin = accounts().find((a) => a.role === 'admin')!;
+    await login(operator, admin);
+    await operator.getByRole('button', { name: `Otwórz ${result.order_id}`, exact: true }).click();
+    const detail = operator.getByRole('complementary', {
+      name: `Szczegóły ${result.order_id}`,
+      exact: true,
+    });
+    await expect(detail.getByLabel('Etap realizacji')).toBeDisabled();
+    const adminRows = detail.locator('section.model');
+    await expect(adminRows).toHaveCount(2);
+    const files = (
+      await (await operator.request.get(`/api/admin/orders/${result.order_id}/files`)).json()
+    ).files;
+    expect(new Set(files.map((f: { quote_id: string }) => f.quote_id))).toEqual(
+      new Set(order.lines.map((l: { quote_id: string }) => l.quote_id)),
+    );
+    for (const [index, line] of order.lines.entries()) {
+      const file = files.find((f: { quote_id: string }) => f.quote_id === line.quote_id);
+      expect(file).toMatchObject({
+        ...expected[index],
+        options: { ...print, quantity: expected[index].quantity },
+      });
+      await expect(adminRows.nth(index).locator('.material-tag')).toHaveText(
+        file.material_name || file.material_id,
+      );
+      const count = adminRows.nth(index).getByRole('spinbutton', { name: /Gotowe \/ / });
+      await expect(count).toBeDisabled();
+      await expect(count).toHaveValue('0');
+      await expect(count).toHaveAttribute('max', String(expected[index].quantity));
+    }
+    expect(new Set(files.map((f: { source_url: string }) => f.source_url))).toEqual(
+      new Set([`/api/admin/orders/${result.order_id}/files/${model.id}/source`]),
+    );
+    const path = `/api/admin/orders/${result.order_id}/production`;
+    const before = await (await operator.request.get(path)).json();
+    const rejected = await operator.request.put(path, {
+      headers: await headers(operator),
+      data: {
+        ...before,
+        progress: order.lines.map((l: { line_id: string }, i: number) => ({
+          model_id: l.line_id,
+          done: i === 0 ? 1 : 0,
+        })),
+      },
+    });
+    expect(rejected.status()).toBe(422);
+    expect(await rejected.json()).toMatchObject({
+      message: expect.stringContaining('Postęp wymaga opłaconego zamówienia'),
+    });
+    expect(await (await operator.request.get(path)).json()).toEqual(before);
+    const unchanged = await (
+      await page.request.get(`/api/account/orders/${result.order_id}`)
+    ).json();
+    expect(unchanged).toMatchObject({
+      status: 'awaiting_quote',
+      paid_at: null,
+      amount_grosze: null,
+      payment_attempt_id: null,
+      manual_offer: { payment_started: false },
+    });
+    expect(unchanged.lines).toEqual(order.lines);
+    expect(errors).toEqual([]);
+    await test.info().attach('manual-admin-unpaid-evidence', {
+      body: JSON.stringify({ files, production: before, rejected_status: rejected.status() }),
       contentType: 'application/json',
     });
+  } finally {
+    await adminContext.close();
+  }
+
+  await test.info().attach('manual-variants-evidence', {
+    body: JSON.stringify({
+      model_id: model.id,
+      upload_count: uploads,
+      order_id: result.order_id,
+      lines: order.lines,
+      persisted,
+      exact_duplicate_status: duplicate.status(),
+    }),
+    contentType: 'application/json',
+  });
 });

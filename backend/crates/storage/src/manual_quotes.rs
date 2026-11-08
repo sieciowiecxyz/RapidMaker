@@ -587,6 +587,40 @@ mod tests {
         let paid_order = db.order(&id, Some(&user), None).await.unwrap().unwrap();
         assert_eq!(paid_order["status"], "paid");
         assert_eq!(paid_order["lines"], original["lines"]);
+        // Existing synthetic Stripe JSON establishes a DB fixture, not a real payment.
+        let mut production = db.production(&id).await.unwrap().unwrap();
+        production.stage = "printing".into();
+        let mut expected: Vec<crate::Progress> = lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| crate::Progress {
+                model_id: line["line_id"].as_str().unwrap().to_owned(),
+                done: if index == 0 { 1 } else { 0 },
+            })
+            .collect();
+        production.progress = expected.clone();
+        db.save_production(&id, &admin, production, now + 9)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut production = db.production(&id).await.unwrap().unwrap();
+        assert_eq!(production.progress, expected);
+        production.progress[0].done = 2;
+        db.save_production(&id, &admin, production, now + 10)
+            .await
+            .unwrap()
+            .unwrap();
+        expected[0].done = 2;
+        assert_eq!(
+            db.production(&id).await.unwrap().unwrap().progress,
+            expected
+        );
+        // This row references both the order and actor; clean it before later lifecycle checks.
+        sqlx::query("DELETE FROM order_production WHERE order_id=$1")
+            .bind(&id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
         assert!(
             db.admin_orders()
                 .await
