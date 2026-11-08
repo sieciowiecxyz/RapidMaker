@@ -1,4 +1,5 @@
-import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, loadEnv, normalizePath, resolveConfig, type ProxyOptions } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 const headers = {
@@ -6,7 +7,8 @@ const headers = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
 };
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
+  const defaults = await resolveConfig({ configFile: false, envFile: false }, 'serve', mode);
   const env = loadEnv(mode, '.', 'RUST_API_PORT');
   const apiPort = Number(env.RUST_API_PORT ?? '18432');
   if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535)
@@ -43,7 +45,17 @@ export default defineConfig(({ mode }) => {
   };
   return {
     plugins: [tailwindcss(), svelte()],
-    server: { proxy, headers },
+    server: {
+      proxy,
+      headers,
+      fs: {
+        deny: [
+          ...defaults.server.fs.deny,
+          '**/tests/artifacts/**',
+          normalizePath(fileURLToPath(new URL('./.codex/**', import.meta.url))),
+        ],
+      },
+    },
     preview: { proxy, headers },
     build: {
       rollupOptions: {

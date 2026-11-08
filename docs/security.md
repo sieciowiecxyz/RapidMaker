@@ -162,3 +162,12 @@ Solxhigh potwierdził zamrożone hashe źródeł i raportów: `security-session-
 Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SDK i ogranicza wpisy/ścieżki/nagłówki oraz rozpakowane rozmiary96/512MiB. W używanym zip9.0.5 zwykły ZipArchive ma size_unknown=false; Crc32Reader czyta najwyżej zadeklarowany rozmiar+1 i odrzuca przekroczenie. Samo `read_to_string` w geometry_package nie jest więc dowodem nieograniczonej dekompresji. Central directory jest jednak parsowany przed limitem512wpisów — ten etap chronią rozmiar wejścia i limity procesu, nie późniejszy licznik.
 
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
+
+
+## 2026-11-08 — prywatne artefakty a Vite dev
+
+Potwierdzono, że lokalny dev server udostępniał własny niesekretny plik kontrolny z `frontend/tests/artifacts` przez HTTP200 mimo katalogu700/pliku600. Nie odczytywano rzeczywistych raportów lub sekretów. Poprawka `server.fs.deny` zachowuje domyślne reguły Vite (pobierane przez resolveConfig bez pliku konfiguracji/env), dodaje tests/artifacts oraz wyłącznie projektowe frontend/.codex. Nie blokuje całego nadrzędnego ~/.codex, w którym znajduje się worktree.
+
+Końcowy istniejący localhost18430: cztery warianty direct/@fs/raw-import dają403 bez zawartości canary; root i src/main.ts dają200 z nagłówkami. Testproxy2/2PASS, build/svelte0errors/warningsPASS; NODE_ENVproduction i built-in denies zachowane. Pierwszy zbyt ogólny wzorzec powodował403 całej strony, test go wykrył i wzorzec zawężono; historyczna próba zachowana. Vite automatycznie przeładował konfigurację, bez polecenia restartu; brak baselinePID, więc nie twierdzimy że PID pozostał ten sam. Backend/DB bez zmian.
+
+Dowody `security-artifact-serving-20261108/`, Solxhigh potwierdził source/politykę/probe. Netto13linii konfiguracji i31testu, bez nowej zależności. Zakres to Vite dev i wskazane katalogi, nie wszystkie ignorowane pliki, cross-origin exploit lub certyfikacja hostingu produkcyjnego. Preview serwuje dist; jego fs.deny nie zmieniano.

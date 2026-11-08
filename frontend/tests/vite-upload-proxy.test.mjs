@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { createServer, loadConfigFromFile } from 'vite';
+import { createServer, loadConfigFromFile, normalizePath, resolveConfig } from 'vite';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const mib = 1024 * 1024;
@@ -58,6 +59,35 @@ test(
     t.after(() => vite.close());
     await vite.listen();
     const port = vite.httpServer.address().port;
+
+    await t.test('private artifacts stay blocked without replacing Vite defaults', async () => {
+      const defaults = await resolveConfig({ configFile: false, envFile: false }, 'serve');
+      assert.deepEqual(vite.config.server.fs.deny, [
+        ...defaults.server.fs.deny,
+        '**/tests/artifacts/**',
+        normalizePath(fileURLToPath(new URL('../.codex/**', import.meta.url))),
+      ]);
+      await mkdir(`${root}tests/artifacts`, { recursive: true });
+      const directory = await mkdtemp(`${root}tests/artifacts/security-canary-`);
+      t.after(() => rm(directory, { recursive: true, force: true }));
+      const canary = 'harmless-private-artifact-regression-canary';
+      const file = `${directory}/canary.txt`;
+      await writeFile(file, canary, { mode: 0o600 });
+      const direct = file.slice(root.length - 1);
+      for (const url of [direct, `/@fs/${file}`]) {
+        for (const suffix of ['', '?raw&import']) {
+          const response = await fetch(`http://127.0.0.1:${port}${url}${suffix}`);
+          assert.equal(response.status, 403, `${url}${suffix}`);
+          assert.ok(!(await response.text()).includes(canary));
+        }
+      }
+      for (const url of ['/', '/src/main.ts']) {
+        const response = await fetch(`http://127.0.0.1:${port}${url}`);
+        assert.equal(response.status, 200, url);
+        assert.equal(response.headers.get('x-frame-options'), 'DENY');
+        await response.text();
+      }
+    });
 
     async function upload(size) {
       return new Promise((resolve, reject) => {
