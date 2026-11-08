@@ -240,6 +240,38 @@ test('duplicate variants keep independent settings and release only the last upl
   await gone(page, replacement);
 });
 
+test('preview retry resubmits a failed STEP upload and renders its real geometry', async ({
+  page,
+}) => {
+  await open(page);
+  await page.route(
+    '**/api/models',
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { message: 'Chwilowy błąd analizy. Spróbuj ponownie.' },
+      }),
+    { times: 1 },
+  );
+  await input(page).setInputFiles(
+    resolve('../backend/crates/geometry/tests/fixtures/step_block.step'),
+  );
+  await expect(page.getByRole('heading', { name: 'Nie można wyświetlić modelu' })).toBeVisible();
+  const retry = page.waitForResponse(isUpload, { timeout: 5000 });
+  await page.getByRole('button', { name: 'Spróbuj ponownie', exact: true }).click();
+  const response = await retry;
+  expect(response.status()).toBe(201);
+  await expect(page.getByRole('img', { name: /^Model z pliku step_block.step/ })).toBeVisible();
+  const id = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1')!).models[0].analysis.id,
+  );
+  await expect(page.locator('.model-row')).toHaveCount(1);
+  const deleted = deletion(page, id);
+  await page.getByRole('button', { name: 'Usuń step_block.step', exact: true }).click();
+  expect((await deleted).status()).toBe(204);
+  await gone(page, id);
+});
+
 test('cached private STEP models can be removed after a guest session is lost', async ({
   page,
   browser,

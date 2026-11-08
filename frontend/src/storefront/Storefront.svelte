@@ -310,6 +310,10 @@
     theme = theme === 'dark' ? 'light' : 'dark';
     saveTheme(theme);
   }
+  async function retryPreview() {
+    if(selectedModel?.status==='error')await uploadModel(selectedId);
+    previewRetry++;
+  }
   async function useSample(count = 1) {
     if(replacingSamples)return;
     if(models.some(model=>!model.sample) && !confirm('Zastąpić dodane modele przykładem? Bieżąca konfiguracja zostanie zastąpiona.'))return;
@@ -406,7 +410,7 @@
     {:else}
       <div class="print-scene chamber empty-model-preview"><div class="chamber-top"><span><i></i> Podgląd</span><span>Plik klienta / 3D</span></div><div class="empty-preview-content" aria-live="polite"><IconCube size={54} stroke={1}/>
         {#if stlPreview.status==='loading'}<h3>Przygotowuję model…</h3><p>{selectedModel.name}</p><p>Możesz w tym czasie wybrać ustawienia wydruku.</p>
-        {:else if stlPreview.status==='error'}<h3>Nie można wyświetlić modelu</h3><p>{stlPreview.error}</p><Button variant="secondary" onclick={()=>{previewRetry++;}}>Spróbuj ponownie</Button>
+        {:else if stlPreview.status==='error'}<h3>Nie można wyświetlić modelu</h3><p>{stlPreview.error}</p><Button variant="secondary" onclick={retryPreview}>Spróbuj ponownie</Button>
         {:else if stlPreview.status==='unsupported'}<h3>Przygotowanie podglądu</h3><p>Dodaj plik ponownie, aby przygotować prywatny podgląd.</p>
         {:else}<h3>Przygotowuję podgląd…</h3>{/if}
       </div></div>
