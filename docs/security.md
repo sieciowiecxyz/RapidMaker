@@ -124,3 +124,14 @@ Surowe raporty, kody wyjścia, drzewo i niezmienione sumy manifestów/locków: `
 Nie potwierdzono nowej luki w sprawdzonym kodzie. Limit 256 KiB jest przed parserem; po odczycie odrzucane są załączniki, ponad32części i głębokość>8. Sprawdzenie liczby części poprzedza lokalną rekurencję. IMAP ma1slot/30s/20UIDna partię, kontrolę RFC822.SIZE, częściowe BODY.PEEK i8MiB budżetu odczytu. From jest tylko nagłówkiem — dostęp opiera się na podpisanej HMAC referencji oraz aktualnym sprawdzeniu uczestnika, roli, własności, wygaśnięcia i revocation w storage. Dedup i limit10wiadomości/order/min pozostają.
 
 Istniejące offline `replies::tests`: **2 PASS**, artefakty `security-inbound-mail-20261108/`. Główny agent i Solxhigh przejrzeli źródła. Subagent audytowy został zablokowany przez filtr narzędzia; kontynuowano jedynie defensywny odczyt kodu i istniejące testy, bez nowych payloadów, IMAP/SMTP lub prób penetracyjnych. Brak zmian produktu; nie jest to dowód bezpieczeństwa wszystkich gałęzi parsera ani kryptograficzne uwierzytelnienie From.
+
+
+## 2026-11-08 — zmiana konta w otwartym checkout
+
+Potwierdzono wyciek UI: po logowaniu B w drugiej karcie inline formularz nadal pokazywał kontakt i uwagi A. Po zatwierdzeniu `prepareCheckout` kopiowało uwagi kontaktowe do wspólnego `model.notes` w localStorage; samo zamknięcie formularza nie wystarczało. Nie wykazano dostępu do cudzych zamówień w backendzie.
+
+Poprawka używa istniejącego sygnału auth: zamyka inline checkout, usuwa prywatny orderDraft i blokuje spóźnione kontynuacje przez authEpoch. Uwagi kontaktowe nie są już kopiowane do wspólnego koszyka; pozostają w istniejącym szkicu konta i są przekazywane do ręcznej wyceny przez props/request body. Prawdziwe wymagania modeli i model cart są zachowane. Bez focus watcher, nowej struktury storage, zależności lub zmian stylu. Sześć plików produktu: netto18linii, zamiast nowej warstwy prywatności.
+
+Regresje headless z kontrolowanym HTTP: przed fixem FAIL na pozostawionym formularzu, częściowa poprawka FAIL na uwagach w globalnym cart. Końcowo5/5PASS, build/svelte-check0errors/0warningsPASS, diffPASS; Solxhigh zaakceptował zamrożone źródła. Test używa prawdziwego UI logowania w drugiej karcie i produkcyjnego sygnału auth, sprawdza zatwierdzoną ręczną wycenę/body z oryginalnymi wymaganiami, dane B po ponownym otwarciu oraz reload `/zamowienie` bez uwag A. Dowody `security-checkout-identity-20261108/final-tests.json` i final-source-manifest.json. To nie jest nowy dowód backendu/cookies lub dostawców.
+
+Granice: stare przedfixowe uwagi już wymieszane w model.notes nie są automatycznie usuwane — nie da się ich odróżnić od oryginalnych wymagań modelu. Asynchroniczne edycje współdzielonego model cart nadal nie mają pełnej gwarancji serializacji między kartami; poprawka zamyka przenoszenie nowych prywatnych uwag kontaktowych. Normalne usługi bez restartu, testy wyłącznie headless.

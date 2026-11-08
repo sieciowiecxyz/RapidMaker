@@ -200,12 +200,7 @@ export async function getQuote(options: QuoteOptions): Promise<Quote> {
       : (quote.reason ?? quote.packing.reason),
   };
 }
-export async function prepareCheckout(
-  models: Model[],
-  delivery: string,
-  manual = false,
-  notes = '',
-): Promise<void> {
+export async function prepareCheckout(models: Model[], delivery: string): Promise<void> {
   validate(models, await getMaterials());
   const [materials, catalog] = await Promise.all([
     checkout.getMaterials(),
@@ -218,14 +213,6 @@ export async function prepareCheckout(
   for (const [index, draft] of resolved.entries()) {
     const cart = await checkout.addModel(draft.name);
     const added = cart.models[cart.models.length - 1];
-    if (manual || notes.trim())
-      draft.notes = [
-        draft.notes,
-        notes.trim(),
-        ...(manual ? ['Indywidualne wymagania — proszę o kontakt przed realizacją.'] : []),
-      ]
-        .filter(Boolean)
-        .join(' ');
     await checkout.updateModel(added.id, { ...draft, id: added.id });
     savedModels.push({ ...models[index], id: added.id });
   }

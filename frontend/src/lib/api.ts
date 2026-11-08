@@ -58,8 +58,8 @@ async function request<T>(path: string, body?: unknown, signal?: AbortSignal): P
     );
   return data as T;
 }
-export function quoteCart(contact?: Contact, signal?: AbortSignal): Promise<Quote> {
-  return calculateQuote(contact, false, signal);
+export function quoteCart(contact?: Contact, signal?: AbortSignal, manual = false): Promise<Quote> {
+  return calculateQuote(contact, false, signal, manual);
 }
 
 export function quotePrintCart(): Promise<Quote> {
@@ -285,13 +285,14 @@ async function calculateQuote(
   contact: Contact | undefined,
   printOnly: boolean,
   signal?: AbortSignal,
+  forceManual = false,
 ): Promise<Quote> {
   const cart = await mock.getCart();
   const { checkout, manual } = await quoteModels(
     cart.models,
     printOnly ? 'pickup' : cart.delivery,
     contact ?? { postalCode: cart.postalCode },
-    false,
+    forceManual,
     signal,
   );
   const offer = checkout.offers[0];

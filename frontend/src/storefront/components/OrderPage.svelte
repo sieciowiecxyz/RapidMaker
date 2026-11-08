@@ -2,6 +2,7 @@
   import { IconArrowLeft, IconArrowRight, IconCheck, IconPackage, IconMapPin } from '@tabler/icons-svelte';
   import Button from './ui/Button.svelte';
   import { onMount, untrack } from 'svelte';
+  import { authEpoch } from '../../lib/authSync';
   import Checkout from '../../pages/checkout/Checkout.svelte';
   import type { Contact, DeliveryMethod } from '../../lib/types';
   import * as orderApi from '../../lib/api';
@@ -61,8 +62,10 @@
     if(!form.reportValidity())return;
     if(draft.models.some(model=>model.sample || !model.analysis)){error='Przykłady pokazują wygląd konfiguratora. Aby zamówić wydruk, wróć i dodaj własne pliki.';return;}
     preparing=true;error='';
+    const epoch=authEpoch();
     try{
-      await prepareCheckout(draft.models,delivery,draft.quote.manual,data.notes);
+      await prepareCheckout(draft.models,delivery);
+      if(epoch!==authEpoch())return;
       save();reviewed=true;
       requestAnimationFrame(()=>{document.getElementById('order-title')?.focus();window.scrollTo({top:0,behavior:'instant'});});
     }catch(cause){error=cause instanceof Error?cause.message:'Nie udało się przygotować dostawy i płatności.';}
@@ -78,7 +81,7 @@
   <div class="order-layout" class:checkout-active={reviewed}>
     <div class="order-form-area">
       {#if reviewed}
-        <Checkout embedded initialContact={contact} initialInvoice={invoice} onEditContact={editContact} onStage={updateStage} />
+        <Checkout embedded initialNotes={data.notes} forceManual={manual} initialContact={contact} initialInvoice={invoice} onEditContact={editContact} onStage={updateStage} />
       {:else}
         <form bind:this={form} onsubmit={review} oninput={save} onchange={save}>
           <section class="order-form-section" aria-labelledby="order-contact-heading">

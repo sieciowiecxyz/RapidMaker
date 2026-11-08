@@ -15,11 +15,13 @@
   let {
     models,
     initialContact,
+    initialNotes = '',
     initialDelivery,
     oncreated,
   }: {
     models: PrintModel[];
     initialContact: Contact;
+    initialNotes?: string;
     initialDelivery: DeliveryMethod;
     oncreated: (id: string) => void | Promise<void>;
   } = $props();
@@ -30,7 +32,7 @@
   let contact = $state<Contact>(untrack(() => ({ ...initialContact }))),
     delivery = $state<DeliveryMethod>(untrack(() => initialDelivery));
   let validationErrors = $state<Record<string, string>>({});
-  let notes = $state(''),
+  let notes = $state(untrack(() => initialNotes)),
     invoice = $state(untrack(() => !!initialContact.company)),
     error = $state('');
   let points = $state<PickupPoint[]>([]),

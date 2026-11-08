@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import * as api from '../../lib/api';
   import { ApiError } from '../../lib/http';
+  import { authEpoch } from '../../lib/authSync';
   import LegalNotice from '../../components/LegalNotice.svelte';
   import ParcelPlan from '../../components/ParcelPlan.svelte';
   import PaymentReturn from './PaymentReturn.svelte';
@@ -21,12 +22,16 @@
   let {
     embedded = false,
     initialContact,
+    initialNotes = '',
+    forceManual = false,
     initialInvoice = false,
     onEditContact,
     onStage,
   }: {
     embedded?: boolean;
     initialContact?: Partial<Contact>;
+    initialNotes?: string;
+    forceManual?: boolean;
     initialInvoice?: boolean;
     onEditContact?: (contact: Contact, invoice: boolean, delivery: DeliveryMethod) => void;
     onStage?: (stage: number) => void;
@@ -61,10 +66,11 @@
   let lastPointPostal = '';
   let pointRequest = 0;
   const pointCache = new Map<string, PickupPoint[]>();
+  let orderNotes = $state('');
   let draftKey = 'rapidmaker.checkout-contact.v2.guest';
   const receiptKey = 'rapidmaker.last-checkout';
   function saveDraft() {
-    sessionStorage.setItem(draftKey, JSON.stringify({ contact, invoice }));
+    sessionStorage.setItem(draftKey, JSON.stringify({ contact, invoice, notes: orderNotes }));
   }
   async function searchPoints(query = pointSearch.trim() || contact.postalCode.trim()) {
     if (query.length < 2) return;
@@ -276,6 +282,7 @@
     }
   }
   async function load() {
+    const epoch = authEpoch();
     busy = true;
     error = '';
     try {
@@ -293,13 +300,18 @@
       const user = await api.getSession();
       draftKey = 'rapidmaker.checkout-contact.v2.' + (user?.id ?? 'guest');
       if (user) contact = (await api.getProfile()).contact;
+      if (epoch !== authEpoch()) return;
       const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? 'null');
       if (saved?.contact && typeof saved.contact.email === 'string') {
         contact = { ...contact, ...saved.contact };
         invoice = !!saved.invoice;
+        orderNotes = typeof saved.notes === 'string' ? saved.notes : '';
       }
       if (initialContact) contact = { ...contact, ...initialContact };
-      if (embedded) invoice = initialInvoice;
+      if (embedded) {
+        invoice = initialInvoice;
+        orderNotes = initialNotes;
+      }
       pointSearch = contact.postalCode || contact.city;
       cart = savedCart;
       if (cart.models.length) await refreshQuote();
@@ -326,7 +338,11 @@
     if (!cart) return;
     saveDraft();
     const snapshot = quoteSnapshot();
-    const quote = await api.quoteCart(normalizedContact(), signal);
+    const quote = await api.quoteCart(
+      normalizedContact(),
+      signal,
+      forceManual || !!orderNotes.trim(),
+    );
     if (snapshot !== quoteSnapshot()) return;
     cart = { ...cart, quote };
     contactAtQuote = snapshot;
@@ -553,6 +569,7 @@
   {:else if cart.quote?.manual}
     <ManualQuoteRequest
       models={cart.models}
+      initialNotes={orderNotes}
       initialContact={contact}
       initialDelivery={cart.delivery}
       oncreated={async (id) => {

@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Nowsza poprawka prywatności checkoutu: zmiana konta zamyka prywatny formularz; nowe uwagi kontaktowe pozostają kontowe zamiast wspólnego model cart.5headlessHTTP-mockPASS/buildPASS. Stare wymieszane uwagi bez migracji, brak pełnej serializacji kart; szczegóły w security.
+
 Audyt zależności2026-11-08: Cargo0podatności; npm1źródłoweLOWdeepmerge(dev,brakpoprawki), pin-utils ostrzeżenie utrzymania(compiledIMAP). Bez zmian locków lub wyciszania; szczegóły w security.
 
 Retencja wygasłych wycen [naprawiona w kodzie](../security.md#naprawione-w-kodzie-retencja-wygasłych-wycen): małe partie GC, ochrona historii/draftów, wspólna blokada zapisu referencji i indeksy migracji0024. Końcowa regresja PG1PASS, wcześniejsze5PG i10unit osobno. Po poprawce realny API upload/slicer i create/update/requote draftu pickup PASS, bez providerów; zapis obu formatów referencji potwierdzony. Nie aktualizowano normalnego schematu/serwera; to retencja, nie globalna kwota DB.

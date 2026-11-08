@@ -7,6 +7,7 @@
   import './coral.css';
   import './print-background.css';
   import { apiFetch } from '../lib/http';
+  import { authEpoch, watchAuthChanges } from '../lib/authSync';
   import { saveTheme } from '../lib/theme';
   import type { StlMesh } from './lib/stlParser';
   import { customColors } from './lib/colors';
@@ -198,6 +199,10 @@
   const money = (value: number) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 
   onMount(() => {
+    const stopAuthSync=watchAuthChanges(()=>{
+      checkoutOpen=false; transitioning=false; orderDraft=null;
+      if(location.hash==='#zamowienie')history.replaceState(null,'','#wycena');
+    });
     const syncRoute=()=>{
       if(transitioning)transitioning=false;
       checkoutOpen=location.hash==='#zamowienie' && !!orderDraft;
@@ -230,6 +235,7 @@
         .from('.hero .quote-card', { y: 16, opacity: .45, duration: .5 }, .16);
     });
     return () => {
+      stopAuthSync();
       window.removeEventListener('popstate',syncRoute);window.removeEventListener('hashchange',syncRoute);
       cancelAnimationFrame(contactFrame); clearTimeout(contactTimer);
       mobile.removeEventListener('change', syncMobile);
@@ -369,8 +375,10 @@
   async function prepareContact(event:MouseEvent) {
     if (!canContact || !quote || transitioning || preparing) return;
     preparing=true;
+    const epoch=authEpoch();
     try {
-      await api.prepareCheckout(models,delivery,manual);
+      await api.prepareCheckout(models,delivery);
+      if(epoch!==authEpoch())return;
       configuratorScroll=window.scrollY;
       orderDraft={models:models.map(model=>({...model,settings:{...model.settings!}})),materials:[...materials],quote:{...quote,lines:quote.lines.map(line=>({...line}))},delivery};
       if(event.detail===0 || matchMedia('(prefers-reduced-motion: reduce)').matches){revealOrder();void focusOrder();}

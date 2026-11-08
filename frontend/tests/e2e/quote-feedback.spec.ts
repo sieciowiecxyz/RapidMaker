@@ -6,13 +6,22 @@ async function configure(
   page: Page,
   configured = true,
   checkout?: (route: Route) => Promise<void>,
+  identity?: () => { id: string; email: string },
 ) {
   const estimates: Record<string, unknown>[] = [];
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/models/limits')
       return route.fulfill({ json: { max_upload_bytes: 32 * 1024 * 1024 } });
-    if (path === '/api/auth/me') return route.fulfill({ status: 401, json: {} });
+    if (path === '/api/auth/me')
+      return identity
+        ? route.fulfill({
+            json: { user: { ...identity(), role: 'client' }, stage: 'authenticated' },
+          })
+        : route.fulfill({ status: 401, json: {} });
+    if (path === '/api/checkout/config') return route.fulfill({ json: { publishable_key: null } });
+    if (path === '/api/account/notifications')
+      return route.fulfill({ json: { email_order_updates: true, email_chat_messages: true } });
     if (path === '/api/catalog/materials')
       return route.fulfill({
         json: {
@@ -26,6 +35,7 @@ async function configure(
           ],
         },
       });
+    if (path.endsWith('/preview.glb')) return route.fulfill({ status: 404, body: '' });
     if (path === '/api/models')
       return route.fulfill({
         status: 201,
@@ -192,3 +202,142 @@ test('a late previous quantity response cannot overwrite the current quote', asy
   await proceed.click();
   await expect(page.locator('.order-total')).toContainText('73,00');
 });
+
+for (const reviewed of [false, true])
+  test(`switching accounts drops ${reviewed ? 'reviewed' : 'inline'} contact and restores only the new account draft`, async ({
+    page,
+    context,
+  }) => {
+    let current = { id: 'inline-a', email: 'inline-a@example.test' };
+    await page.addInitScript(() => {
+      for (const id of ['inline-a', 'inline-b'])
+        sessionStorage.setItem(
+          'rapidmaker.checkout-contact.v2.' + id,
+          JSON.stringify({
+            contact: {
+              name: id + ' private name',
+              email: id + '@example.test',
+              phone: '48111111111',
+              street: id + ' street',
+              city: 'Warszawa',
+              postalCode: '00-001',
+            },
+            notes: id + ' private notes',
+          }),
+        );
+    });
+    await configure(page, true, undefined, () => current);
+    if (reviewed) {
+      await page.locator('.quote-contact').click();
+      await expect(page.locator('input[name=email]')).toHaveValue('inline-a@example.test');
+      // Restore a genuine model requirement through the same adapter as a cart reload.
+      await page.evaluate(() => {
+        const key = 'rapidmaker.frontend.demo.v1';
+        const saved = JSON.parse(localStorage.getItem(key)!);
+        saved.cart.models[0].notes = 'Original model requirement';
+        localStorage.setItem(key, JSON.stringify(saved));
+        localStorage.setItem('rapidmaker.storefront.checkout-ready', '1');
+      });
+      await page.goto('/wycena?restore=cart');
+    }
+    const open = page.locator('.quote-contact');
+    await expect(open).toBeEnabled();
+    await open.click();
+    await expect(page.locator('input[name=email]')).toHaveValue('inline-a@example.test');
+    await expect(page.locator('textarea[name=notes]')).toHaveValue('inline-a private notes');
+    if (reviewed) {
+      await page
+        .getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: 'Zapytaj o wycenę', exact: true }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(() =>
+          JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart.models.map(
+            (m: { notes: string }) => m.notes,
+          ),
+        ),
+      ).toEqual(['Original model requirement']);
+      await expect(page.getByLabel('Uwagi i wymagania', { exact: true })).toHaveValue(
+        'inline-a private notes',
+      );
+      let body: { notes: string } | undefined;
+      await page.route('**/api/account/manual-quotes', async (route) => {
+        body = route.request().postDataJSON();
+        await route.fulfill({ status: 422, json: { message: 'Fixture captured request only.' } });
+      });
+      await page.getByRole('button', { name: 'Wyślij zapytanie o wycenę', exact: true }).click();
+      await expect
+        .poll(() => body?.notes)
+        .toBe('inline-a private notes\ncube_20mm.stl: Original model requirement');
+    }
+    const cartBefore = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart.models,
+    );
+    const draftBefore = await page.evaluate(() =>
+      sessionStorage.getItem('rapidmaker.checkout-contact.v2.inline-a'),
+    );
+
+    // Real login UI and its session mutation publish the production auth marker.
+    const other = await context.newPage();
+    let signedIn = false;
+    await other.route('**/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/auth/me')
+        return route.fulfill(
+          signedIn
+            ? {
+                json: {
+                  user: { ...current, role: 'client' },
+                  stage: 'authenticated',
+                  csrf_token: 'fixture-csrf',
+                },
+              }
+            : { status: 401, json: {} },
+        );
+      if (path === '/api/auth/password/login') {
+        current = { id: 'inline-b', email: 'inline-b@example.test' };
+        signedIn = true;
+        return route.fulfill({
+          json: { user: { ...current, role: 'client' }, stage: 'authenticated' },
+        });
+      }
+      if (path === '/api/auth/claim-guest')
+        return route.fulfill({ json: { resources_claimed: 0 } });
+      if (path === '/api/account/orders') return route.fulfill({ json: { orders: [] } });
+      throw new Error('Unexpected login fixture API: ' + path);
+    });
+    await other.goto('/logowanie');
+    await other.getByLabel('Adres email', { exact: true }).fill('inline-b@example.test');
+    await other.getByLabel('Hasło', { exact: true }).fill('fixture-password-only');
+    await other.getByRole('button', { name: 'Zaloguj hasłem', exact: true }).click();
+    await expect(other).toHaveURL(/\/konto\/zamowienia$/);
+    await expect(page.locator('#order-title')).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart.models,
+      ),
+    ).toEqual(cartBefore);
+    await open.click();
+    await expect(page.locator('input[name=email]')).toHaveValue('inline-b@example.test');
+    await expect(page.locator('input[name=name]')).toHaveValue('inline-b private name');
+    await expect(page.locator('textarea[name=notes]')).toHaveValue('inline-b private notes');
+    expect(
+      await page.evaluate(() => sessionStorage.getItem('rapidmaker.checkout-contact.v2.inline-a')),
+    ).toBe(draftBefore);
+    if (reviewed) {
+      await page.goto('/zamowienie');
+      await expect(page.locator('.checkout-layout, .manual-request')).toBeVisible();
+      await expect(page.locator('body')).not.toContainText('inline-a private notes');
+      expect(
+        await page.evaluate(() =>
+          JSON.stringify(JSON.parse(localStorage.getItem('rapidmaker.frontend.demo.v1')!).cart),
+        ),
+      ).not.toContain('inline-a private notes');
+      await page.reload();
+      await expect(page.locator('.checkout-layout, .manual-request')).toBeVisible();
+      await expect(page.locator('body')).not.toContainText('inline-a private notes');
+    }
+    await other.close();
+  });
