@@ -2,6 +2,7 @@ import { expect, test, type Page } from './fixtures';
 import { accounts, login } from './helpers';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { fillAuthorContact } from './checkout-helpers';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -14,13 +15,13 @@ async function headers(page: Page) {
   return { Origin: 'http://localhost:18437', 'X-CSRF-Token': me.csrf_token };
 }
 
-function offerEmails(id: string) {
+function inspectOwned(id: string, query: string) {
   const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
   if (
     !/^rapidmaker_test_browser_[a-f0-9]+$/.test(database) ||
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id)
   )
-    throw new Error('Offer inspection requires an isolated database and owned order UUID');
+    throw new Error('Inspection requires an isolated database and owned resource UUID');
   return JSON.parse(
     execFileSync(
       'podman',
@@ -36,10 +37,17 @@ function offerEmails(id: string) {
         'ON_ERROR_STOP=1',
         '-At',
         '-c',
-        `SELECT COALESCE(json_agg(json_build_object('event_key',event_key,'status',status,'attempts',attempts) ORDER BY event_key),'[]'::json) FROM email_outbox WHERE kind='manual_offer' AND payload->'notification'->>'reference'='${id}'`,
+        query,
       ],
       { encoding: 'utf8' },
     ).trim(),
+  );
+}
+
+function offerEmails(id: string) {
+  return inspectOwned(
+    id,
+    `SELECT COALESCE(json_agg(json_build_object('event_key',event_key,'status',status,'attempts',attempts) ORDER BY event_key),'[]'::json) FROM email_outbox WHERE kind='manual_offer' AND payload->'notification'->>'reference'='${id}'`,
   );
 }
 
@@ -268,4 +276,141 @@ test('manual publication recovers before and after commit without duplicate offe
   } finally {
     await adminContext.close();
   }
+});
+
+test('native terminal failure reaches a persisted manual request through the UI', async ({
+  page,
+}) => {
+  test.skip(
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
+    'Requires local accounts without providers',
+  );
+  test.setTimeout(150_000);
+  const estimates: { status: number; body: unknown }[] = [];
+  page.on('response', (response) => {
+    if (response.url().endsWith('/api/quotes/estimate') && response.request().method() === 'POST')
+      estimates.push({ status: response.status(), body: response.request().postDataJSON() });
+  });
+  const client = accounts().find((a) => a.email === 'browser-other@example.invalid')!;
+  expect(client.totp_uri).toBeTruthy();
+  await login(page, client);
+  await page.goto('/wycena');
+  const uploaded = page.waitForResponse(
+    (r) => r.url().endsWith('/api/models') && r.request().method() === 'POST',
+  );
+  const buffer = Buffer.from(
+    readFileSync(resolve('../backend/crates/geometry/tests/fixtures/cube_20mm.stl')),
+  );
+  expect(buffer.readUInt32LE(80)).toBe(12);
+  // Existing closed cube: -10..10 mm becomes 20 x 20 x 0.01 mm.
+  for (let triangle = 0; triangle < 12; triangle++)
+    for (let vertex = 0; vertex < 3; vertex++) {
+      const z = 84 + triangle * 50 + 12 + vertex * 12 + 8;
+      buffer.writeFloatLE((buffer.readFloatLE(z) + 10) * 0.0005, z);
+    }
+  await page.getByLabel('Dodaj modele STL, STEP lub 3MF').setInputFiles({
+    name: 'thin-box_20x20x0.01.stl',
+    mimeType: 'application/octet-stream',
+    buffer,
+  });
+  const response = await uploaded;
+  expect(response.status()).toBe(201);
+  const modelId = () =>
+    page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1') ?? '{}').models?.[0]
+          ?.analysis?.id,
+    );
+  await expect.poll(modelId).toBeTruthy();
+  const id = await modelId();
+  expect(id).toMatch(/^[a-f0-9-]{36}$/);
+  const metadata = await page.request.get(`/api/models/${id}`);
+  expect(metadata.status()).toBe(200);
+  const model = await metadata.json();
+  expect(model.dimensions_mm[0]).toBe(20);
+  expect(model.dimensions_mm[1]).toBe(20);
+  expect(model.dimensions_mm[2]).toBeCloseTo(0.01, 6);
+  await page.locator('input[name=material][value=pla]').check();
+  await page.locator('input[name=color]').first().check();
+  await page.locator('input[name=quality][value=standard]').check();
+  await page.locator('input[name=strength][value=standard]').check();
+  await expect(page.getByText('Wymagana ręczna wycena', { exact: true })).toBeVisible({
+    timeout: 100_000,
+  });
+  const jobs = inspectOwned(
+    model.id,
+    `SELECT json_agg(json_build_object('id',id,'status',status,'attempts',attempts,'lease_cleared',lease_token IS NULL AND lease_until IS NULL)) FROM slicer_jobs WHERE model_id='${model.id}'`,
+  );
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]).toMatchObject({ status: 'failed', lease_cleared: true });
+  expect(jobs[0].attempts).toBeGreaterThanOrEqual(1);
+  expect(jobs[0].attempts).toBeLessThanOrEqual(3);
+  const job = await (await page.request.get(`/api/quotes/jobs/${jobs[0].id}`)).json();
+  expect(job).toMatchObject({ status: 'failed', result: null });
+  expect(estimates).toHaveLength(1);
+  expect(estimates[0].status).toBe(202);
+  await expect(page.locator('.quote-result .price')).toHaveCount(0);
+  await page.locator('.quote-contact').click();
+  await fillAuthorContact(page);
+  await page.getByRole('button', { name: 'Przejdź do indywidualnej wyceny', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Zapytaj o wycenę', exact: true })).toBeVisible();
+  await page.getByRole('radio', { name: 'Odbiór osobisty', exact: true }).check();
+  const created = page.waitForResponse(
+    (r) => r.url().endsWith('/api/account/manual-quotes') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Wyślij zapytanie o wycenę', exact: true }).click();
+  const sent = await created;
+  expect(sent.status()).toBe(200);
+  const result = await sent.json();
+  expect(result.order_id).toMatch(/^[a-f0-9-]{36}$/);
+  const sentBody = sent.request().postDataJSON();
+  expect(sentBody.parts).toHaveLength(1);
+  const selected = estimates[0].body as { options: Record<string, unknown> } & Record<
+    string,
+    unknown
+  >;
+  expect(selected).toEqual({
+    model_id: model.id,
+    material_id: 'GFA00',
+    color_code: '10101',
+    options: { quantity: 1, quality: 'standard', wall_loops: 3, infill_percent: 20 },
+  });
+  const { quantity, ...printOptions } = selected.options;
+  expect(quantity).toBe(1);
+  // Manual HTTP carries quantity at part level; the API canonicalizes options.
+  expect(sentBody.parts[0]).toEqual({ ...selected, quantity, options: printOptions });
+  await expect(page).toHaveURL(new RegExp('/konto/zamowienia/' + result.order_id + '$'));
+  await expect(
+    page.getByRole('heading', { name: 'Oczekuje na wycenę', exact: true }),
+  ).toBeVisible();
+  const own = await page.request.get(`/api/account/orders/${result.order_id}`);
+  expect(own.status()).toBe(200);
+  const order = await own.json();
+  expect(order.status).toBe('awaiting_quote');
+  expect(order.amount_grosze).toBeNull();
+  expect(order.manual_offer.payment_started).toBe(false);
+  const persisted = inspectOwned(
+    result.order_id,
+    `SELECT json_build_object('status',o.status,'amount',o.amount_grosze,'payment_attempt',o.payment_attempt_id,'offer',m.offer,'parts',m.input->'parts','hold',EXISTS(SELECT 1 FROM order_files f WHERE f.order_id=o.id AND f.model_id='${model.id}' AND (f.retain_until IS NULL OR f.retain_until>extract(epoch from now())::bigint)),'retain_until',(SELECT max(f.retain_until) FROM order_files f WHERE f.order_id=o.id AND f.model_id='${model.id}'),'payment_attempts',(SELECT count(*) FROM payment_attempts p WHERE p.draft_id=o.id)) FROM orders o JOIN manual_quotes m ON m.order_id=o.id WHERE o.id='${result.order_id}'`,
+  );
+  expect(persisted).toMatchObject({
+    status: 'awaiting_quote',
+    amount: null,
+    payment_attempt: null,
+    offer: null,
+    hold: true,
+    payment_attempts: 0,
+  });
+  expect(persisted.parts).toEqual([
+    {
+      ...sentBody.parts[0],
+      requested_color: null,
+      options: { ...printOptions, quantity },
+    },
+  ]);
+  expect(estimates).toHaveLength(1);
+  await test.info().attach('native-manual-evidence', {
+    body: JSON.stringify({ model, jobs, job, persisted, order_id: result.order_id }),
+    contentType: 'application/json',
+  });
 });

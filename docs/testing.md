@@ -89,6 +89,8 @@ SIGTERM wymaga czasu na sprzątanie: przeglądarka/API do30s każde, operacja ps
 
 `python frontend/tests/run-integration.py --local-accounts manual-publication.spec.ts`: zerwanie połączenia przed/po rzeczywistym zapisie oferty, identyczny retry, wersje i deduplikacja outbox oraz ukrycie danych po logout. Bez Stripe/SMTP; należy do core.
 
+Ten sam plik zawiera pełny native UI fallback: cienki zamknięty STL → terminalny błąd rzeczywistego slicera → formularz ręcznej wyceny → POST/panel/GET/DB. Sprawdza zachowanie modelu i opcji, brak kwoty/płatności i aktywny hold; bez mocków HTTP/dostawców. Filtrowany przebieg na `a0790f2`: 1 PASS/25,5 s, `full-manual-ui-native-verified-20261108/result.json`. Cztery wcześniejsze FAIL testu zachowano; nie zmieniano produktu dla uzyskania PASS.
+
 `public-visual.spec.ts` sprawdza też inline SVG: minimalną widoczną liczbę, geometrię i dla rozmiaru≤600 px wkład pikseli na diagnostycznym tle. Duże SVG: tylko geometria. Kontrole negatywne wykrywają grafikę pustą/ukrytą/brakującą; to nie jest porównanie pełnej zgodności wizualnej ani pomiar kontrastu. Liczniki są w adnotacjach `svg-rendering` raportu JSON.
 
 Profil dużych modeli sprawdzamy osobno: `E2E_CORPUS_MANIFEST="$PWD/backend/test-models/makerworld/manifest.json" E2E_REPORT_NAME=large-profile-complete python frontend/tests/run-integration.py --large-models large-profile.spec.ts`. Runner ustawia profil tylko własnemu API z tymczasową bazą; `.env`/zwykły serwer bez zmian. To rzeczywisty upload/prywatnyGLB/kanoniczna siatka dla8/20/40 oraz pomiar slicera/niezależny rachunek20, bez dowodu renderowania dużych modeli na stronie. Zwykłe `models.spec.ts` dodaje100Continue/niekompletny body→429 i200 po rozłączeniu. Szczegóły i wcześniejsze FAIL: [plan](plans/large-models.md).

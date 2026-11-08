@@ -35,6 +35,8 @@ Priorytet właściciela: szukać konkretnych problemów security i naprawiać je
 
 Warianty złożonego modelu 29: standard ×1, draft ×2 oraz osobno PETG/TPU standard ×1 mają poprawne rachunki przy stawkach testowych (4/5 automatycznie w odrębnych przebiegach); fine ×3 zatrzymuje slicer (exit 137, przyczyna nieustalona). Naprawiono kosztowne retry oraz brak przejścia UI do ręcznej wyceny: unit/PG/mock UI osobno PASS, rzeczywisty fine ×3 kończy jedną próbę i pozwala zapisać zalogowanemu klientowi ręczne zgłoszenie bez ceny/płatności. Dwa wcześniejsze FAIL zachowane. To nie pełna macierz modeli/opcji ani dowód rentowności; szczegóły w security i raporcie korpusu.
 
+Ręczny fallback domknięto też jednym pełnym native UI testem na małym cienkim STL: terminalny błąd → formularz → zapis/panel/GET/DB bez ceny/płatności, z aktywnym hold. 1 PASS/25,5 s; cztery wcześniejsze FAIL harnessu zachowane, produkt bez zmian. Test w manual-publication.spec.ts, dowody i granice w security/testing.
+
 Wolne pobieranie: potwierdzone4stalledTCP→503 naprawiono niezależnym producentem/deadline300s.7focusedPASS, TCP odzyskuje200 przy nadal otwartych gniazdach; netto35linii produktu, bez zależności. Osobny native headless11PASS: GLB/izolacja/expiry/auth, bez oryginałów/plików zamówień i pikselowego audytu. Solxhigh bez blokera, normalneAPI bez wdrożenia; dowody i granice w security.
 
 Rozdział odpowiedzi klient/admin: audyt nie potwierdził wycieku; istniejący native router/PG test rozszerzony o prywatność szkicu faktury,1PASS. Netto5linii testu, produkt bezzmian; Solxhigh bez blokera. Szczegóły i granice w security.
