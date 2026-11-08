@@ -164,6 +164,10 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — ponawianie nieodwracalnych operacji
+
+Nie znaleziono potwierdzonego duplikowania operacji lub akceptowania zmienionej treści pod tym samym kluczem w badanych ścieżkach płatności, zwrotów, nadań, podjazdów, anulowań i publikacji ofert. Zapis submitting/creating/ordering z kontrolą lease poprzedza wywołanie przewoźnika; niepewny wynik jest uzgadniany odczytem, bez ślepego ponowienia. Awaria po tym zapisie, ale przed HTTP, może zostawić niewykonaną operację w manual_review: to ochrona przed duplikatem, nie gwarancja exactly-once ani wykonania. Dwa istniejące testy offline klasyfikacji odpowiedzi PASS; blokady/unikalność/crash windows tylko sprawdzono źródłowo, bez ponawiania PG lub dostawców. Sol xhigh bez blokera, kod/testy bez zmian. Dowody: `security-mutation-retry-20261108/result.json`, operation-inventory.json i tests.json.
+
 ## 2026-11-08 — bramki tras administracyjnych
 
 Źródłowo sprawdzono 34 jawne operacje: 33 chronione (20 mutacji/13 odczytów) oraz publiczny GET stanu sesji, bez danych prywatnych przed auth. Montowanie routerów, warstwa authorize i jawne guardy nie wykazały brakującej roli/MFA/Origin/CSRF ani publicznego aliasu operacji. To inwentaryzacja źródeł, nie 34 testy runtime; część metod storage ufa wywołującemu. Dowody: `security-admin-routes-20261108/inventory.json` i result.json.
