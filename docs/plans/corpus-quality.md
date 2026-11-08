@@ -36,6 +36,8 @@ Goal otwarty; różne wersje/przebiegi nie tworzą nowego PASS całości. FAIL/h
 
 ## Dalsza praca i granice
 
+- **Sekrety 2026-11-09**: 11 aktualnych wartości, 404 śledzone zwykłe pliki i 3412 blobów osiągalnych z lokalnych refs (112 MB) bez jawnych kopii; sprawdzone wzorce sk_/whsec_ również bez trafień. Dwa odbiorniki SOPS zgodne z kluczami właściciela/znajomego, cache głównego hooka zgodny z trzema hashami. `sec-secret-literals-20261109/`; bez odszyfrowania/MAC, skanu nieosiągalnych obiektów, wszystkich dawnych wartości lub kodowań. Brak nowej potwierdzonej luki i zmian produktu.
+
 - **Macierz operatora 2026-11-09**: rzeczywiste 33 chronione operacje (13 odczytów/20 zapisów): 99 odmów dla gościa/klienta/admina przed 2FA oraz 40 dla pełnego admina bez CSRF/z obcym Origin. Dodatnie kontrole i hash 17 tabel PASS; 1 headless test 2,5 s. `sec-admin-boundaries-20261108/result.json`; automatyczne odkrywanie tras/body z OpenAPI, grupa `privacy`. Początkowe 422 od niepełnego body jest zachowane jako błąd fixture. Brak nowej potwierdzonej luki; kod produktu/normalny API/DB bez zmian.
 
 - **Frontend — ostatni krok 2026-11-08**: spóźniony prywatny GLB po logout odrzucany przed wyświetleniem; ponowienie błędnego uploadu faktycznie wysyła plik. Dowód GLB przed FAIL/po PASS i kontrola lokalnego STL, łącznie cztery headless PASS; netto +3 linie produktu dla granicy sesji, bez zależności. `sec-preview-body-20261108/result.json`, test należy do `privacy`. Lokalny Vite używa poprawki, API/DB bez restartu/zmian; wcześniej zapisane lokalne kopie siatek pozostają w szkicu.
