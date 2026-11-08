@@ -36,6 +36,21 @@ API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko do
 
 Launcher przypina binarkę na czas procesu w prywatnym katalogu `$XDG_STATE_HOME/rapidmaker/runtime` (domyślnie `~/.local/state/rapidmaker/runtime`). Kolejny build nie usuwa ścieżki potrzebnej workerom geometrii. Nieaktywne, rozpoznane kopie są sprzątane przy następnym starcie; aktywne i nieznane pliki pozostają. Uruchomienie binarki bez launchera nie ma tej ochrony. Test helpera: `python -m unittest discover -s backend/tests -v`.
 
+### Opcjonalny wspólny limit zasobów
+
+Linux z menedżerem użytkownika systemd: uruchom z root repo, po zatrzymaniu poprzedniego API. Przykład ogranicza API i jego potomków razem, bez nowej warstwy Rust. Wartości 6 GiB/256 zadań/CPU 200% sprawdzono na małym zadaniu; dobierz je do hosta i większych/równoległych prac.
+
+```sh
+systemd-run --user --unit=rapidmaker-api --collect --service-type=exec \
+  --working-directory="$PWD" -p MemoryMax=6G -p TasksMax=256 \
+  -p CPUQuota=200% -p KillMode=control-group -p TimeoutStopSec=5s -p Restart=no \
+  /usr/bin/python3 "$PWD/backend/run.py"
+```
+
+Logi: `journalctl --user -u rapidmaker-api.service -f` (Ctrl+C kończy podgląd). Zatrzymanie całej usługi: `systemctl --user stop rapidmaker-api.service`.
+
+Launcher nadal czyta lokalny `.env`; sekretów nie przekazuj w argumentach. CPUQuota to szybkość CPU, nie suma CPU-seconds; TasksMax liczy także wątki. Jedna praca może wyczerpać wspólną pamięć/limit zadań i wyłączyć API. To dodatkowa granica całej usługi, bez izolacji awarii poszczególnych zadań lub kwoty inodów; bwrap/prlimit pozostają. Uruchomienie usługą jest świadomym krokiem operatora, nie domyślnym zachowaniem launchera. [Dowody i ograniczenia](../docs/security.md#2026-11-08--wykonalność-wspólnego-budżetu-workerów).
+
 ## Email
 
 `rapidmaker-notifications` udostępnia `Mailer::from_env()` i `send(recipient, Notification)`. API współdzieli jeden Mailer. Kody wysyła bezpośrednio; zdarzenia zamówień/rozmów zapisuje atomowo z outboxem w PostgreSQL. Jeden worker wykonuje maks. 10 prób wysyłki/min, odzyskuje lease po restarcie, honoruje preferencje i ma stały Message-ID. Brak publicznego endpointu wysyłki. Stan kolejki: chronione `GET /api/admin/notifications`.
