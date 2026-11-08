@@ -30,6 +30,8 @@ Prywatne pliki: `api/files.rs` wysyła asynchronicznie po 64 KiB, z limitem czte
 
 Trwałość uploadu: pliki, katalog UUID i katalog nadrzędny są fsync przed insertem. Storage wywołuje przekazany `before_commit` tuż przed COMMIT; API wyłącza wtedy usuwanie plików także na wypadek anulowania HTTP. `storage::ModelCommitUncertain` rozróżnia błąd COMMIT od błędu wcześniejszego inserta: API zachowuje przygotowane pliki przy niepewnym wyniku i zwraca 503. Niezarejestrowane katalogi starsze niż 24 h uzgadnia istniejący worker: współdzielony root flock, osobny odczyt po blokadzie inserta PostgreSQL, aktywne zadania/holdy chronione. `ModelCleanupCursor` przechodzi po 64 wpisy na przebieg; busy/błąd bazy zachowuje pliki. Root jest stały podczas pracy; wszystkie procesy uploadu muszą być zaktualizowane.
 
+Upload sprawdza `fstatvfs` otwartego katalogu pod wspólnym flock: przed zapisem musi zostać miejsce na oryginał, maksymalny STL/GLB, 1 MiB metadanych oraz 512 MiB rezerwy. Brak miejsca lub błąd odczytu daje 503 bez nowego katalogu/rekordu. To kontrola przyjęcia, nie rezerwacja bloków wobec innych programów; kwoty PostgreSQL nadal obowiązują.
+
 ## Nowa wycena a istniejący checkout
 
 `POST /api/models`: STL/STEP/3MF → prywatny oryginał, izolowana kanoniczna siatka STL i prywatny podgląd GLB bez ustawień/G-code. `POST /api/quotes/estimate` przyjmuje ID własnego modelu, materiał, kolor i opcje → trwałe zadanie PostgreSQL (202) → worker slicera → koszt i atomowy snapshot. `GET /api/quotes/jobs/{id}` zwraca status/wynik właścicielowi. Katalog: `GET /api/catalog/materials`. Deduplikacja w DB obejmuje model, ustawienia, profile, kolor i koszty; bez cache pomiarów w RAM. Brak ceny, zatwierdzenia albo poprawnego wyniku nie daje automatycznej oferty.

@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+Zapas dysku uploadu: po buildzie `python backend/tests/model_storage_pressure.py`. Rzeczywiste API/PostgreSQL i dwa prywatne tmpfs (1 GiB/64 MiB): poprawny STL 201, brak miejsca 503 bez plików/nowego rekordu, kontrolne ENOSPC. Opcjonalny argument wskazuje binarkę do porównania. Linux/bubblewrap; własna baza i katalog sprzątane, bez providerów i przeglądarki; raport w ignorowanym `frontend/tests/artifacts/model-disk-*`.
+
 Testy przeglądarki wyłącznie headless, bez otwierania okien. Obie konfiguracje Playwright mają jawne `headless: true`; nie używaj `--headed`, `--ui` ani `--debug`.
 
 Testy mają pomagać dostarczać kod. Sprawdzaj zmieniony zakres najkrótszą sensowną metodą. Bez obowiązkowej Astry, testujących subagentów, wielokrotnych review i pełnych zestawów przy każdej iteracji. Zielonego wyniku nie powtarzaj bez nowej zmiany, błędu lub konkretnej wątpliwości.

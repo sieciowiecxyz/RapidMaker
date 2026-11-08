@@ -15,7 +15,10 @@ use sha2::{Digest, Sha256};
 use std::{
     fs::{self, DirBuilder, File, OpenOptions, ReadDir},
     io::{SeekFrom, Write},
-    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+    os::{
+        fd::AsRawFd,
+        unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+    },
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -232,6 +235,26 @@ fn lock_model_root(root: &Path) -> std::io::Result<Option<File>> {
         Err(std::fs::TryLockError::WouldBlock) => Ok(None),
         Err(std::fs::TryLockError::Error(error)) => Err(error),
     }
+}
+
+fn admit_disk(root: &File, maximum_bytes: usize) -> Result<(), Error> {
+    let unavailable = || {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Brak miejsca na bezpieczne zapisanie modelu. Spróbuj później.",
+        )
+    };
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // The directory FD stays open; a successful fstatvfs initializes the structure.
+    if unsafe { libc::fstatvfs(root.as_raw_fd(), stats.as_mut_ptr()) } != 0 {
+        return Err(unavailable());
+    }
+    let stats = unsafe { stats.assume_init() };
+    let available = u128::from(stats.f_bavail) * u128::from(stats.f_frsize);
+    if available < maximum_bytes as u128 + 512 * 1024 * 1024 {
+        return Err(unavailable());
+    }
+    Ok(())
 }
 
 pub(super) async fn cleanup_models(
@@ -518,6 +541,11 @@ async fn upload(
     else {
         return Ok(upload_busy());
     };
+    // The root lock serializes our writers; allow source, full mesh, GLB and metadata.
+    admit_disk(
+        &_root_lock,
+        input.len() + state.profile.stl_bytes() + MAX_PREVIEW_BYTES + 1024 * 1024,
+    )?;
     let id = Uuid::new_v4().to_string();
     let directory = state.root.join(&id);
     DirBuilder::new()
