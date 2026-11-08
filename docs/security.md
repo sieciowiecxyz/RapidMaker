@@ -220,6 +220,8 @@ W badanych ścieżkach nie znaleziono obejścia ceny/ilości/własności/oferty:
 
 Uzupełnienie: jeden test prywatnego PostgreSQL potwierdził, że zmiana danych adresowych usuwa snapshot/ważność i blokuje przygotowanie płatności ze starą wersją; odzyskana próba i zamówienie zachowują pierwotny kontakt i 2500 groszy. Kod produktu bez zmian, rozszerzony istniejący test. To nie przeliczenie dostawy przez HTTP ani rzeczywisty provider. Po review usunięto jednoczesną zmianę oferty/fingerprintu jako niejednoznaczną; pierwotna kontrola fingerprintu została. Dowody: `security-checkout-snapshot-binding-20261108/pg-extension-run1/`.
 
+Parser pomiarów: jeden dokładny test offline PASS z poprawną kontrolą i sześcioma odmowami (ujemny/przekroczony czas lub masa, wykładnik poza f64). Dodano 15 linii istniejącego testu; produkt bez zmian. Odrzucenie może nastąpić już w deserializacji. Bez Bambu, rachunku kosztów lub dowodu rentowności; Sol xhigh bez blokera. Dowody: `security-pricing-measurements-20261108/parser-run1/`.
+
 ## 2026-11-08 — Origin, Host i CSRF
 
 Przegląd nie potwierdził obejścia. Produkcja wymaga dokładnej authority i Origin przy mutacjach; brak Origin dozwolony tylko dla GET/HEAD. Powielone Host/Origin oraz nieprawidłowy Origin są odrzucane; forwarded headers nie zastępują Host/Origin. Sesje produkcyjne mają __Host/Secure/HttpOnly/Lax; zaufany proxy jest jawny. Upload sprawdza Origin i własność, nie token CSRF — nie deklarować uniwersalnej kontroli tokenu dla każdego POST.

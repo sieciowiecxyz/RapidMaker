@@ -1258,6 +1258,21 @@ with open('/out/' + name, 'r+b') as lock:
         ] {
             assert!(parse_result(json.as_bytes()).is_err());
         }
+        for (time, mass, valid) in [
+            ("1", "1", true),
+            ("-1", "1", false),
+            ("2592001", "1", false),
+            ("1", "-1", false),
+            ("1", "10000.01", false),
+            ("1e309", "1", false),
+            ("1", "1e309", false),
+        ] {
+            let json = format!(
+                r#"{{"return_code":0,"sliced_plates":[{{"total_predication":{time},"filaments":[{{"total_used_g":{mass}}}],"objects":[{{}}]}}]}}"#
+            );
+            let accepted = parse_result(json.as_bytes()).is_ok();
+            assert_eq!(accepted, valid, "{time}/{mass}");
+        }
     }
 
     #[test]
