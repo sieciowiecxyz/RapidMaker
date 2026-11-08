@@ -33,7 +33,7 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
-Retencja wygasłych wycen [naprawiona w kodzie](../security.md#naprawione-w-kodzie-retencja-wygasłych-wycen): małe partie GC, ochrona historii/draftów, wspólna blokada zapisu referencji i indeksy migracji0024. Końcowa regresja PG1PASS, wcześniejsze5PG i10unit osobno. Nie aktualizowano normalnego schematu/serwera; to retencja, nie globalna kwota DB.
+Retencja wygasłych wycen [naprawiona w kodzie](../security.md#naprawione-w-kodzie-retencja-wygasłych-wycen): małe partie GC, ochrona historii/draftów, wspólna blokada zapisu referencji i indeksy migracji0024. Końcowa regresja PG1PASS, wcześniejsze5PG i10unit osobno. Po poprawce realny API upload/slicer i create/update/requote draftu pickup PASS, bez providerów; zapis obu formatów referencji potwierdzony. Nie aktualizowano normalnego schematu/serwera; to retencja, nie globalna kwota DB.
 
 Goal pozostaje otwarty. Probe inodów i64pustychplików wykonany; obecny Bubblewrap nie udostępnia kwoty `nr_inodes`. Wykrytą możliwość tworzenia kolejnych user namespaces zablokowano w obu workerach (natywne probes i API2PASS). Twarda kwota inodów oraz sumy RAM/CPU/PID potomków nadal wymagają rozwiązania mount/deployment; nie zastępować ich pollingiem ani RLIMIT_NOFILE. Zachować obecne limity i fail-closed, bez udawania ukończenia. Szczegóły i warianty: [bezpieczeństwo](../security.md#zagnieżdżone-przestrzenie-użytkownika).
 
