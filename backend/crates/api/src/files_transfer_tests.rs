@@ -125,7 +125,15 @@ async fn private_transfers_preserve_bytes_headers_and_reject_invalid_files() {
 #[tokio::test]
 async fn private_transfer_permits_follow_body_drop_eof_and_read_errors() {
     let _serial = DOWNLOAD_TEST.lock().await;
-    let (handle, _cleanup) = transfer_fixture();
+    let (mut handle, _cleanup) = transfer_fixture();
+    let original = fs::read(&handle.source).unwrap();
+    OpenOptions::new()
+        .write(true)
+        .open(&handle.source)
+        .unwrap()
+        .set_len(256 * 1024)
+        .unwrap();
+    handle.record.source_bytes = 256 * 1024;
     let mut bodies = Vec::new();
     for _ in 0..4 {
         bodies.push(source_response(&handle).await.unwrap().into_body());
@@ -135,11 +143,14 @@ async fn private_transfer_permits_follow_body_drop_eof_and_read_errors() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     drop(bodies.pop());
-    assert_eq!(DOWNLOADS.available_permits(), 1);
+    wait_download_permits(1).await;
     let body = source_response(&handle).await.unwrap().into_body();
-    axum::body::to_bytes(body, 1000).await.unwrap();
+    axum::body::to_bytes(body, 256 * 1024).await.unwrap();
     assert_eq!(DOWNLOADS.available_permits(), 1);
     drop(bodies);
+    wait_download_permits(4).await;
+    fs::write(&handle.source, &original).unwrap();
+    handle.record.source_bytes = original.len() as i64;
     let body = source_response(&handle).await.unwrap().into_body();
     fs::write(&handle.source, b"").unwrap();
     let failure = axum::body::to_bytes(body, 1000).await.unwrap_err();
@@ -376,4 +387,198 @@ async fn upload_body_keeps_configured_limit_and_maps_broken_bodies() {
         .unwrap()
         .contains("private path")
     );
+}
+
+async fn wait_download_permits(expected: usize) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while DOWNLOADS.available_permits() != expected {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn private_transfer_deadline_releases_unpolled_bodies_and_reports_partial_error() {
+    let _serial = DOWNLOAD_TEST.lock().await;
+    let (handle, _cleanup) = transfer_fixture();
+    let length = 256 * 1024;
+    OpenOptions::new()
+        .write(true)
+        .open(&handle.mesh)
+        .unwrap()
+        .set_len(length as u64)
+        .unwrap();
+    let mut files = Vec::new();
+    for _ in 0..4 {
+        files.push(
+            private_file(&handle.mesh, length as i64, length)
+                .await
+                .unwrap(),
+        );
+    }
+    tokio::time::pause();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
+    let mut bodies = files
+        .into_iter()
+        .map(|file| file.body_at(deadline).1)
+        .collect::<Vec<_>>();
+    assert_eq!(DOWNLOADS.available_permits(), 0);
+    tokio::time::advance(Duration::from_secs(301)).await;
+    wait_download_permits(4).await;
+    assert_eq!(
+        bodies.len(),
+        4,
+        "deadline releases permits without body drop"
+    );
+    let failure = axum::body::to_bytes(bodies.pop().unwrap(), length)
+        .await
+        .unwrap_err();
+    assert!(failure.to_string().contains("Private model read failed"));
+    assert!(!failure.to_string().contains(handle.mesh.to_str().unwrap()));
+    drop(bodies);
+    let file = private_file(&handle.mesh, length as i64, length)
+        .await
+        .unwrap();
+    drop(file);
+    assert_eq!(DOWNLOADS.available_permits(), 4);
+    tokio::time::resume();
+    let file = private_file(&handle.mesh, length as i64, length)
+        .await
+        .unwrap();
+    let mut stream = file.body().1.into_data_stream();
+    assert!(!stream.next().await.unwrap().unwrap().is_empty());
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(301)).await;
+    wait_download_permits(4).await;
+    let mut failed = false;
+    while let Some(chunk) = stream.next().await {
+        if let Err(error) = chunk {
+            assert!(error.to_string().contains("Private model read failed"));
+            failed = true;
+            break;
+        }
+    }
+    assert!(
+        failed,
+        "a partially sent timed-out body must not end successfully"
+    );
+}
+
+#[tokio::test]
+async fn private_download_socket_deadline_recovers_with_receivers_still_open() {
+    use std::os::fd::AsRawFd;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let _serial = DOWNLOAD_TEST.lock().await;
+    assert_eq!(DOWNLOADS.available_permits(), 4);
+    let directory =
+        std::env::temp_dir().join(format!("rapidmaker-socket-probe-{}", Uuid::new_v4()));
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let _cleanup = PendingDirectory(Some(directory.clone()));
+    let path = directory.join("benign-sparse.stl");
+    let length = 32 * 1024 * 1024;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path)
+        .unwrap()
+        .set_len(length as u64)
+        .unwrap();
+    let app = axum::Router::new().route(
+        "/fixture",
+        axum::routing::get(move || {
+            let path = path.clone();
+            async move {
+                match private_file(&path, length as i64, length).await {
+                    Ok(file) => file
+                        .body_at(tokio::time::Instant::now() + Duration::from_secs(2))
+                        .into_response(),
+                    Err(error) => error.into_response(),
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    struct AbortServer(tokio::task::JoinHandle<()>);
+    impl Drop for AbortServer {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let _server = AbortServer(server);
+    async fn request(address: std::net::SocketAddr) -> (tokio::net::TcpStream, String) {
+        let socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        let value: libc::c_int = 1024;
+        unsafe {
+            assert_eq!(
+                libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    libc::SO_RCVBUF,
+                    &value as *const _ as *const libc::c_void,
+                    std::mem::size_of_val(&value) as libc::socklen_t
+                ),
+                0
+            );
+        }
+        let mut socket = socket;
+        socket
+            .write_all(b"GET /fixture HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).await.unwrap();
+            headers.push(byte[0]);
+            assert!(headers.len() < 4096);
+        }
+        (socket, String::from_utf8(headers).unwrap())
+    }
+    let result = tokio::time::timeout(Duration::from_secs(18), async {
+        let mut receivers = Vec::new();
+        for index in 0..4 {
+            let (socket, headers) = request(address).await;
+            assert!(headers.starts_with("HTTP/1.1 200"), "{headers}");
+            receivers.push(socket);
+            eprintln!("receiver {}: 200 headers read, body unconsumed", index + 1);
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(DOWNLOADS.available_permits(), 0);
+        let (fifth, headers) = request(address).await;
+        eprintln!(
+            "fifth while sockets stalled: {}",
+            headers.lines().next().unwrap()
+        );
+        assert!(headers.starts_with("HTTP/1.1 503"), "{headers}");
+        drop(fifth);
+        let recovery = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let (socket, headers) = request(address).await;
+                drop(socket);
+                if headers.starts_with("HTTP/1.1 200") {
+                    eprintln!(
+                        "after deadline with original four sockets still open: 200 recovered"
+                    );
+                    break;
+                }
+                assert!(headers.starts_with("HTTP/1.1 503"), "{headers}");
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        })
+        .await;
+        assert!(recovery.is_ok(), "download capacity did not recover");
+        assert_eq!(receivers.len(), 4);
+        drop(receivers);
+        wait_download_permits(4).await;
+    })
+    .await;
+    assert!(result.is_ok(), "local transport probe exceeded 18 seconds");
 }

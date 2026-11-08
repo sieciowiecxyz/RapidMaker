@@ -884,7 +884,7 @@ async fn artifact_response(
     }
 }
 
-// The permit travels with the body, including while a client stops polling it.
+// An independent producer bounds the lifetime of the file and download permit.
 struct PrivateFile {
     file: tokio::fs::File,
     remaining: u64,
@@ -893,24 +893,59 @@ struct PrivateFile {
 
 impl PrivateFile {
     fn body(self) -> ([(header::HeaderName, String); 1], Body) {
+        self.body_at(tokio::time::Instant::now() + Duration::from_secs(300))
+    }
+
+    fn body_at(
+        mut self,
+        deadline: tokio::time::Instant,
+    ) -> ([(header::HeaderName, String); 1], Body) {
         let length = self.remaining;
-        let stream = futures_util::stream::try_unfold(self, |mut state| async move {
-            if state.remaining == 0 {
-                return Ok(None);
+        let (sender, receiver) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let transfer = async {
+                while self.remaining > 0 {
+                    let mut bytes =
+                        vec![0; self.remaining.min(DOWNLOAD_CHUNK_BYTES as u64) as usize];
+                    let read = self.file.read(&mut bytes).await?;
+                    if read == 0 {
+                        return Err(download_error());
+                    }
+                    bytes.truncate(read);
+                    sender
+                        .send(Bytes::from(bytes))
+                        .await
+                        .map_err(|_| download_error())?;
+                    self.remaining -= read as u64;
+                }
+                Ok::<_, std::io::Error>(())
+            };
+            tokio::select! {
+                _ = tokio::time::sleep_until(deadline) => {},
+                _ = sender.closed() => {},
+                _ = transfer => {},
             }
-            let mut bytes = vec![0; state.remaining.min(DOWNLOAD_CHUNK_BYTES as u64) as usize];
-            let read = state
-                .file
-                .read(&mut bytes)
-                .await
-                .map_err(|_| download_error())?;
-            if read == 0 {
-                return Err(download_error());
-            }
-            bytes.truncate(read);
-            state.remaining -= read as u64;
-            Ok(Some((Bytes::from(bytes), state)))
+            // Release resources before channel closure tells the receiver that transfer ended.
+            drop(self);
+            drop(sender);
         });
+        let stream = futures_util::stream::try_unfold(
+            (receiver, length),
+            |(mut receiver, remaining)| async move {
+                if remaining == 0 {
+                    // EOF follows producer cleanup, even if the final chunk was consumed first.
+                    if receiver.recv().await.is_some() {
+                        return Err(download_error());
+                    }
+                    return Ok(None);
+                }
+                let bytes = receiver.recv().await.ok_or_else(download_error)?;
+                let remaining = remaining
+                    .checked_sub(bytes.len() as u64)
+                    .ok_or_else(download_error)?;
+                Ok(Some((bytes, (receiver, remaining))))
+            },
+        );
         (
             [(header::CONTENT_LENGTH, length.to_string())],
             Body::from_stream(stream),

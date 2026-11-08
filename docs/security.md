@@ -164,6 +164,14 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — wolne pobieranie prywatnych plików
+
+Pięć istniejących testów ścieżek/nagłówków/odczytu PASS; brak potwierdzonego traversal lub wycieku. Osobny rzeczywisty test TCP wykazał jednak zajęcie wszystkich4slotów: cztery nieczytające połączenia dostają200, piąte503; zamknięcie przywraca200. Fixture używa produkcyjnego odczytu, zastępuje routing/autoryzację — nie dowodzi obejścia dostępu. O_NOFOLLOW zabezpiecza ostatni komponent, nie przodków wobec lokalnego aktora z prawem do prywatnego katalogu.
+
+Poprawka: jeden producent na odczyt, kanał1×64KiB, niezależny deadline300s i anulowanie po porzuceniu odbiorcy. Plik/slot zwalniane przed EOF; przedwczesne zakończenie daje błąd body. Netto35linii produktu, bez zależności lub zmian UI/auth/nagłówków. Siedem końcowych testów PASS: bajty/nagłówki/GLB/duże pliki, cleanup, deadline300s na zatrzymanym zegarze i TCP z krótkim wspólnym deadline. TCP odzyskuje200 bez zamykania czterech starych gniazd.4×200MiB: porcje≤64KiB, zaobserwowany przyrost RSS około3MiB, nie formalny pomiar maksimum.
+
+Solxhigh bez blokera. Dowody `security-file-download-20261108/transport-probe-result.json`, `fix-result.json`, `final-hashes.json`; pierwotny błąd kompilacji zachowany, poprawiony przed testami. Po usunięciu zbędnego testowego SO_LINGER ponowiono tylko test TCP. Normalny API/DB bez restartu lub wdrożenia. Legalny odczyt ponad5min zostanie przerwany; uprawniony klient nadal może ponawiać żądania, więc nie jest to gwarancja fairness ani całkowitej odporności na DoS. Pozostałe połączenia/bufory transportu nie podlegają kwocie tych czterech plików.
+
 ## 2026-11-08 — granica zaufania webhooka Stripe
 
 Przegląd źródeł nie wykazał obejścia: podpis surowego body i czas sprawdzane przed zapisem; zdarzenie inicjuje ponowne pobranie obiektu Stripe z weryfikacją ID/kwoty/PLN/metadanych/testmode. Rozliczenie blokuje próbę płatności, stan paid jest końcowy, zapis zamówienia i outbox atomowy. Dwa istniejące testy offline podpisu/korelacji PASS.
