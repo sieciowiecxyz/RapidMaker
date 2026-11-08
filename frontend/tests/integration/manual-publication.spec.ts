@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures';
-import { accounts, login } from './helpers';
+import { accounts, login, fillStripeCard, stripeEvidence } from './helpers';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fillAuthorContact } from './checkout-helpers';
@@ -420,13 +420,16 @@ test('different manual configurations share one upload and preserve separate ord
   browser,
 }) => {
   test.skip(
-    !process.env.RAPIDMAKER_TEST_ACCOUNTS || process.env.RAPIDMAKER_SANDBOX === '1',
-    'Requires local accounts without providers',
+    !process.env.RAPIDMAKER_TEST_ACCOUNTS,
+    'Requires local accounts or the explicit test sandbox',
   );
-  test.setTimeout(90_000);
+  const sandbox = process.env.RAPIDMAKER_SANDBOX === '1';
+  test.setTimeout(sandbox ? 180_000 : 90_000);
   await login(
     page,
-    accounts().find((a) => a.email === 'browser-other@example.invalid')!,
+    accounts().find(
+      (a) => a.email === (sandbox ? 'void@sieciowiec.xyz' : 'browser-other@example.invalid'),
+    )!,
   );
   await page.goto('/wycena');
   const buffer = Buffer.from(
@@ -629,6 +632,78 @@ test('different manual configurations share one upload and preserve separate ord
       body: JSON.stringify({ files, production: before, rejected_status: rejected.status() }),
       contentType: 'application/json',
     });
+    if (sandbox) {
+      const published = await operator.request.post(`/api/admin/orders/${result.order_id}/quote`, {
+        headers: await headers(operator),
+        data: {
+          version: order.manual_offer.version,
+          amount_grosze: 2500,
+          shipping_grosze: 0,
+          scope: 'Dwa warianty, odbiór osobisty.',
+        },
+      });
+      expect(published.status()).toBe(200);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Przygotuj płatność za ofertę' }).click();
+      await fillStripeCard(page);
+      await page.getByRole('button', { name: /Zamawiam i płacę 25/ }).click();
+      const readOrder = async () =>
+        (await page.request.get(`/api/account/orders/${result.order_id}`)).json();
+      await expect.poll(async () => (await readOrder()).status, { timeout: 40_000 }).toBe('paid');
+      const paid = await readOrder();
+      expect(paid).toMatchObject({ amount_grosze: 2500, lines: order.lines });
+      const provider = stripeEvidence({
+        payment_intent_id: paid.provider_id,
+        attempt_id: paid.payment_attempt_id,
+        order_id: result.order_id,
+      });
+      expect(provider).toMatchObject({
+        amount: 2500,
+        amount_received: 2500,
+        currency: 'pln',
+        status: 'succeeded',
+        refunds: [],
+      });
+      await operator.reload({ waitUntil: 'domcontentloaded' });
+      await operator.getByRole('button', { name: 'Otwórz ' + result.order_id }).click();
+      await expect(detail.getByLabel('Etap realizacji')).toHaveValue('production:preparation');
+      const counts = detail.getByRole('spinbutton', { name: /Gotowe \/ / });
+      const first = counts.nth(0);
+      const saved = operator.waitForResponse(
+        (r) => r.url().endsWith(path) && r.request().method() === 'PUT',
+      );
+      await first.fill('1');
+      await first.blur();
+      expect((await saved).status()).toBe(200);
+      const progress = await (await operator.request.get(path)).json();
+      expect(progress).toMatchObject({
+        revision: before.revision + 1,
+        stage: 'preparation',
+        progress: order.lines.map((l: { line_id: string }, i: number) => ({
+          model_id: l.line_id,
+          done: i === 0 ? 1 : 0,
+        })),
+      });
+      await expect(first).toHaveValue('1');
+      await expect(counts.nth(1)).toHaveValue('0');
+      const final = await readOrder();
+      expect(final).toMatchObject({ status: 'paid', amount_grosze: 2500, lines: order.lines });
+      const mailState = () =>
+        inspectOwned(
+          result.order_id,
+          `SELECT json_build_object('kinds',json_agg(kind ORDER BY kind),'sent',count(*) FILTER (WHERE status='sent'),'only_void',bool_and(recipient='void@sieciowiec.xyz')) FROM email_outbox WHERE payload->'notification'->>'reference'='${result.order_id}'`,
+        );
+      await expect.poll(mailState, { timeout: 90_000 }).toEqual({
+        kinds: ['legal_documents', 'manual_offer', 'payment_received'],
+        sent: 3,
+        only_void: true,
+      });
+      const evidence = { lines: final.lines, provider, production: progress, mail: mailState() };
+      await test.info().attach('paid-variants-evidence', {
+        body: JSON.stringify(evidence),
+        contentType: 'application/json',
+      });
+    }
   } finally {
     await adminContext.close();
   }

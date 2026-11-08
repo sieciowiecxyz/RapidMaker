@@ -17,6 +17,7 @@ Goal otwarty; różne wersje/przebiegi nie tworzą nowego PASS całości. FAIL/h
 
 | Nowszy zakres | Dowód i granica |
 | --- | --- |
+| Dwa warianty po zapłacie | **1 PASS**: wspólny upload PLA ×1/PETG ×2, ręczna oferta 25 zł, rzeczywista płatność Stripe TEST i niezależna kontrola kwoty/korelacji. Panel admina zapisuje [1,0], klient zachowuje obie pozycje; dokładnie 3 SMTP sent tylko void. Bez IMAP/automatycznej wyceny. Zachowany błąd końcowego bind harnessu i brak zapisu PID prywatnego API; cleanup potwierdzony osobno. [Dowody](../e2e-coverage.md#płatność-dwóch-wariantów--2026-11-08). |
 | Nowe stany konfiguratora | Obejrzano 8 rzeczywistych viewportów (1440/390, jasny/ciemny): identyczny wariant i ręczna wycena, tekst/CTA bez ucięcia lub overflow. Kontrolowane HTTP, bez CSS patcha; pierwszy błędny sposób zapisu sticky/fixed zachowany. To nie pełne WCAG/UI lub backend. [Zakres](../e2e-coverage.md#stany-konfiguratora--2026-11-08). |
 | Manual razem, `9d7793a` | **4/4 PASS**, headless/prywatna DB/API, 0 SKIP/flaky/retry: publikacja, terminalny slicer → manual UI, dwa warianty/admin unpaid gate, fizyczny GC. Bez providerów/doręczenia emaila; nie full core. |
 | Live journey, `f257f53` | **1 PASS**: oferta → Stripe TEST 25 zł → zwrot 5 zł → email/chat dedup. 18 obserwacji jednej pozycji potwierdza line_id=quote_id/model/ilość/opcje; niezależne GET Stripe: kwoty/korelacja/testmode. 5 SMTP sent tylko void; IMAP oferta/umowa/zwrot/chat +2 reply, payment_received bez osobnego IMAP. Nie płatność wielu wariantów. [Pełny zakres](../testing.md). |
