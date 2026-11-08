@@ -903,7 +903,6 @@ fn scene_from_step(
             "MAPPED_ITEM(",
             "REPRESENTATION_RELATIONSHIP(",
             "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(",
-            "CONVERSION_BASED_UNIT(",
         ]
         .iter()
         .any(|item| compact.contains(item))
@@ -2218,6 +2217,19 @@ mod tests {
         let analysis = analyze_scene(&mesh, SourceFormat::Step, &limits).unwrap();
         assert_eq!(analysis.dimensions_mm, [2.0; 3]);
         assert!((signed_volume(&mesh) - 8.0).abs() < 0.0001);
+        let degrees = std::str::from_utf8(STEP_BLOCK).unwrap().replace(
+            "#347 = ( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($,.RADIAN.) );",
+            "#347 = ( CONVERSION_BASED_UNIT('DEGREE',#99990) NAMED_UNIT(#99991) PLANE_ANGLE_UNIT() );\n#99990 = PLANE_ANGLE_MEASURE_WITH_UNIT(PLANE_ANGLE_MEASURE(0.0174532925199433),#99992);\n#99991 = DIMENSIONAL_EXPONENTS(0.,0.,0.,0.,0.,0.,0.);\n#99992 = ( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($,.RADIAN.) );",
+        );
+        assert_ne!(degrees.as_bytes(), STEP_BLOCK);
+        let angled = scene_from_step(degrees.as_bytes(), &limits, Instant::now()).unwrap();
+        assert_eq!(
+            analyze_scene(&angled, SourceFormat::Step, &limits)
+                .unwrap()
+                .dimensions_mm,
+            [2.0; 3]
+        );
+        assert!((signed_volume(&angled) - 8.0).abs() < 0.0001);
         for (limits, expected) in [
             (
                 ConversionLimits {
@@ -2243,7 +2255,7 @@ mod tests {
     }
 
     #[test]
-    fn step_rejects_multiple_solids_in_one_representation() {
+    fn step_rejects_duplicate_solids_in_one_representation() {
         let source = std::str::from_utf8(STEP_BLOCK)
             .unwrap()
             .replace("(#11,#15)", "(#11,#15,#99990)")
@@ -2268,6 +2280,10 @@ mod tests {
         let source = std::str::from_utf8(STEP_BLOCK).unwrap();
         for input in [
             source.replace("SI_UNIT(.MILLI.,.METRE.)", "SI_UNIT($,.METRE.)"),
+            source.replace(
+                "#346 = ( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) );",
+                "#346 = ( CONVERSION_BASED_UNIT('INCH',#99990) LENGTH_UNIT() NAMED_UNIT(#99991) );\n#99990 = LENGTH_MEASURE_WITH_UNIT(LENGTH_MEASURE(25.4),#99992);\n#99991 = DIMENSIONAL_EXPONENTS(1.,0.,0.,0.,0.,0.,0.);\n#99992 = ( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) );",
+            ),
             source.replace("ENDSEC;", "#99999=MAPPED_ITEM(#1,#2);ENDSEC;"),
         ] {
             assert_eq!(

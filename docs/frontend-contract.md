@@ -14,7 +14,7 @@ Stałe materiały i paleta renderują się lokalnie. Katalog serwera służy roz
 
 Cena wymaga dopuszczenia profilu, jawnego kosztu i aktualnej polityki cenowej. Profile i koszty nie włączają się samoczynnie. Lokalny POC można jawnie rozszerzyć przez --pricing-poc-extend; nie nadpisuje istniejących cen ani polityki, nie działa w production. Brak tych danych oznacza ręczną ofertę, którą admin publikuje, a klient opłaca przez Stripe. Dane testowe dotyczą wyłącznie izolowanych baz.
 
-Błąd API nie blokuje lokalnego podglądu STL; analiza/upload pozostają osobnym stanem. STEP i 3MF korzystają z prywatnego GLB po konwersji backendu. Próbka jest jawnie próbką, nie plikiem przesłanym przez klienta. Po odświeżeniu sam File nie istnieje; zachowany serwerowy identyfikator nadal wymaga prawidłowej sesji/własności.
+Błąd API nie blokuje lokalnego podglądu STL; analiza/upload pozostają osobnym stanem. STEP i 3MF korzystają z prywatnego GLB po konwersji backendu. Próbka jest jawnie próbką, nie plikiem przesłanym przez klienta. Po odświeżeniu sam File nie istnieje; zachowany serwerowy identyfikator nadal wymaga prawidłowej sesji/własności. Brak dostępu 401/403/404 nie blokuje usunięcia wpisu z lokalnego szkicu; nie oznacza usunięcia chronionego pliku na serwerze. Błędy 409/503 i sieci nadal zachowują wpis do ponowienia.
 
 Formularz inline zachowuje kompozycję autora i przekazuje dane do rzeczywistego checkoutu. Kontakt/faktura są wpisywane raz; adres Stripe i wybór kuriera/punktu mają jedno źródło. Kwota, opakowania, oferta i zapłata pochodzą z API. Wynik Stripe prowadzi do trwałego zamówienia.
 

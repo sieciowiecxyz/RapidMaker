@@ -1,5 +1,12 @@
 #include "rapidmaker-geometry/src/step.rs.h"
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <Precision.hxx>
+#include <cmath>
+#include <vector>
 #include <BRep_Tool.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
@@ -34,26 +41,48 @@ StepMesh tessellate_step(rust::Slice<const std::uint8_t> input,
     if (shape.IsNull()) {
       throw std::runtime_error("Empty STEP");
     }
-    TopExp_Explorer solids(shape, TopAbs_SOLID);
-    if (!solids.More()) {
-      return {StepStatus::Unsupported, {}};
+    std::vector<TopoDS_Shape> solids;
+    for (TopExp_Explorer item(shape, TopAbs_SOLID); item.More(); item.Next()) {
+      if (solids.size() == 32) return {StepStatus::Unsupported, {}};
+      solids.push_back(item.Current());
     }
-    solids.Next();
-    if (solids.More()) {
-      return {StepStatus::Unsupported, {}};
+    if (solids.empty()) return {StepStatus::Unsupported, {}};
+    if (solids.size() > 1) {
+      for (std::size_t i = 0; i < solids.size(); ++i) {
+        if (!BRepCheck_Analyzer(solids[i]).IsValid()) return {StepStatus::Unsupported, {}};
+        for (std::size_t j = 0; j < i; ++j) {
+          if (solids[i].IsSame(solids[j])) return {StepStatus::Unsupported, {}};
+          BRepExtrema_DistShapeShape separation(solids[i], solids[j]);
+          if (!separation.IsDone() || separation.InnerSolution() ||
+              !std::isfinite(separation.Value()) || separation.Value() <= Precision::Confusion()) {
+            return {StepStatus::Unsupported, {}};
+          }
+        }
+      }
     }
     BRepMesh_IncrementalMesh mesher(shape, 0.01, false, 0.5, false);
     if (!mesher.IsDone()) {
       throw std::runtime_error("STEP tessellation failed");
     }
     StepMesh result{StepStatus::Ok, {}};
+    double unmeshed_area = 0.0;
     for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More();
          faces.Next()) {
       const auto face = TopoDS::Face(faces.Current());
       TopLoc_Location location;
       const auto mesh = BRep_Tool::Triangulation(face, location);
       if (mesh.IsNull()) {
-        throw std::runtime_error("Missing STEP face mesh");
+        if (!BRepCheck_Analyzer(face).IsValid()) throw std::runtime_error("Missing STEP face mesh");
+        for (const auto &solid : solids) {
+          if (!BRepCheck_Analyzer(solid).IsValid()) throw std::runtime_error("Missing STEP face mesh");
+        }
+        GProp_GProps properties;
+        BRepGProp::SurfaceProperties(face, properties, false, false);
+        unmeshed_area += std::abs(properties.Mass());
+        if (!std::isfinite(unmeshed_area) || unmeshed_area > Precision::SquareConfusion()) {
+          throw std::runtime_error("Missing STEP face mesh");
+        }
+        continue;
       }
       for (int i = 1; i <= mesh->NbTriangles(); ++i) {
         if (result.points.size() / 3 >= max_triangles) {

@@ -18,6 +18,7 @@ fn main() {
         "TKMesh",
         "TKTopAlgo",
         "TKBRep",
+        "TKG3d",
         "TKMath",
         "TKernel",
     ] {

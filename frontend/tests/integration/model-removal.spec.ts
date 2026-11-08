@@ -240,6 +240,80 @@ test('duplicate variants keep independent settings and release only the last upl
   await gone(page, replacement);
 });
 
+test('cached private STEP models can be removed after a guest session is lost', async ({
+  page,
+  browser,
+  playwright,
+}) => {
+  const step = resolve('../backend/crates/geometry/tests/fixtures/step_block.step');
+  await open(page);
+  const id = await upload(page, step);
+  const preview = await page.request.get(`/api/models/${id}/preview.glb`);
+  expect(preview.status()).toBe(200);
+  expect((await preview.body()).subarray(0, 4).toString()).toBe('glTF');
+  const saved = await page.context().storageState();
+  const other = await playwright.request.newContext({ baseURL: origin });
+  try {
+    const stp = await other.post('/api/models', {
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/octet-stream',
+        'x-model-filename': 'step_block.stp',
+      },
+      data: readFileSync(step),
+    });
+    expect(stp.status()).toBe(201);
+    const uploaded = await stp.json();
+    const stpPreview = await other.get(uploaded.preview_url);
+    expect(stpPreview.status()).toBe(200);
+    expect((await stpPreview.body()).subarray(0, 4).toString()).toBe('glTF');
+    const outsider = await other.storageState();
+    for (const status of [401, 403, 404]) {
+      const context = await browser.newContext({
+        storageState: { cookies: status === 404 ? outsider.cookies : [], origins: saved.origins },
+      });
+      try {
+        const stale = await context.newPage();
+        if (status === 403)
+          await stale.route('**/api/auth/me', (route) => route.fulfill({ status: 403, json: {} }));
+        const deniedPreview = stale.waitForResponse((r) =>
+          r.url().endsWith(`/api/models/${id}/preview.glb`),
+        );
+        await stale.goto('/wycena');
+        expect((await deniedPreview).status()).toBe(status === 404 ? 404 : 401);
+        await expect(
+          stale.getByRole('heading', { name: 'Nie można wyświetlić modelu' }),
+        ).toBeVisible();
+        const recovery = await stale.locator('.empty-model-preview p').innerText();
+        let deletes = 0;
+        stale.on('request', (r) => {
+          if (r.method() === 'DELETE') deletes++;
+        });
+        await stale.getByRole('button', { name: 'Usuń step_block.step', exact: true }).click();
+        await expect(stale.locator('.model-row')).toHaveCount(0);
+        expect(recovery).toContain('dodaj plik ponownie');
+        await expect
+          .poll(() =>
+            stale.evaluate(
+              () =>
+                JSON.parse(localStorage.getItem('rapidmaker.storefront.draft.v1')!).models.length,
+            ),
+          )
+          .toBe(0);
+        expect(deletes).toBe(status === 403 ? 0 : 1);
+        const retained = await page.request.get(`/api/models/${id}/source`);
+        expect(retained.status()).toBe(200);
+        expect(await retained.body()).toEqual(readFileSync(step));
+        expect(existsSync(directory(id))).toBe(true);
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await other.dispose();
+  }
+});
+
 test('controlled DELETE 503 keeps the ready model and real retry removes it', async ({ page }) => {
   await open(page);
   const id = await upload(page);

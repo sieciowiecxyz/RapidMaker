@@ -298,7 +298,7 @@
     else void(async()=>{
       try {
         const response=await apiFetch(`/api/models/${encodeURIComponent(analysisId!)}/preview.glb`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20_000)])});
-        if(!response.ok)throw new Error(response.status===401||response.status===403?'Zaloguj się ponownie, aby otworzyć prywatny podgląd.':'Nie udało się pobrać podglądu. Spróbuj ponownie.');
+        if(!response.ok)throw new Error([401,403,404].includes(response.status)?'Podgląd jest niedostępny w tej sesji. Zaloguj się na konto właściciela lub usuń model i dodaj plik ponownie.':'Nie udało się pobrać podglądu. Spróbuj ponownie.');
         const buffer=await response.arrayBuffer();
         if(!cancelled)worker.postMessage({buffer,format:'glb'},[buffer]);
       }catch(error){if(!cancelled)stlPreview={status:'error',id,error:error instanceof Error?error.message:'Nie udało się pobrać podglądu.'};worker.terminate();}

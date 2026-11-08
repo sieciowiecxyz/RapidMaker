@@ -431,8 +431,15 @@ export function getModelUploadLimit(): Promise<number> {
 }
 
 export async function releaseModel(id: string): Promise<void> {
-  const response = await apiFetch(`/api/models/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (response.status === 204 || response.status === 404) return;
+  // A local draft may outlive its private upload session.
+  let response: Response;
+  try {
+    response = await apiFetch(`/api/models/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch (error) {
+    if (error instanceof ApiError && [401, 403].includes(error.status)) return;
+    throw error;
+  }
+  if ([204, 401, 403, 404].includes(response.status)) return;
   const data = await response.json().catch(() => undefined);
   throw new ApiError(
     response.status,
