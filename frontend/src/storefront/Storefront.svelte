@@ -6,7 +6,7 @@
   import './light.css';
   import './coral.css';
   import './print-background.css';
-  import { apiFetch } from '../lib/http';
+  import { apiFetch, assertCurrent } from '../lib/http';
   import { authEpoch, watchAuthChanges } from '../lib/authSync';
   import { saveTheme } from '../lib/theme';
   import type { StlMesh } from './lib/stlParser';
@@ -200,6 +200,7 @@
 
   onMount(() => {
     const stopAuthSync=watchAuthChanges(()=>{
+      previewRetry++;
       checkoutOpen=false; transitioning=false; orderDraft=null;
       if(location.hash==='#zamowienie')history.replaceState(null,'','#wycena');
     });
@@ -273,6 +274,7 @@
     if(!localStl && !analysisId){stlPreview={status:model.status==='analyzing'?'loading':'error',id,error:model.error ?? 'Dodaj plik ponownie, aby przygotować podgląd.'};return;}
     const cached=meshCache.get(id);
     if(cached){meshCache.delete(id);meshCache.set(id,cached);stlPreview={status:'ready',id,mesh:cached};return;}
+    const epoch=authEpoch();
     stlPreview={status:'loading',id};
     let cancelled=false;
     const controller=new AbortController();
@@ -280,7 +282,7 @@
     try{worker=new Worker(new URL('./lib/stl.worker.ts',import.meta.url),{type:'module'});}
     catch{stlPreview={status:'error',id,error:'Odczyt modelu w tle jest niedostępny w tej przeglądarce.'};return;}
     worker.onmessage=(event:MessageEvent<{ok:boolean;mesh:StlMesh;error?:string}>)=>{
-      if(cancelled)return;
+      if(cancelled || (!localStl && epoch!==authEpoch())){worker.terminate();return;}
       if(event.data.ok){
         const mesh=event.data.mesh;
         let size=mesh.vertices.byteLength+(mesh.sectionMask?.byteLength ?? 0);
@@ -300,6 +302,7 @@
         const response=await apiFetch(`/api/models/${encodeURIComponent(analysisId!)}/preview.glb`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20_000)])});
         if(!response.ok)throw new Error([401,403,404].includes(response.status)?'Podgląd jest niedostępny w tej sesji. Zaloguj się na konto właściciela lub usuń model i dodaj plik ponownie.':'Nie udało się pobrać podglądu. Spróbuj ponownie.');
         const buffer=await response.arrayBuffer();
+        assertCurrent(epoch);
         if(!cancelled)worker.postMessage({buffer,format:'glb'},[buffer]);
       }catch(error){if(!cancelled)stlPreview={status:'error',id,error:error instanceof Error?error.message:'Nie udało się pobrać podglądu.'};worker.terminate();}
     })();

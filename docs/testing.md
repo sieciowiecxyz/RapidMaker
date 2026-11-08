@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+Podgląd a sesja: po buildzie `E2E_REPORT_NAME=preview-auth-current python frontend/tests/run-integration.py --local-accounts preview-auth.spec.ts`. Rzeczywisty upload STEP/GLB i logout w drugiej karcie; kontrolowane wstrzymanie odczytu body. Spóźniony wynik nie trafia do podglądu. Drugi przypadek zachowuje lokalny STL mimo błędu uploadu i zmiany markera auth. Własna DB/root, bez email/providerów; należy do grupy `privacy`.
+
 Kwoty przed konwersją: `E2E_REPORT_NAME=model-quota-current python frontend/tests/run-integration.py upload-quota.spec.ts`. Własna DB/root, syntetyczne rekordy kwot: cztery pełne limity odrzucają przed plikami; gdy mieści się tylko oryginał, wynik nadal blokuje końcowa kontrola. Po zwolnieniu kwoty upload201/GLB200; watcher katalogu, bez zapisywania fizycznych8GiB/providerów/UI. Gotowa binarka API wymagana.
 
 JSON a zmiana sesji: po aktualnym buildzie `E2E_REPORT_NAME=api-epoch-current python frontend/tests/run-integration.py --local-accounts api-response-epoch.spec.ts`. Rzeczywiste hasło/TOTP, backend i logout; aktualne moduły TS bez warstwy widoku, kontrolowana kolejność Promise. Backend401 → stary JSON musi zostać odrzucony; nie jest to test wycieku w UI. Osobna DB/root, bez wysyłki email/providerów.
