@@ -139,6 +139,29 @@ test('real security settings rotate sessions, change password, use passkey and r
   await keys.getByRole('button', { name: 'Dodaj klucz dostępu', exact: true }).click();
   expect((await registered).status()).toBe(200);
   await expect(keys.getByText('E2E security key', { exact: true })).toBeVisible();
+  const anonymous = await browser.newContext();
+  try {
+    const origin = new URL(page.url()).origin;
+    const start = await anonymous.request.post(`${origin}/api/auth/passkey/login/start`, {
+      headers: { Origin: origin },
+      data: { email: account.email },
+    });
+    expect(start.status()).toBe(200);
+    const beforeProof = await start.json();
+    expect(beforeProof.stage).toBe('primary');
+    expect(beforeProof.user).toBeNull();
+    expect(beforeProof.second_factor).toBeNull();
+    const pending = await (await anonymous.request.get(`${origin}/api/auth/me`)).json();
+    expect(pending.user).toBeNull();
+    expect(pending.second_factor).toBeNull();
+    expect((await anonymous.request.get(`${origin}/api/account/orders`)).status()).toBe(401);
+    const resume = await anonymous.newPage();
+    await resume.goto(`${origin}/logowanie`);
+    await expect(resume.getByLabel('Adres email', { exact: true })).toHaveValue('');
+    await expect(resume.getByRole('button', { name: 'Zaloguj hasłem', exact: true })).toBeVisible();
+  } finally {
+    await anonymous.close();
+  }
 
   page.on('dialog', (dialog) => dialog.accept());
   await security.getByRole('button', { name: 'Wyloguj wszystkie urządzenia', exact: true }).click();

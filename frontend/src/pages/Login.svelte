@@ -28,7 +28,7 @@
   onMount(async () => {
     try {
       const value = await auth.getAuthState();
-      if (value) email = value.user.email;
+      if (value?.user) email = value.user.email;
       if (value?.stage === 'authenticated' && params.has('reauth')) current = null;
       else await advance(value);
     } catch (e) {
@@ -189,7 +189,7 @@
           ? 'Wpisz jeden z zapisanych kodów. Każdy działa tylko raz.'
           : totp
             ? 'Wpisz aktualny 6-cyfrowy kod. Email nie zastępuje aplikacji.'
-            : `Wysłaliśmy 8-cyfrowy kod na ${challenge?.email ?? current?.user.email ?? email}.`}
+            : `Wysłaliśmy 8-cyfrowy kod na ${challenge?.email ?? current?.user?.email ?? email}.`}
       </p>
       <form
         class="stack"

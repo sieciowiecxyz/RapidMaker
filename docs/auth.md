@@ -35,7 +35,7 @@ Nowe konto i stare konto bez hasła/passkey: potwierdzenie email otwiera ogranic
 | POST `/api/auth/logout`, `/logout-all` `{}` | Wylogowanie urządzenia/wszystkich sesji. |
 | POST `/api/auth/claim-guest` `{}` | Przypisanie własnych zasobów gościa po pełnym logowaniu. |
 
-`stage`: setup, primary, second_factor, authenticated. `second_factor`: email albo totp. Business API przyjmuje wyłącznie authenticated. Mutacje sprawdzają Origin i CSRF; publiczne starty logowania mają własne limity i powiązanie cookie. Schematy endpointów są generowane w `/api/`.
+`stage`: setup, primary, second_factor, authenticated. `second_factor`: email albo totp. Przed potwierdzeniem passkey (`primary`) pola `user` i `second_factor` są null w odpowiedziach startu i `/api/auth/me`. Business API przyjmuje wyłącznie authenticated. Mutacje sprawdzają Origin i CSRF; publiczne starty logowania mają własne limity i powiązanie cookie. Schematy endpointów są generowane w `/api/`.
 
 ## Bezpieczeństwo
 

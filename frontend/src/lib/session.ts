@@ -3,13 +3,14 @@ import type { EmailChallenge, Session } from './types';
 import { ApiError, apiRequest, clearAuthToken } from './http';
 
 export type AuthState = {
-  user: { id: string; email: string; role: 'client' | 'admin' };
+  user: { id: string; email: string; role: 'client' | 'admin' } | null;
   admin_verified: boolean;
   stage: 'setup' | 'primary' | 'second_factor' | 'authenticated';
-  second_factor: 'email' | 'totp';
+  second_factor: 'email' | 'totp' | null;
 };
 export type AuthSession = Session & { adminVerified: boolean };
 function session(data: AuthState): AuthSession {
+  if (!data.user) throw new Error('Dokończ logowanie.');
   return {
     id: data.user.id,
     email: data.user.email,

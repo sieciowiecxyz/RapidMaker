@@ -317,8 +317,9 @@ impl Auth {
     }
 
     pub(super) fn session_body(&self, token: &str, s: &AuthSession) -> Result<Value, Error> {
+        let proved = s.stage != "primary";
         Ok(
-            json!({"user":s.user,"stage":s.stage,"second_factor":s.second_factor,"expires_at":s.expires_at,"csrf_token":self.csrf(token)?,"admin_verified":s.stage=="authenticated" && s.user.role=="admin"}),
+            json!({"user":proved.then_some(&s.user),"stage":s.stage,"second_factor":proved.then_some(&s.second_factor),"expires_at":s.expires_at,"csrf_token":self.csrf(token)?,"admin_verified":s.stage=="authenticated" && s.user.role=="admin"}),
         )
     }
     pub(super) fn finish_session(&self, token: &str, s: &AuthSession) -> Result<Response, Error> {
