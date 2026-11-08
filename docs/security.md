@@ -164,6 +164,10 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — kwoty koszyka i checkoutu
+
+W badanych ścieżkach nie znaleziono obejścia ceny/ilości/własności/oferty: wyceny są serwerowymi snapshotami, koszyk sprawdza ich właściciela i aktualność, a przygotowanie płatności blokuje właściwą wersję szkicu i bierze kwotę z oferty DB. Ręczna cena wymaga admina; formularz klienta nie przyjmuje kwoty. Cztery istniejące testy offline tożsamości/reuse/formularza/overflow PASS; istniejące scenariusze manipulacji HTTP i blokad PG tylko przejrzano, bez ponownego uruchamiania. Sol xhigh bez blokera, bez zmian kodu/testów. Dowody: `security-cart-amounts-20261108/result.json`, tests.json i source-after.sha256. To nie pełny dowód przepływu płatności, wszystkich wyścigów lub rentowności; bez providerów, zmian normalnego API/DB i nowych cen.
+
 ## 2026-11-08 — Origin, Host i CSRF
 
 Przegląd nie potwierdził obejścia. Produkcja wymaga dokładnej authority i Origin przy mutacjach; brak Origin dozwolony tylko dla GET/HEAD. Powielone Host/Origin oraz nieprawidłowy Origin są odrzucane; forwarded headers nie zastępują Host/Origin. Sesje produkcyjne mają __Host/Secure/HttpOnly/Lax; zaufany proxy jest jawny. Upload sprawdza Origin i własność, nie token CSRF — nie deklarować uniwersalnej kontroli tokenu dla każdego POST.
