@@ -275,12 +275,13 @@ impl Storage {
         Ok(result)
     }
 
-    pub async fn auth_logout(&self, token: &str) -> Result<(), StorageError> {
-        sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
+    pub async fn auth_logout(&self, token: &str) -> Result<bool, StorageError> {
+        Ok(sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
             .bind(hash_token(token).as_slice())
             .execute(&self.pool)
-            .await?;
-        Ok(())
+            .await?
+            .rows_affected()
+            == 1)
     }
 
     pub async fn auth_logout_all(&self, user_id: &str) -> Result<(), StorageError> {
@@ -515,6 +516,12 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        let other = random_token().unwrap();
+        sqlx::query("INSERT INTO sessions(token_hash,user_id,created_at,last_seen_at,expires_at) VALUES($1,$2,$3,$3,$3+600)")
+            .bind(hash_token(&other).as_slice()).bind(&user.id).bind(now+65).execute(&db.pool).await.unwrap();
+        assert!(db.auth_logout(&session).await.unwrap());
+        assert!(!db.auth_logout(&session).await.unwrap());
+        assert!(db.auth_pending(&other, now + 65).await.unwrap().is_some());
         sqlx::query("UPDATE users SET role='admin' WHERE id=$1")
             .bind(&user.id)
             .execute(&db.pool)

@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Nowsza poprawka logout: zero usuniętych tokenów po równoczesnej rotacji daje401 bezSet-Cookie, nie fałszywy200. NativeHTTP/PG i lokalnecookie testyPASS; ponowienie zaktualnąsesją działa. Bez gwarancji revocationcałejrodziny; security opisuje granice.
+
 Nowsza poprawka prywatności checkoutu: zmiana konta zamyka prywatny formularz; nowe uwagi kontaktowe pozostają kontowe zamiast wspólnego model cart.5headlessHTTP-mockPASS oraz osobno1realbackend/cookies/TOTP/UI/SQLPASS,buildPASS. Stare wymieszane uwagi bez migracji, brak pełnej serializacji kart; szczegóły w security.
 
 Audyt zależności2026-11-08: Cargo0podatności; npm1źródłoweLOWdeepmerge(dev,brakpoprawki), pin-utils ostrzeżenie utrzymania(compiledIMAP). Bez zmian locków lub wyciszania; szczegóły w security.

@@ -609,10 +609,17 @@ async fn logout(
     Json(_input): Json<Value>,
 ) -> Result<Response, Error> {
     auth.pending_mutation(&headers).await?;
-    auth.database()?
+    if !auth
+        .database()?
         .auth_logout(session_cookie(&headers)?.ok_or_else(unavailable)?)
         .await
-        .map_err(|_| unavailable())?;
+        .map_err(|_| unavailable())?
+    {
+        return Err(error(
+            StatusCode::UNAUTHORIZED,
+            "Sesja zmieniła się. Odśwież stronę i spróbuj ponownie.",
+        ));
+    }
     tracing::info!(event = "auth_logout", scope = "session");
     response(json!({"ok":true}), &[set_cookie(session_name(), "", 0)])
 }

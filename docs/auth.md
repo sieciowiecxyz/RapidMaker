@@ -61,3 +61,5 @@ Pierwszy admin: zakończ pełne logowanie klienta, następnie lokalnie `python b
 `auth/credentials.rs`: Argon2, TOTP i szyfrowanie. `storage/credentials.rs`: transakcje, limity, etapy, rotacja i replay. `api/account_security.rs`: endpointy; istniejące auth/passkeys zachowują granice HTTP. Frontend: Login, AccountSecurity, Passkeys i wspólny adapter sesji/CSRF.
 
 Testy obejmują izolowany PostgreSQL, cookie/Origin, autoryzację routera oraz Chromium z wirtualnym WebAuthn i kontrolowanym API: hasło + email, passkey + TOTP, błędny kod, ustawienia i brak sekretów w browser storage. Nie zastępują fizycznego klucza, publicznego TLS ani testu doręczenia emaila. Aktualny wynik: docs/testing.md.
+
+Zwykły logout potwierdza usunięcie bieżącego tokenu. Jeśli token został już zastąpiony lub usunięty po walidacji, API zwraca401 bezSet-Cookie, zamiast fałszywego200. Należy odświeżyć sesję i ponowić; to nie jest logout całej rodziny rotacji ani wszystkich urządzeń.
