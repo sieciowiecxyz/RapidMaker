@@ -51,6 +51,8 @@ Nowe STL mają normalne zgodne z kolejnością wierzchołków. Starsze uploady s
 
 ## Tożsamość runtime
 
+Jednocześnie działają najwyżej dwie kontrole plików runtime. Miejsce jest zajmowane przed uruchomieniem pracy w tle i zwalniane dopiero po jej zakończeniu, także gdy klient przerwie żądanie.
+
 Zadanie i snapshot wyceny zawierają SHA-256 całego drzewa `/opt/bambustudio-bin`: launchera `AppRun`, `bin/bambu-studio`, zasobów, profili i bibliotek dostarczonych wewnątrz tego katalogu. Hash obejmuje posortowane względne ścieżki, typy i uprawnienia wpisów oraz zawartość plików z prefiksami długości. Nie zależy od ścieżki katalogu głównego ani kolejności utworzenia wpisów. Wchodzi do klucza deduplikacji; worker i checkout odrzucają inną lub brakującą tożsamość. Starsze wyceny wymagają przeliczenia.
 
 Hash jest liczony raz na proces. API z bazą inicjalizuje go przed obsługą HTTP, więc zimny odczyt pakietu wydłuża start, zamiast pierwszego zlecenia klienta. Brak działającego slicera zapisuje ostrzeżenie i blokuje wyceny; pozostałe API może działać. Osobny worker inicjalizuje hash przy pierwszym użyciu. Hashowanie i skanowanie działają w `spawn_blocking`, poza zadaniami async HTTP. Odczyt sprawdza metadane przed otwarciem, na otwartym pliku i po odczycie oraz porównuje całe drzewo przed/po hashowaniu. Każde użycie oraz kontrola przed/po slicingu ponownie skanują ścieżki, typy i metadane całego drzewa, bez ponownego odczytu zawartości. To koszt O(liczby wpisów) operacji metadanych i sortowania O(n log n), również dla trafienia deduplikacji; zimny start dodatkowo czyta wszystkie bajty bundla. Nie zmierzono tu opóźnienia rzeczywistego bundla pod obciążeniem.

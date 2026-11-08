@@ -28,6 +28,7 @@ const LIMITS: Limits = Limits {
     path_bytes: 4096,
 };
 static IDENTITY: LazyLock<Result<Identity, ()>> = LazyLock::new(|| Identity::read(Path::new(ROOT)));
+static CHECKS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 type Stamp = (u64, u64, u64, i64, i64, i64, i64);
 fn stamp(metadata: &fs::Metadata) -> Stamp {
@@ -175,7 +176,10 @@ impl Identity {
 /// Hash once per process; ordinary runtime changes invalidate this process until restart.
 /// Every use scans bounded tree metadata. This guard does not close adversarial hot-swap races.
 pub async fn runtime_sha256() -> Result<&'static str, Error> {
-    tokio::task::spawn_blocking(|| {
+    let permit = CHECKS.acquire().await.map_err(|_| Error::Busy)?;
+    tokio::task::spawn_blocking(move || {
+        // Cancelling the caller does not stop this task; retain its slot until completion.
+        let _permit = permit;
         IDENTITY
             .as_ref()
             .map_err(|_| ())
