@@ -4,6 +4,7 @@ import { announceAuthChange, authEpoch, watchAuthChanges } from './authSync';
 let csrfToken: string | null = null;
 let csrfLoading: Promise<void> | null = null;
 let generation = 0;
+const responseEpochs = new WeakMap<Response, number>();
 
 export class ApiError extends Error {
   constructor(
@@ -121,6 +122,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       if (!url.pathname.startsWith('/api/auth/'))
         window.dispatchEvent(new Event('rapidmaker:session-expired'));
     }
+    // A successful session change increments our epoch once; other responses keep theirs.
+    responseEpochs.set(response, epoch + (response.ok && changes ? 1 : 0));
     return response;
   };
   if (!changes) return send();
@@ -135,7 +138,7 @@ export async function apiRequest<T>(path: string, method = 'GET', body?: unknown
       ? {}
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
-  const epoch = authEpoch();
+  const epoch = responseEpochs.get(response) ?? -1;
   const data = response.status === 204 ? undefined : await response.json().catch(() => undefined);
   assertCurrent(epoch);
   if (!response.ok)

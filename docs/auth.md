@@ -60,6 +60,8 @@ Pierwszy admin: zakończ pełne logowanie klienta, następnie lokalnie `python b
 
 ## Moduły i sprawdzenie
 
+Adapter HTTP zachowuje znacznik sesji żądania także podczas odczytu JSON; własna skuteczna zmiana sesji zwiększa go raz. Inna zmiana w czasie oczekiwania odrzuca wynik przed zwróceniem danych i zapisem CSRF. Ochrona nie zależy od odświeżenia widoku.
+
 `auth/credentials.rs`: Argon2, TOTP i szyfrowanie. `storage/credentials.rs`: transakcje, limity, etapy, rotacja i replay. `api/account_security.rs`: endpointy; istniejące auth/passkeys zachowują granice HTTP. Frontend: Login, AccountSecurity, Passkeys i wspólny adapter sesji/CSRF.
 
 Testy obejmują izolowany PostgreSQL, cookie/Origin, autoryzację routera oraz Chromium z wirtualnym WebAuthn i kontrolowanym API: hasło + email, passkey + TOTP, błędny kod, ustawienia i brak sekretów w browser storage. Nie zastępują fizycznego klucza, publicznego TLS ani testu doręczenia emaila. Aktualny wynik: docs/testing.md.

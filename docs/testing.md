@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+JSON a zmiana sesji: po aktualnym buildzie `E2E_REPORT_NAME=api-epoch-current python frontend/tests/run-integration.py --local-accounts api-response-epoch.spec.ts`. Rzeczywiste hasło/TOTP, backend i logout; aktualne moduły TS bez warstwy widoku, kontrolowana kolejność Promise. Backend401 → stary JSON musi zostać odrzucony; nie jest to test wycieku w UI. Osobna DB/root, bez wysyłki email/providerów.
+
 Wspólny budżet zapisów: po buildzie `python backend/tests/write_concurrency.py` (opcjonalnie ścieżka binarki). Własne API/TCP bez DB/providerów: jedno IP/48 webhooków z podrobionymi XFF → 16 oczekujących +32×429; inne IP nadal zapisuje (200). Drugie IP zajmuje pozostałe 16 miejsc → trzecie dostaje 429, odczyt 200; zwolnienie przywraca zapis. Linux loopback aliases; próbki RSS nie dowodzą maksimum pamięci; raport/cleanup w ignorowanym `frontend/tests/artifacts/json-inflight-*`.
 
 Zapas dysku uploadu: po buildzie `python backend/tests/model_storage_pressure.py`. Rzeczywiste API/PostgreSQL i dwa prywatne tmpfs (1 GiB/64 MiB): poprawny STL 201, brak miejsca 503 bez plików/nowego rekordu, kontrolne ENOSPC. Opcjonalny argument wskazuje binarkę do porównania. Linux/bubblewrap; własna baza i katalog sprzątane, bez providerów i przeglądarki; raport w ignorowanym `frontend/tests/artifacts/model-disk-*`.
