@@ -33,6 +33,8 @@ Wyniki dotyczą wskazanych wersji i osobnych przebiegów. Nowszy dowód celowany
 
 Priorytet właściciela: szukać konkretnych problemów security i naprawiać je najmniejszą uzasadnioną zmianą. Bez dokładania kodu, zależności lub szerokich testów tylko dla oceny; dowody i ograniczenia zapisywać w [security](../security.md).
 
+Wspólny checkpoint na `9d7793a`: 4/4 PASS w jednym headless uruchomieniu na jednej prywatnej DB/API (publikacja, błąd slicera → manual UI, warianty/admin unpaid gate, fizyczna retencja). 0 pominięć/flaky/ponowień, 104,7 s; źródła/binarka/dist niezmienne, normalne API nietknięte, cleanup potwierdzony. Sol xhigh bez blokera; `manual-flows-combined-20261108/runtime-run1/result.json`. To wybrany zakres, nie full core/dostawcy/doręczenie emaila.
+
 Retencja dwóch wariantów jednego uploadu: native 1 PASS, ostatnia aktywna ochrona zachowuje pliki, po wygaśnięciu wszystkich realny GC usuwa oryginał/STL/GLB, pozostawia snapshoty i zwraca 410. Tylko testy, bez retencji opłaconych zamówień i bez zmian normalnego serwera; Sol xhigh bez blokera, dowody w security/testing.
 
 Identyczne warianty: konfigurator autora pokazuje wczesny komunikat i blokuje przejście przed zmianą koszyka. Ilość lub ustawienia można zmienić, różne preferencje kolorów zachowane; backendowe odmowy pozostają. Native UI i mock HTTP po 1 PASS, +21 linii TS, brak zmian stylu; Sol xhigh bez blokera, granice w security.
