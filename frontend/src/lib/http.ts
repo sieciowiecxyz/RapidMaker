@@ -69,7 +69,7 @@ const sessionChanges = new Set([
   '/api/account/totp/confirm',
   '/api/account/totp',
 ]);
-function assertCurrent(epoch: number) {
+export function assertCurrent(epoch: number) {
   if (epoch !== authEpoch()) throw new ApiError(0, 'Sesja zmieniła się. Odśwież widok.');
 }
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {

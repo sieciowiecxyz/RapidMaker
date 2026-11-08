@@ -1,4 +1,5 @@
-import { ApiError, apiFetch, apiRequest } from './http';
+import { ApiError, apiFetch, apiRequest, assertCurrent } from './http';
+import { authEpoch } from './authSync';
 
 export type Parcel = { outer_mm: [number, number, number]; weight_g: number };
 export type PickupDate = { date: string; min_time: string; max_time: string };
@@ -75,6 +76,7 @@ export function shippingIntent(id: string, value?: ShippingIntent | null): Shipp
   return parsed;
 }
 export async function downloadLabel(orderId: string, packageId: string) {
+  const epoch = authEpoch();
   const response = await apiFetch(
     `${shipmentPath(orderId)}/labels/${encodeURIComponent(packageId)}?format=a6`,
   );
@@ -84,7 +86,9 @@ export async function downloadLabel(orderId: string, packageId: string) {
   }
   if (!response.headers.get('content-type')?.includes('application/pdf'))
     throw new Error('Serwer nie zwrócił etykiety PDF.');
-  const url = URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  assertCurrent(epoch);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = `rapidmaker-${packageId}.pdf`;

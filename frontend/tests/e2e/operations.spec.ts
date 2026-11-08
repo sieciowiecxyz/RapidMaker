@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+test.use({ screenshot: 'off', trace: 'off', video: 'off' });
 const id = '00000000-0000-4000-8000-000000000002';
 async function admin(page: Page, booked = false) {
   const writes: { path: string; body: any; csrf?: string }[] = [];
@@ -317,4 +318,113 @@ test('cancellation requires explicit approval and remains pending; compact mobil
   expect(calls[0].body.request_id).toMatch(/^[a-f0-9-]{36}$/);
   expect(calls[0].csrf).toBe('csrf-operations');
   await expect(page.getByText('Anulowano', { exact: true })).toHaveCount(0);
+});
+
+test.describe('private label response', () => {
+  test('label body completing after logout cannot start a private download', async ({
+    page,
+    context,
+  }) => {
+    await admin(page, true);
+    const other = await context.newPage();
+    await admin(other, true);
+    await other.route('**/api/auth/logout', (route) => route.fulfill({ json: { ok: true } }));
+    await other.route(
+      (url) => url.pathname === '/logowanie',
+      (route) =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><title>Wylogowano</title>',
+        }),
+    );
+    await page.getByRole('button', { name: 'Dostawa', exact: true }).click();
+    await page.evaluate(() => {
+      const state = window as typeof window & {
+        labelReading?: boolean;
+        labelComplete?: boolean;
+        labelURLs?: number;
+        finishLabel?: () => void;
+      };
+      const originalFetch = window.fetch.bind(window),
+        originalURL = URL.createObjectURL.bind(URL);
+      state.labelURLs = 0;
+      URL.createObjectURL = (value) => {
+        if (value instanceof Blob && value.type === 'application/pdf') state.labelURLs!++;
+        return originalURL(value);
+      };
+      window.fetch = async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (!url.pathname.includes('/labels/')) return originalFetch(input, init);
+        let sent = false;
+        const response = new Response(
+          new ReadableStream<Uint8Array>(
+            {
+              start(controller) {
+                state.finishLabel = () => {
+                  controller.enqueue(new TextEncoder().encode('% synthetic private label\n%%EOF'));
+                  controller.close();
+                };
+              },
+              pull(controller) {
+                state.labelReading = true;
+                if (!sent) {
+                  sent = true;
+                  controller.enqueue(new TextEncoder().encode('%PDF-1.4\n'));
+                }
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+          { headers: { 'Content-Type': 'application/pdf' } },
+        );
+        const originalBlob = response.blob.bind(response);
+        response.blob = async () => {
+          const blob = await originalBlob();
+          state.labelComplete = true;
+          return blob;
+        };
+        return response;
+      };
+    });
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    await page.getByRole('button', { name: 'Etykieta PDF', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).labelReading)).toBe(true);
+    let release!: () => void, refreshed!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const revalidation = new Promise<void>((resolve) => {
+      refreshed = resolve;
+    });
+    await page.route('**/api/auth/me', async (route) => {
+      refreshed();
+      await gate;
+      await route.fulfill({ status: 401, json: { message: 'Zaloguj się.' } });
+    });
+    try {
+      await other.getByRole('button', { name: 'Wyloguj', exact: true }).click();
+      await revalidation;
+      await expect(page.getByRole('button', { name: 'Etykieta PDF', exact: true })).toHaveCount(0);
+      await page.evaluate(() => (window as any).finishLabel());
+      await expect.poll(() => page.evaluate(() => (window as any).labelComplete)).toBe(true);
+      const urls = await page.evaluate(() => (window as any).labelURLs as number);
+      if (urls) await expect.poll(() => downloads).toBe(1);
+      await test.info().attach('label-after-logout', {
+        body: JSON.stringify({
+          bodyRead: true,
+          protectedViewRemoved: true,
+          privateURLs: urls,
+          downloads,
+        }),
+        contentType: 'application/json',
+      });
+      expect(urls).toBe(0);
+      expect(downloads).toBe(0);
+    } finally {
+      release();
+      await page.unroute('**/api/auth/me');
+      await other.close();
+    }
+  });
 });
