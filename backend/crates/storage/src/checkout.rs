@@ -848,6 +848,30 @@ mod tests {
             legal_version: "2026-10-25",
             production_days: 14,
         };
+        let mut address = update.clone();
+        address["recipient"] = json!({"street":"Before 1","postal_code":"05-500"});
+        let edited = db
+            .checkout_create(&owner, None, &address, 10002)
+            .await
+            .unwrap();
+        let old = db
+            .checkout_quote(&edited.id, &owner, 1, &quote, 10600, 10002)
+            .await
+            .unwrap()
+            .unwrap();
+        address["recipient"] = json!({"street":"After 2","postal_code":"00-001"});
+        let cleared = db
+            .checkout_update(&edited.id, &owner, old.version, &address, 10003)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(cleared.quote.is_none() && cleared.quote_expires_at.is_none());
+        let stale = AttemptInput {
+            draft_id: &edited.id,
+            version: old.version,
+            ..input
+        };
+        assert!(db.checkout_prepare(&stale, 10003).await.unwrap().is_none());
         sqlx::query("UPDATE catalog_materials SET cost_net_grosze_per_kg=6000 WHERE id=$1")
             .bind(&material)
             .execute(&db.pool)
@@ -980,11 +1004,15 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(recovered.offer_id.as_deref(), Some("pickup"));
-        let fulfillment: Value = sqlx::query_scalar("SELECT fulfillment FROM orders WHERE id=$1")
-            .bind(&id)
-            .fetch_one(&fresh.pool)
-            .await
-            .unwrap();
+        assert_eq!(recovered.amount_grosze, 2500);
+        let (fulfillment, contact, amount): (Value, Value, i64) =
+            sqlx::query_as("SELECT fulfillment,contact,amount_grosze FROM orders WHERE id=$1")
+                .bind(&id)
+                .fetch_one(&fresh.pool)
+                .await
+                .unwrap();
+        assert_eq!(contact, quote["contact"]);
+        assert_eq!(amount, 2500);
         assert_eq!(fulfillment["offer"]["name"], "Selected carrier");
         assert_eq!(fulfillment["delivery"], "courier");
         assert_eq!(fulfillment["packing"]["parcels"][0]["weight_g"], 500);
