@@ -858,9 +858,9 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
             .0,
         422
     );
-    let mut concurrent = json!({"revision":1,"buyer":"Nowy nabywca A","address":"","nip":"","created":"2026-10-26","lines":[{"name":"Całe zamówienie","qty":1,"price_grosze":1000}]});
+    let mut concurrent = json!({"revision":1,"buyer":"private-invoice-canary A","address":"","nip":"","created":"2026-10-26","lines":[{"name":"Całe zamówienie","qty":1,"price_grosze":1000}]});
     let first = concurrent.clone();
-    concurrent["buyer"] = json!("Nowy nabywca B");
+    concurrent["buyer"] = json!("private-invoice-canary B");
     let (first, second) = tokio::join!(
         call(&app, "PUT", &invoice_path, Some(&admin), Some(first)),
         call(&app, "PUT", &invoice_path, Some(&admin), Some(concurrent))
@@ -873,6 +873,7 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
         "only one editor can save a given invoice revision"
     );
     let (_, saved) = call(&app, "GET", &invoice_path, Some(&admin), None).await;
+    assert!(String::from_utf8_lossy(&saved).contains("private-invoice-canary"));
     assert_eq!(
         serde_json::from_slice::<Value>(&saved).unwrap()["draft"]["revision"],
         2
@@ -887,6 +888,10 @@ async fn clients_guests_and_admins_cannot_cross_resource_boundaries() {
     .await;
     assert_eq!(status, 200);
     assert!(!String::from_utf8_lossy(&public).contains("private-production-canary"));
+    assert!(!String::from_utf8_lossy(&public).contains("private-invoice-canary"));
+    let public: Value = serde_json::from_slice(&public).unwrap();
+    assert!(public.get("production").is_none());
+    assert!(public.get("invoice_draft").is_none());
     let payment_after: (Option<String>, Option<i64>, i64) =
         sqlx::query_as("SELECT provider_id,paid_at,amount_grosze FROM orders WHERE id=$1")
             .bind(&fa.order)

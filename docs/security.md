@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — odpowiedzi zamówień klienta
+
+Przegląd źródeł nie wykazał wycieku prywatnych danych produkcji/faktury, identyfikatorów uczestników rozmowy ani plików innych klientów. Istniejący test routera/PostgreSQL sprawdzał kanarek produkcji; dodano kanarek szkicu faktury, potwierdzenie jego odczytu przez admina i brak obu pól w odpowiedzi klienta. Zmiana tylko testowa: netto5linii, bez kodu produktu/zależności.
+
+Baseline1PASS i końcowy1PASS na osobnych usuniętych bazach; bez providerów, przeglądarki i zmian normalnego API/DB. Dowody `security-order-response-20261108/access-invoice-final.json` i `final-hashes.json`. Solxhigh potwierdził rzeczywisty rozdział serwerowy, bez blokera; zakres to sprawdzone trasy, nie pełny pentest. Aktualne pełnowierszowe SELECT szczegółu zamówienia wymaga nadal uwagi przy dodawaniu kolumn do orders.
+
 ## 2026-11-08 — prywatne artefakty a Vite dev
 
 Potwierdzono, że lokalny dev server udostępniał własny niesekretny plik kontrolny z `frontend/tests/artifacts` przez HTTP200 mimo katalogu700/pliku600. Nie odczytywano rzeczywistych raportów lub sekretów. Poprawka `server.fs.deny` zachowuje domyślne reguły Vite (pobierane przez resolveConfig bez pliku konfiguracji/env), dodaje tests/artifacts oraz wyłącznie projektowe frontend/.codex. Nie blokuje całego nadrzędnego ~/.codex, w którym znajduje się worktree.
