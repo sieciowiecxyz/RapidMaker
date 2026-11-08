@@ -34,6 +34,8 @@ Trwałość uploadu: pliki, katalog UUID i katalog nadrzędny są fsync przed in
 
 Upload sprawdza `fstatvfs` otwartego katalogu pod wspólnym flock: przed zapisem musi zostać miejsce na oryginał, maksymalny STL/GLB, 1 MiB metadanych oraz 512 MiB rezerwy. Brak miejsca lub błąd odczytu daje 503 bez nowego katalogu/rekordu. To kontrola przyjęcia, nie rezerwacja bloków wobec innych programów; kwoty PostgreSQL nadal obowiązują.
 
+Jedna kwerenda kwot modeli obsługuje precheck liczby i znanych bajtów oryginału przed katalogiem/parserem oraz końcowy insert pod blokadą PostgreSQL. Precheck nie rezerwuje miejsca; końcowa kontrola nadal liczy rzeczywistą siatkę i GLB.
+
 ## Nowa wycena a istniejący checkout
 
 `POST /api/models`: STL/STEP/3MF → prywatny oryginał, izolowana kanoniczna siatka STL i prywatny podgląd GLB bez ustawień/G-code. `POST /api/quotes/estimate` przyjmuje ID własnego modelu, materiał, kolor i opcje → trwałe zadanie PostgreSQL (202) → worker slicera → koszt i atomowy snapshot. `GET /api/quotes/jobs/{id}` zwraca status/wynik właścicielowi. Katalog: `GET /api/catalog/materials`. Deduplikacja w DB obejmuje model, ustawienia, profile, kolor i koszty; bez cache pomiarów w RAM. Brak ceny, zatwierdzenia albo poprawnego wyniku nie daje automatycznej oferty.

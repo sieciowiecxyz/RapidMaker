@@ -1,6 +1,13 @@
 use super::{Storage, StorageError};
 use sqlx::Row;
 
+const MODEL_CAPACITY: &str = "SELECT $2::bigint > 0
+    AND COUNT(*) < 1000
+    AND COUNT(*) FILTER (WHERE owner_hash=$1) < 20
+    AND COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes),0)+$2::bigint <= 8::bigint*1024*1024*1024
+    AND COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes) FILTER (WHERE owner_hash=$1),0)+$2::bigint <= 256::bigint*1024*1024
+    FROM private_models";
+
 /// COMMIT failed to acknowledge success; prepared files must remain available.
 #[derive(Debug)]
 pub struct ModelCommitUncertain;
@@ -63,6 +70,14 @@ pub(crate) fn stored_model(row: sqlx::postgres::PgRow) -> Result<StoredModel, St
 }
 
 impl Storage {
+    /// Admission hint for known bytes; the final insert still checks measured sizes atomically.
+    pub async fn model_has_capacity(&self, owner: &str, bytes: i64) -> Result<bool, StorageError> {
+        Ok(sqlx::query_scalar(MODEL_CAPACITY)
+            .bind(owner)
+            .bind(bytes)
+            .fetch_one(&self.pool)
+            .await?)
+    }
     /// All writers take one database lock; concurrent processes cannot exceed quotas.
     /// Return false for quota refusal, while database failures remain errors.
     pub async fn insert_model(&self, model: &StoredModel) -> Result<bool, StorageError> {
@@ -99,22 +114,11 @@ impl Storage {
         sqlx::query("SELECT pg_advisory_xact_lock(72617069646)")
             .execute(&mut *tx)
             .await?;
-        let row = sqlx::query("SELECT COUNT(*) AS total_count, COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes),0)::bigint AS total_bytes,
-            COUNT(*) FILTER (WHERE owner_hash=$1) AS owner_count,
-            COALESCE(SUM(source_bytes+mesh_bytes+preview_bytes) FILTER (WHERE owner_hash=$1),0)::bigint AS owner_bytes FROM private_models")
-            .bind(&model.owner_hash).fetch_one(&mut *tx).await?;
-        if row.try_get::<i64, _>("total_count")? >= 1000
-            || row.try_get::<i64, _>("owner_count")? >= 20
-            || row
-                .try_get::<i64, _>("total_bytes")?
-                .checked_add(bytes)
-                .ok_or("quota size overflow")?
-                > 8 * 1024 * 1024 * 1024
-            || row
-                .try_get::<i64, _>("owner_bytes")?
-                .checked_add(bytes)
-                .ok_or("quota size overflow")?
-                > 256 * 1024 * 1024
+        if !sqlx::query_scalar::<_, bool>(MODEL_CAPACITY)
+            .bind(&model.owner_hash)
+            .bind(bytes)
+            .fetch_one(&mut *tx)
+            .await?
         {
             return Ok(false);
         }

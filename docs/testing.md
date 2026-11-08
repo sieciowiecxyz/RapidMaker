@@ -2,6 +2,8 @@ Aktualny zestaw całej strony: `npm --prefix frontend run test:all`. Grupy i wym
 
 # Szybka weryfikacja
 
+Kwoty przed konwersją: `E2E_REPORT_NAME=model-quota-current python frontend/tests/run-integration.py upload-quota.spec.ts`. Własna DB/root, syntetyczne rekordy kwot: cztery pełne limity odrzucają przed plikami; gdy mieści się tylko oryginał, wynik nadal blokuje końcowa kontrola. Po zwolnieniu kwoty upload201/GLB200; watcher katalogu, bez zapisywania fizycznych8GiB/providerów/UI. Gotowa binarka API wymagana.
+
 JSON a zmiana sesji: po aktualnym buildzie `E2E_REPORT_NAME=api-epoch-current python frontend/tests/run-integration.py --local-accounts api-response-epoch.spec.ts`. Rzeczywiste hasło/TOTP, backend i logout; aktualne moduły TS bez warstwy widoku, kontrolowana kolejność Promise. Backend401 → stary JSON musi zostać odrzucony; nie jest to test wycieku w UI. Osobna DB/root, bez wysyłki email/providerów.
 
 Wspólny budżet zapisów: po buildzie `python backend/tests/write_concurrency.py` (opcjonalnie ścieżka binarki). Własne API/TCP bez DB/providerów: jedno IP/48 webhooków z podrobionymi XFF → 16 oczekujących +32×429; inne IP nadal zapisuje (200). Drugie IP zajmuje pozostałe 16 miejsc → trzecie dostaje 429, odczyt 200; zwolnienie przywraca zapis. Linux loopback aliases; próbki RSS nie dowodzą maksimum pamięci; raport/cleanup w ignorowanym `frontend/tests/artifacts/json-inflight-*`.

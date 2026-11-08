@@ -140,6 +140,13 @@ fn error(status: StatusCode, message: &str) -> Error {
     (status, Json(json!({"message": message})))
 }
 
+fn model_quota() -> Error {
+    error(
+        StatusCode::TOO_MANY_REQUESTS,
+        "Przekroczono limit zapisanych modeli. Spróbuj po wygaśnięciu starszych plików.",
+    )
+}
+
 fn database(state: &FileState) -> Result<&Storage, Error> {
     state.storage.as_ref().ok_or_else(|| {
         error(
@@ -508,7 +515,7 @@ fn filename(headers: &HeaderMap) -> Result<(String, String), Error> {
     responses((status = 201, description = "Prywatny model i adres GLB", body = Value),
         (status = 408, description = "Przekroczony czas odbierania pliku", body = Value),
         (status = 413, description = "Przekroczony limit pliku", body = Value),
-        (status = 429, description = "Trwa inny upload", body = Value),
+        (status = 429, description = "Zajęty upload lub wyczerpana kwota modeli", body = Value),
         (status = 503, description = "Magazyn chwilowo niedostępny", body = Value),
         (status = 422, description = "Nieprawidłowa geometria", body = Value)))]
 async fn upload(
@@ -531,6 +538,18 @@ async fn upload(
     } else {
         (format!("{:x}", Sha256::digest(token.as_bytes())), None)
     };
+    if !storage
+        .model_has_capacity(&owner_hash, input.len() as i64)
+        .await
+        .map_err(|_| {
+            error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Nie można sprawdzić limitu modeli.",
+            )
+        })?
+    {
+        return Err(model_quota());
+    }
     // Declared before PendingDirectory so rollback removes files before unlocking.
     let Some(_root_lock) = lock_model_root(&state.root).map_err(|_| {
         error(
@@ -663,10 +682,7 @@ async fn upload(
             )
         })?
     {
-        return Err(error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Przekroczono limit zapisanych modeli. Spróbuj po wygaśnięciu starszych plików.",
-        ));
+        return Err(model_quota());
     }
     tracing::info!(event="model_uploaded", model_id=%record.id, source_bytes=record.source_bytes, mesh_bytes=record.mesh_bytes, preview_bytes=record.preview_bytes);
     let mut response = (StatusCode::CREATED, Json(public_metadata(&record))).into_response();
