@@ -74,3 +74,10 @@ Rozszerzony `pricing-options.spec.ts`: `material-pricing-20261107.json` — 1 na
 Historia `78d5802`, `3519cb9`, `bb67c8a`, wcześniejsze FAIL harnessu i opt-in large pozostają w [corpus-report](corpus-report.md), wraz ze szczegółami własności/retencji. Nie sumować tych wyników ani usuniętych linii z nowszymi. Pełna macierz, szerszy load/pentest, fizyczne urządzenia, rentowność i ogólna prostota pozostają niepotwierdzone; review nie oznacza 10/10 ani zamknięcia celu.
 
 Uruchamianie: [plan](plans/corpus-quality.md) i [testing](testing.md). Wyłącznie headless, bez `--headed`/`--ui`/`--debug`; wspólny Chromium Playwright, inny executable tylko jawnie. Wrapper `core` obejmuje `privacy`, a `all` wszystkie grupy. Spis komend nie oznacza ich wykonania; archiwizuj raporty przed ponowieniem.
+
+
+## Stany konfiguratora — 2026-11-08
+
+Na `d23c24f` obejrzano 8 rzeczywistych zrzutów viewportu: identyczny wariant i ręczna wycena, 1440×1000/390×844, oba motywy. Root i Sol xhigh przejrzeli obrazy oraz wybrane pełne kadry: tekst i CTA czytelne, stan disabled/aktywny odróżnialny, brak poziomego overflow; fonty Manrope/Oxanium i lokalna kostka WebGL widoczne. Bez zmiany CSS, kontrolek lub stylu autora. To kontrolowane HTTP z publicznym fixture, nie dowód cen/backendu, pełnej UI, fizycznego telefonu lub obliczonego kontrastu/WCAG.
+
+Pierwszy zapis całego przewiniętego elementu przestawił sticky/fixed na obrazie; zachowano go jako niejednoznaczny artefakt, nie błąd produktu. Poprawiony zapis to `page.screenshot({fullPage:false})` przy CTA, bez zmiany DOM/CSS/focusu; skip-link poza viewportem i bez focusu we wszystkich ośmiu kadrach. Dowody: `visual-configurator-states-20261108/capture2/` (manifest.json, PNG i dwa contact sheets, dane focusu, cleanup). Źródła/binarka/dist niezmienne, własny preview usunięty, normalny API nietknięty; brak żądań do nieprzechwyconego API lub zewnętrznych dostawców. Nie znaleziono konkretnego defektu uzasadniającego patch.
