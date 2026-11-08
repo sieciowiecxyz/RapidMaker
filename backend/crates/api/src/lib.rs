@@ -83,6 +83,25 @@ pub async fn slicer_worker() -> Result<SliceWorker, Box<dyn std::error::Error + 
         rapidmaker_storage::Storage::connect(&std::env::var("DATABASE_URL")?).await?,
     ))
 }
+async fn admit_write(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if request.method().is_safe() {
+        return next.run(request).await;
+    }
+    static WRITES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32);
+    let Ok(_permit) = WRITES.try_acquire() else {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            [(axum::http::header::RETRY_AFTER, "1")],
+            axum::Json(serde_json::json!({"code":"server_busy","message":"Serwer jest zajęty. Spróbuj ponownie za chwilę."})),
+        ).into_response();
+    };
+    next.run(request).await
+}
+
 pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Error + Send + Sync>> {
     let model_profile = model_limits::ModelProfile::from_env()?;
     let mailer = std::sync::Arc::new(rapidmaker_notifications::Mailer::from_env()?);
@@ -132,6 +151,7 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .merge(webhook)
         .layer(axum::Extension(mailer.clone()))
         .layer(axum::Extension(auth))
+        .layer(axum::middleware::from_fn(admit_write))
         .layer(axum::middleware::from_fn(logging::request))
         .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
             std::time::Duration::from_secs(30),

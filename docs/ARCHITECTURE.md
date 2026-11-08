@@ -6,6 +6,8 @@ Jeden backend Rust i PostgreSQL. Małe konkretne funkcje, jawne SQL, minimum zal
 
 Pakowanie w API i checkout działa przez `spawn_blocking`: maksymalnie dwa obliczenia na proces, w tym jedno z publicznego endpointu; zajęcie zwraca 429. Anulowanie HTTP nie zwalnia miejsca przed końcem obliczenia.
 
+API przyjmuje do 32 równoczesnych żądań zapisu na proces, łącznie z webhookami i uploadem; miejsce jest zajęte przez odbiór body i handler. Nadmiar dostaje 429/Retry-After:1. Bezpieczne metody odczytu nie zajmują tych miejsc. Limity body i 30 s bezczynności pozostają; to nie limit połączeń TCP ani całkowitej pamięci workerów.
+
 Warstwy geometrii i slicera ograniczają także zapisywalne systemy plików: `/dev` jest RO, osobne `/dev/shm` ma 128 MiB. Slicer ma `/out` tmpfs512 MiB i eksportuje na host wyłącznie prywatny `result.json`, bez G-code. AS/CPU to limity pojedynczego procesu; szczegóły i granice: [bezpieczeństwo](security.md#pamięć-tymczasowa-workerów).
 
 ## Faktyczna mapa
