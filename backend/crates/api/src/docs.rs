@@ -22,7 +22,7 @@ pub fn router(mut document: OpenApi) -> axum::Router {
     document.info.version = env!("CARGO_PKG_VERSION").into();
     document.info.contact = None;
     document.info.license = None;
-    document.info.description = Some("Logowanie lokalne: otwórz http://localhost:18430/api zgodnie z AUTH_ORIGIN. Cookie HttpOnly ustawia backend po logowaniu. Dla zapisu sesyjnego podaj X-CSRF-Token z /api/auth/me przez Authorize. Administracja dodatkowo wymaga passkey. Wywołania Try it out wykonują rzeczywiste operacje API.".into());
+    document.info.description = Some("Logowanie lokalne: otwórz http://localhost:18430/api zgodnie z AUTH_ORIGIN. Cookie HttpOnly ustawia backend po logowaniu. Dla zapisu sesyjnego podaj X-CSRF-Token z /api/auth/me przez Authorize. Administracja wymaga roli administratora i pełnego logowania dwuskładnikowego. Wywołania Try it out wykonują rzeczywiste operacje API.".into());
     document.servers = Some(vec![Server::new("/")]);
     let components = document.components.get_or_insert_with(Default::default);
     components.add_security_scheme(

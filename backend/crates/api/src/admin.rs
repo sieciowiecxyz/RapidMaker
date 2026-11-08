@@ -1,4 +1,4 @@
-//! Operator endpoints require the shared database session and verified passkey.
+//! Operator endpoints require a shared database session, the admin role and full MFA.
 use axum::{
     Extension, Json,
     extract::{Path, Request, State},

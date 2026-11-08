@@ -48,7 +48,7 @@ pub(super) async fn scope(
         if session.user.role == "admin" && session.admin_verified_at.is_none() {
             return Err(error(
                 StatusCode::FORBIDDEN,
-                "Potwierdź dostęp kluczem passkey.",
+                "Dokończ logowanie dwuskładnikowe.",
             ));
         }
         Some(session.user.id)
@@ -366,7 +366,7 @@ async fn payment_status(
     path = "/api/admin/orders",
     tag = "Admin",
     summary = "Lista zamówień operatora.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
 )]
@@ -387,7 +387,7 @@ struct Status {
     path = "/api/admin/orders/{id}/status",
     tag = "Admin",
     summary = "Zmień status realizacji zamówienia.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     request_body = Status,
     params(("id" = String, Path, description = "Identyfikator zamówienia.")),
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
@@ -418,7 +418,7 @@ async fn status(
     path = "/api/admin/orders/{id}/messages",
     tag = "Admin",
     summary = "Pobierz rozmowę zamówienia.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     params(("id" = String, Path, description = "Identyfikator zamówienia."), ChatQuery),
     responses((status = 200, description = "Strona rozmowy i stan przeczytania.", body = rapidmaker_storage::MessagePage), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
@@ -447,7 +447,7 @@ async fn admin_messages(
     path = "/api/admin/orders/{id}/messages",
     tag = "Admin",
     summary = "Wyślij wiadomość do klienta.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     request_body = Message,
     params(("id" = String, Path, description = "Identyfikator zamówienia.")),
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
@@ -479,7 +479,7 @@ async fn admin_message(
     path = "/api/admin/notifications",
     tag = "Admin",
     summary = "Statystyki kolejki powiadomień email.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
 )]
@@ -595,7 +595,7 @@ async fn file(
     path = "/api/admin/orders/{id}/files",
     tag = "Admin",
     summary = "Lista plików zamówienia dla operatora.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     params(("id" = String, Path, description = "Identyfikator zamówienia.")),
     responses((status = 200, description = "Powodzenie.", body = Value), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))
@@ -612,7 +612,7 @@ async fn admin_files(
     path = "/api/admin/orders/{id}/files/{model}/{kind}",
     tag = "Admin",
     summary = "Pobierz plik zamówienia jako operator.",
-    description = "Wymaga sesji administratora potwierdzonej passkey (MFA). Mutacje wymagają CSRF i dozwolonego Origin.",
+    description = "Wymaga sesji administratora po pełnym logowaniu dwuskładnikowym. Mutacje wymagają CSRF i dozwolonego Origin.",
     params(("id" = String, Path, description = "Identyfikator zamówienia."), ("model" = String, Path, description = "Identyfikator modelu."), ("kind" = String, Path, description = "source, preview.glb albo mesh.")),
     responses((status = 200, description = "Powodzenie.", body = Vec<u8>, content_type = "application/octet-stream"), (status = 400, description = "Nieprawidłowe dane.", body = Value), (status = 401, description = "Brak lub wygaśnięcie sesji.", body = Value), (status = 403, description = "Brak uprawnień, MFA lub nieprawidłowy CSRF/Origin.", body = Value), (status = 404, description = "Nie znaleziono zasobu właściciela.", body = Value), (status = 409, description = "Niedozwolona zmiana stanu.", body = Value), (status = 410, description = "Plik wygasł lub jest niedostępny.", body = Value), (status = 503, description = "Usługa chwilowo niedostępna.", body = Value)),
     security(("session" = []))

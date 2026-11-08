@@ -42,7 +42,7 @@ pub(super) fn router() -> OpenApiRouter<Arc<App>> {
 
 #[utoipa::path(post,path="/api/admin/orders/{id}/refunds",operation_id="admin_refund_create",tag="Admin",
     summary="Zleć pełny lub częściowy zwrot płatności Stripe test.",
-    description="Wymaga admina, passkey i CSRF. request_id identyfikuje jedną operację; ponowienie nie tworzy kolejnego zwrotu. 202 oznacza zapisanie zlecenia, nie potwierdzenie zwrotu. Status realizacji zamówienia pozostaje osobny.",
+    description="Wymaga admina, pełnego logowania dwuskładnikowego, CSRF i dozwolonego Origin. request_id identyfikuje jedną operację; ponowienie nie tworzy kolejnego zwrotu. 202 oznacza zapisanie zlecenia, nie potwierdzenie zwrotu. Status realizacji zamówienia pozostaje osobny.",
     params(("id"=String,Path)),request_body=RefundRequest,
     responses((status=202,body=Refund),(status=400,body=super::checkout::Problem),(status=401,body=super::checkout::Problem),(status=403,body=super::checkout::Problem),(status=404,body=super::checkout::Problem),(status=409,body=super::checkout::Problem),(status=429,body=super::checkout::Problem),(status=503,body=super::checkout::Problem)),
     security(("session"=[],"csrf"=[])))]
