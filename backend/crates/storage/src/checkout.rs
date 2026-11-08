@@ -1351,7 +1351,24 @@ mod tests {
             .await
             .unwrap()
         );
+        let changed = json!({"livemode":false,"metadata":{"quote_id":"another-order"}});
+        assert!(
+            !db.stripe_event_accept(
+                &eventid,
+                "checkout.session.completed",
+                "session",
+                "cs_test_other",
+                &changed,
+                11001
+            )
+            .await
+            .unwrap()
+        );
         let event = db.stripe_event_lease(11001).await.unwrap().unwrap();
+        assert_eq!(event.event_type, "payment_intent.succeeded");
+        assert_eq!(event.provider_kind, "intent");
+        assert_eq!(event.object_id, "pi_test");
+        assert_eq!(event.payload, payload);
         assert!(db.stripe_event_lease(11002).await.unwrap().is_none());
         assert!(
             !db.stripe_event_finish(&eventid, "stale", true, 11003)

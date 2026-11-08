@@ -164,6 +164,12 @@ Nie potwierdzono brakującego limitu odczytu 3MF/STL. Gate archiwum poprzedza SD
 Axum ogranicza rzeczywiste ramki body32/96MiB, z admission przed ekstrakcją i timeoutem60s; worker ma AS2GiB/CPU25s/wall30s. Cztery istniejące testy lokalne: granice3MF,ZIP64,limitySTL,uploadbody — po1PASS. Dowody `security-model-read-bounds-20261108/result.json`; Solxhigh niezależnie sprawdził źródła/bibliotekę. Bez patcha, nowych plików wejściowych lub ruchu sieciowego. Nie jest to formalny dowód szczytowej pamięci normalizacji/SDK, łącznych zasobów potomków lub inodów.
 
 
+## 2026-11-08 — granica zaufania webhooka Stripe
+
+Przegląd źródeł nie wykazał obejścia: podpis surowego body i czas sprawdzane przed zapisem; zdarzenie inicjuje ponowne pobranie obiektu Stripe z weryfikacją ID/kwoty/PLN/metadanych/testmode. Rozliczenie blokuje próbę płatności, stan paid jest końcowy, zapis zamówienia i outbox atomowy. Dwa istniejące testy offline podpisu/korelacji PASS.
+
+Istniejący test PostgreSQL rozszerzono o ten sam ID zdarzenia ze zmienionym typem, rodzajem obiektu, ID obiektu i payloadem: ponowienie odrzucone, lease zachowuje cztery oryginalne pola.1PASS na własnej usuniętej bazie; fmt/diffPASS, Solxhigh bez blokera. Netto17linii testu, produkt bez zmian. Dowody `security-stripe-webhook-20261108/checkout-event-final.json`, `final-hashes.json`. To test deduplikacji storage, nie HTTP/podpisu/providera ani równoległego wyścigu; normalneAPI/DB bez zmian.
+
 ## 2026-11-08 — wywołania HTTP płatności i dostawy
 
 W sprawdzonych ścieżkach nie potwierdzono podatności: stałe hosty HTTPS, walidacja ID przed budową ścieżek i wyłączone przekierowania. Etykieta pochodzi z endpointu Furgonetki, nie z URL zwróconego przez dostawcę; dostęp wymaga admina, format a4/a6, limit8MiB i sygnatura PDF. Stripe ogranicza odpowiedź do512KiB; Furgonetka JSON do1/5MiB, błędy64KiB. Limity czasu: Stripe connect5s/request20s, Furgonetka3s/8s.
