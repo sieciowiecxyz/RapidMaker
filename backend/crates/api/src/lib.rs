@@ -132,7 +132,10 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
         .merge(webhook)
         .layer(axum::Extension(mailer.clone()))
         .layer(axum::Extension(auth))
-        .layer(axum::middleware::from_fn(logging::request));
+        .layer(axum::middleware::from_fn(logging::request))
+        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+            std::time::Duration::from_secs(30),
+        ));
     if let Some(server) = &metrics {
         router = router.layer(axum::middleware::from_fn_with_state(
             server.metrics.clone(),
@@ -170,4 +173,87 @@ pub async fn router() -> Result<(axum::Router, Workers), Box<dyn std::error::Err
             shipping: shipping_worker,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_json_and_webhook_bodies_do_not_wait_forever() {
+        assert!(
+            std::env::var_os("DATABASE_URL").is_none(),
+            "This test must not use a database"
+        );
+        let (app, workers) = router().await.unwrap();
+        let request = |path: &str, body: Body| {
+            Request::post(path)
+                .extension(axum::extract::ConnectInfo(
+                    "127.0.0.1:12345".parse::<std::net::SocketAddr>().unwrap(),
+                ))
+                .header("host", "localhost:18430")
+                .header("origin", "http://localhost:18430")
+                .header("content-type", "application/json")
+                .body(body)
+                .unwrap()
+        };
+        assert_eq!(
+            app.clone()
+                .oneshot(request(
+                    "/api/shipping/estimate",
+                    Body::from(r#"{"parts":[],"delivery":"pickup"}"#)
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        for path in [
+            "/api/shipping/estimate",
+            "/api/auth/password/login",
+            "/api/webhooks/stripe",
+        ] {
+            let body = Body::from_stream(futures_util::stream::pending::<
+                Result<axum::body::Bytes, std::io::Error>,
+            >());
+            let response = tokio::time::timeout(
+                std::time::Duration::from_secs(31),
+                app.clone().oneshot(request(path, body)),
+            )
+            .await
+            .expect("An idle body must not retain its request indefinitely")
+            .unwrap();
+            assert!(
+                response.status().is_client_error(),
+                "{path}: {}",
+                response.status()
+            );
+        }
+        use futures_util::StreamExt;
+        let progress =
+            futures_util::stream::iter(["{", "\"parts\":[],", "\"delivery\":\"pickup\"}"]).then(
+                |chunk| async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                    Ok::<_, std::io::Error>(axum::body::Bytes::from_static(chunk.as_bytes()))
+                },
+            );
+        let response = app
+            .oneshot(request(
+                "/api/shipping/estimate",
+                Body::from_stream(progress),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Progressing bodies must not get a whole-handler timeout"
+        );
+        workers.shutdown().await;
+    }
 }
