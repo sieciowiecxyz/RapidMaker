@@ -1,13 +1,51 @@
 import { expect, test } from './fixtures';
 import { configureCheckout } from './checkout-helpers';
-import { fillStripeCard } from './helpers';
+import { fillStripeCard, stripeEvidence } from './helpers';
 
-test.use({ screenshot: 'off', trace: 'off' });
+test.use({ screenshot: 'off', trace: 'off', bypassCSP: false });
 test('real automatic pickup checkout stays on the site and pays the server amount', async ({
   page,
 }) => {
   test.skip(process.env.RAPIDMAKER_SANDBOX !== '1', 'Requires --sandbox; Stripe test card only');
   test.setTimeout(120_000);
+  const policy =
+    "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; script-src 'self' https://js.stripe.com; worker-src 'self' blob:";
+  const violations: string[] = [],
+    stripeScripts = new Set<string>();
+  page.on('console', (message) => {
+    if (message.text().startsWith('App CSP:')) {
+      violations.push(message.text());
+      console.log(message.text());
+    }
+  });
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (
+      url.origin === 'https://js.stripe.com' &&
+      response.ok() &&
+      response.request().resourceType() === 'script' &&
+      response.frame() === page.mainFrame()
+    )
+      stripeScripts.add(url.origin + url.pathname);
+  });
+  await page.addInitScript((expected) => {
+    if (location.origin !== 'http://localhost:18437') return;
+    addEventListener('securitypolicyviolation', (event) => {
+      if (event.originalPolicy !== expected) return;
+      let blocked = event.blockedURI;
+      try {
+        blocked = new URL(blocked).origin;
+      } catch {
+        /* inline/eval */
+      }
+      console.error('App CSP:' + event.effectiveDirective + ':' + blocked);
+    });
+  }, policy);
+  for (const url of ['/', 'http://127.0.0.1:18436/api/']) {
+    const response = await page.request.get(url, { headers: { Host: 'localhost:18437' } });
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-security-policy']).toBe(policy);
+  }
   type Quote = {
     id: string;
     print_grosze: number;
@@ -30,6 +68,7 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
   await page.getByRole('button', { name: 'Przejdź do płatności →', exact: true }).click();
   await expect(page.locator('.order-stage')).toContainText('Płatność');
   await fillStripeCard(page);
+  expect(stripeScripts.size, 'Actual parent-document Stripe.js must load').toBeGreaterThan(0);
   const pay = page.getByRole('button', { name: /^Zamawiam i płacę .*→$/ });
   const label = await pay.innerText();
   const created = page.waitForResponse(
@@ -73,6 +112,25 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
   ).toBeVisible();
   const orderId: string = status.order_id;
   expect(orderId).toBeTruthy();
+  const provider = stripeEvidence({
+    payment_intent_id: intent,
+    attempt_id: orderId,
+    order_id: orderId,
+  });
+  expect(provider).toMatchObject({
+    amount: expected,
+    amount_received: expected,
+    currency: 'pln',
+    status: 'succeeded',
+    quote_id: orderId,
+    refunds: [],
+  });
+  await test
+    .info()
+    .attach('stripe-csp-provider', {
+      body: JSON.stringify(provider),
+      contentType: 'application/json',
+    });
   const localReceiptFree = (inject: boolean) =>
     page.evaluate(
       ({ inject, orderId }) => {
@@ -149,4 +207,16 @@ test('real automatic pickup checkout stays on the site and pays the server amoun
   ).toHaveCount(0);
   await page.unroute(`**/api/account/orders/${orderId}`);
   expect(await localReceiptFree(false)).toBe(true);
+  expect(violations, 'No app-origin violations of the enforced policy').toEqual([]);
+  await test
+    .info()
+    .attach('stripe-csp-browser', {
+      body: JSON.stringify({
+        policy,
+        parentStripeScripts: [...stripeScripts],
+        violations,
+        paymentElementCardFilled: true,
+      }),
+      contentType: 'application/json',
+    });
 });

@@ -3,7 +3,8 @@ import { defineConfig, loadEnv, normalizePath, resolveConfig, type ProxyOptions 
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 const headers = {
-  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+  'Content-Security-Policy':
+    "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; script-src 'self' https://js.stripe.com; worker-src 'self' blob:",
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
 };

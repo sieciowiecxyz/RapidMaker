@@ -876,6 +876,10 @@ async fn local_only(
         )
         .into_response();
     }
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_static("frame-ancestors 'none'; object-src 'none'; base-uri 'self'; script-src 'self' https://js.stripe.com; worker-src 'self' blob:"),
+    );
     response
 }
 pub fn protect(router: axum::Router, auth: Arc<super::auth::Auth>) -> axum::Router {

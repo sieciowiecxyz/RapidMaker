@@ -4,11 +4,21 @@ import { resolve } from 'node:path';
 import { request as httpRequest } from 'node:http';
 
 const fixture = (name: string) => resolve('../backend/crates/geometry/tests/fixtures', name);
+test.use({ bypassCSP: false });
 
 test('real STL, STEP and 3MF upload produces private GLB without selecting a color', async ({
   page,
   browser,
 }) => {
+  const violations: string[] = [];
+  page.on('console', (message) => {
+    if (message.text().startsWith('CSP violation:')) violations.push(message.text());
+  });
+  await page.addInitScript(() =>
+    addEventListener('securitypolicyviolation', (event) =>
+      console.error('CSP violation:' + event.effectiveDirective),
+    ),
+  );
   await page.goto('/wycena', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.header')).toHaveCSS('display', 'flex');
   await expect(page.locator('.hero')).toHaveCSS('display', 'grid');
@@ -86,12 +96,12 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
       await expect(page.getByText('Podgląd 3D jest niedostępny na tym urządzeniu.')).toHaveCount(0);
     }
     await page.screenshot({
-      path: 'tests/artifacts/integration/configure-desktop.png',
+      path: test.info().outputPath('configure-desktop.png'),
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
-      path: 'tests/artifacts/integration/configure-mobile.png',
+      path: test.info().outputPath('configure-mobile.png'),
       fullPage: true,
     });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -115,6 +125,7 @@ test('real STL, STEP and 3MF upload produces private GLB without selecting a col
     await expect(
       page.getByRole('img', { name: /Model z pliku step_block.step.*Czarny/ }),
     ).toBeVisible();
+    expect(violations).toEqual([]);
   } finally {
     await outsider.close();
   }

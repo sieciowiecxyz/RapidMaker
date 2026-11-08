@@ -1,8 +1,27 @@
 import { expect, test } from './fixtures';
 
+test.use({ bypassCSP: false });
+
 test('generated API documentation loads its real schema and expands an operation', async ({
   page,
 }) => {
+  const policy =
+    "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; script-src 'self' https://js.stripe.com; worker-src 'self' blob:";
+  expect(process.env.RAPIDMAKER_TEST_API_PID).toMatch(/^\d+$/);
+  for (const url of ['/', '/api/', 'http://127.0.0.1:18436/api/']) {
+    const response = await page.request.get(url, { headers: { Host: 'localhost:18437' } });
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-security-policy']).toBe(policy);
+  }
+  await page.addInitScript(() => {
+    Reflect.set(window, '__rapidmakerCspViolations', []);
+    addEventListener('securitypolicyviolation', (event) => {
+      Reflect.get(window, '__rapidmakerCspViolations').push({
+        directive: event.effectiveDirective,
+        blocked: event.blockedURI,
+      });
+    });
+  });
   const schema = await page.request.get('/api/openapi.json');
   expect(schema.status()).toBe(200);
   const api = await schema.json();
@@ -10,8 +29,36 @@ test('generated API documentation loads its real schema and expands an operation
   expect(api.paths['/api/legal/documents']).toBeTruthy();
   await page.goto('/api/');
   await expect(page.locator('.swagger-ui').first()).toBeVisible();
-  await page.locator('.opblock-summary').first().click();
-  await expect(page.locator('.opblock.is-open').first()).toBeVisible();
+  const operation = page
+    .locator('.opblock')
+    .filter({ has: page.locator('[data-path="/api/legal/documents"]') });
+  await operation.locator('.opblock-summary').click();
+  await operation.locator('.try-out__btn').click();
+  const executed = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/legal/documents' && r.request().method() === 'GET',
+  );
+  await operation.locator('button.execute').click();
+  expect((await executed).status()).toBe(200);
+  expect(await page.evaluate(() => Reflect.get(window, '__rapidmakerCspViolations'))).toEqual([]);
+  await page.evaluate(() => {
+    Reflect.set(window, '__rapidmakerCspCanary', false);
+    const script = document.createElement('script');
+    script.textContent = 'window.__rapidmakerCspCanary = true';
+    document.head.append(script);
+  });
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, '__rapidmakerCspViolations')))
+    .toHaveLength(1);
+  expect(await page.evaluate(() => Reflect.get(window, '__rapidmakerCspCanary'))).toBe(false);
+  const violations = await page.evaluate(() => Reflect.get(window, '__rapidmakerCspViolations'));
+  expect(violations[0].directive).toMatch(/^script-src(?:-elem)?$/);
+  expect(violations[0].blocked).toBe('inline');
+  await test
+    .info()
+    .attach('csp-inline-canary', {
+      body: JSON.stringify(violations),
+      contentType: 'application/json',
+    });
 });
 
 test('real packing preserves all quantities and rejects untrusted checkout fields/origins', async ({

@@ -46,11 +46,13 @@ Test sprawdza nazwę bazy/katalogu i konfigurację przed utworzeniem fixtures. P
 - Status GitHuba przy pierwszym pushu L7 wciąż pokazywał wcześniejsze alerty lz4_flex/WebAuthn; kod/lockfile usuwa lub aktualizuje wskazane wersje. Nie zamykano alertów ręcznym wyjątkiem ani nie zakładano odświeżenia indeksu.
 - Nadal potrzebne przed produkcją: wdrożenie HTTPS/proxy, podłączenie autoryzacji frontendu i utrzymanie aktualnych bibliotek systemowych OCCT. To ograniczony przegląd, bez pełnego pentestu i testów atakujących zewnętrzne usługi.
 
-## Nagłówki lokalnego frontendu
+## Nagłówki i polityka skryptów
 
-Vite dev i preview ustawiają CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'`, `X-Frame-Options: DENY` i `X-Content-Type-Options: nosniff`. Aplikacja nie może być osadzana w ramce; własne iframe Stripe/Maps, workery i skrypty nie dostały nowej polityki źródeł.
+Vite dev/preview oraz zwykłe odpowiedzi chronionego routera API mają CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'; script-src 'self' https://js.stripe.com; worker-src 'self' blob:`. Bez `unsafe-inline`/`unsafe-eval`; Vite zachowuje XFO DENY i nosniff. Wczesne odmowy Origin i normalizowane odpowiedzi 4xx API nie przechodzą przez dodanie CSP. To dodatkowa ochrona, bez potwierdzonego exploitu XSS.
 
-Nagłówki nie są częścią plików `dist`. Przyszły hosting musi wystawić je sam; nie jest to konfiguracja wdrożenia produkcyjnego. Test headless sprawdza cztery dokumenty HTML i blokadę cross-origin iframe przez łączną politykę CSP/XFO; nie dowodzi uprzywilejowanego ataku na localhost.
+Headless: Swagger Try it out 200 i blokada wstrzykniętego skryptu; pięć formatów/GLB/lokalny Worker; osobny rzeczywisty HMR. Stripe TEST: PaymentElement i zapłata 29,97 zł potwierdzona niezależnym GET; trzy powiadomienia SMTP bez dowodu doręczenia. Osobny AddressElement przyjął częściowy adres bez zamówień/płatności/emaili; Maps ładował się w ramce Stripe. Brak naruszeń polityki aplikacji w tych ścieżkach nie dowodzi pełnego autocomplete ani polityki ramek dostawcy. Zachowano wcześniejsze błędy harnessu, bez poluzowania CSP.
+
+Dowody: ignorowane `frontend/tests/artifacts/security-csp-feasibility-20261108/implementation-phase{1,2,3-origin}/`. Normalny Vite automatycznie przeładował konfigurację; normalnego API/DB nie aktualizowano. Nagłówki nie należą do `dist`: przyszły hosting musi je ustawić osobno. Brak nowego `default-src`, ograniczeń stylów/połączeń i pełnego pentestu.
 
 ## Pamięć tymczasowa workerów
 
