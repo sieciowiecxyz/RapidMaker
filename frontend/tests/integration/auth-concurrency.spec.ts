@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { accounts, totp, type Account } from './helpers';
+import { execFileSync } from 'node:child_process';
 
 test.use({ screenshot: 'off', trace: 'off', video: 'off' });
 
@@ -11,6 +12,40 @@ async function password(page: Page, account: Account) {
 async function factor(page: Page, account: Account) {
   const field = page.getByLabel('Kod z aplikacji', { exact: true });
   await expect(field).toBeVisible();
+  const database = process.env.RAPIDMAKER_TEST_DATABASE ?? '';
+  expect(database).toMatch(/^rapidmaker_test_browser_[a-f0-9]+$/);
+  expect(account.id).toMatch(/^[a-f0-9-]{36}$/);
+  const saved = execFileSync(
+    'podman',
+    [
+      'exec',
+      process.env.TEST_PG_CONTAINER ?? 'rapidmaker-catalog-postgres',
+      'psql',
+      '-U',
+      'rapidmaker',
+      '-d',
+      database,
+      '-At',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      `SELECT totp_last_step FROM users WHERE id='${account.id}'`,
+    ],
+    { encoding: 'utf8', timeout: 15_000 },
+  ).trim();
+  expect(saved).toMatch(/^-?\d+$/);
+  const lastStep = Number(saved);
+  // Other scenarios share this fixture; wait for an unused code without resetting replay state.
+  const wait = Math.max(0, (lastStep + 1) * 30_000 + 200 - Date.now());
+  if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+  const submittedStep = Math.floor(Date.now() / 30_000);
+  expect(submittedStep).toBeGreaterThan(lastStep);
+  await test
+    .info()
+    .attach('totp-step-readiness', {
+      body: JSON.stringify({ lastStep, submittedStep, waitedMs: wait }),
+      contentType: 'application/json',
+    });
   await field.fill(totp(account.totp_uri!));
   await field.press('Enter');
 }
