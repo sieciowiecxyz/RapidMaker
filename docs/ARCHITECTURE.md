@@ -58,6 +58,8 @@ Katalog Bambu pochodzi z lokalnego Studio, wersja 02.08.00.06: 49 materiałów/3
 
 ## Uruchomienie i granice
 
+Normalny lokalny API działa w usłudze użytkownika `rapidmaker-api.service`: 8 GiB RAM, bez swapu, 256 zadań i CPU 400% łącznie z natywnymi potomkami. `KillMode=control-group` i `OOMPolicy=kill` kończą całą grupę; restart jest ręczny. Launcher nadal czyta `.env` i przypina binarkę, a bwrap/prlimit izolują pojedyncze prace. Bezpośredni start launchera/binarki wymaga własnej granicy zasobów. [Polecenie i logi](../backend/README.md#lokalny-serwer-z-limitem-zasobów).
+
 [Backend: konfiguracja i kontrakt API](../backend/README.md). Lokalny PostgreSQL 16 na localhost:18434; API:18432, Vite:18430. Jedna `.env`, SOPS i hook przed commitem. Brak Dockerfile/Taskfile/Kubernetes i publicznego wdrożenia. Działają SMTP, klient auth i trwałe zamówienia/rozmowy. IMAP iCloud działa lokalnie; publiczne wdrożenie i serwery Prometheus/Grafana pozostają planem; strukturalne logi JSON działają. Kolejność i dowody w [PLAN.md](PLAN.md) oraz [MILESTONES.md](MILESTONES.md).
 
 ## Auth

@@ -29,27 +29,27 @@ Wymagane: Rust ≥1.94, Linux, kompilator C++17 i systemowy Open CASCADE **7.9**
 
 ```sh
 cargo build --locked --manifest-path backend/Cargo.toml
-python backend/run.py
 ```
 
 API: `127.0.0.1:18432`; frontend Vite przekazuje `/api`. Launcher czyta tylko dozwolone klucze z rootowego `.env` (0600, SOPS): sandboxy Stripe/Furgonetki, `DATABASE_URL`, `PRICING_RATES_JSON`, `AUTH_*`, `MODEL_STORAGE_DIR` oraz konfigurację SMTP poniżej.
 
 Launcher przypina binarkę na czas procesu w prywatnym katalogu `$XDG_STATE_HOME/rapidmaker/runtime` (domyślnie `~/.local/state/rapidmaker/runtime`). Kolejny build nie usuwa ścieżki potrzebnej workerom geometrii. Nieaktywne, rozpoznane kopie są sprzątane przy następnym starcie; aktywne i nieznane pliki pozostają. Uruchomienie binarki bez launchera nie ma tej ochrony. Test helpera: `python -m unittest discover -s backend/tests -v`.
 
-### Opcjonalny wspólny limit zasobów
+### Lokalny serwer z limitem zasobów
 
-Linux z menedżerem użytkownika systemd: uruchom z root repo, po zatrzymaniu poprzedniego API. Przykład ogranicza API i jego potomków razem, bez nowej warstwy Rust. Wartości 6 GiB/256 zadań/CPU 200% sprawdzono na małym zadaniu; dobierz je do hosta i większych/równoległych prac.
+Normalny localhost działa jako usługa użytkownika systemd: API i wszyscy potomkowie mają razem 8 GiB RAM, 256 zadań, budżet CPU 400% i wyłączony swap. Uruchom z root repo, po zatrzymaniu poprzedniego API. Przykład zachowuje zatwierdzony lokalny profil large; wymaga `AUTH_MODE=localhost` w `.env`.
 
 ```sh
 systemd-run --user --unit=rapidmaker-api --collect --service-type=exec \
-  --working-directory="$PWD" -p MemoryMax=6G -p TasksMax=256 \
-  -p CPUQuota=200% -p KillMode=control-group -p TimeoutStopSec=5s -p Restart=no \
-  /usr/bin/python3 "$PWD/backend/run.py"
+  --working-directory="$PWD" --setenv=MODEL_PROFILE=large \
+  -p MemoryMax=8G -p MemorySwapMax=0 -p TasksMax=256 -p CPUQuota=400% \
+  -p OOMPolicy=kill -p KillMode=control-group -p TimeoutStopSec=40s \
+  -p Restart=no -p UMask=0077 /usr/bin/python3 "$PWD/backend/run.py"
 ```
 
-Logi: `journalctl --user -u rapidmaker-api.service -f` (Ctrl+C kończy podgląd). Zatrzymanie całej usługi: `systemctl --user stop rapidmaker-api.service`.
+Stan: `systemctl --user status rapidmaker-api.service`. Logi: `journalctl --user -u rapidmaker-api.service -f` (Ctrl+C kończy podgląd). Zatrzymanie całej usługi: `systemctl --user stop rapidmaker-api.service`. Po zatrzymaniu lub awarii powtórz polecenie startu; nie włączamy automatycznego restartu ani startu przy logowaniu.
 
-Launcher nadal czyta lokalny `.env`; sekretów nie przekazuj w argumentach. CPUQuota to szybkość CPU, nie suma CPU-seconds; TasksMax liczy także wątki. Jedna praca może wyczerpać wspólną pamięć/limit zadań i wyłączyć API. To dodatkowa granica całej usługi, bez izolacji awarii poszczególnych zadań lub kwoty inodów; bwrap/prlimit pozostają. Uruchomienie usługą jest świadomym krokiem operatora, nie domyślnym zachowaniem launchera. [Dowody i ograniczenia](../docs/security.md#2026-11-08--wykonalność-wspólnego-budżetu-workerów).
+Launcher nadal czyta lokalny `.env`; sekretów nie przekazuj w argumentach. CPUQuota ogranicza tempo CPU, a TasksMax liczy również wątki. OOM lub zakończenie głównego procesu kończy całą grupę. To wspólna granica zasobów, bez izolacji awarii każdej pracy lub kwoty inodów; bwrap/prlimit pozostają. Sam `python backend/run.py` nie tworzy tej granicy; używamy go wewnątrz usługi oraz do CLI, np. `--mail-test`. [Dowody i ograniczenia](../docs/security.md#2026-11-09--wspólny-limit-działającego-localhost).
 
 ## Email
 

@@ -63,13 +63,9 @@ npm --prefix frontend ci
 cargo build --locked --manifest-path backend/Cargo.toml
 ```
 
-Terminal 1 — API:
+API uruchom w tle jako [usługę systemd z limitem zasobów](backend/README.md#lokalny-serwer-z-limitem-zasobów). Polecenie czyta `.env`; nie wymaga przekazywania sekretów w argumentach.
 
-```sh
-python backend/run.py
-```
-
-Terminal 2 — frontend:
+Terminal — frontend:
 
 ```sh
 npm --prefix frontend run dev
